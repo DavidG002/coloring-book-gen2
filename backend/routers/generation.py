@@ -1,0 +1,102 @@
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from sqlalchemy.orm import Session
+import json
+
+from database import get_db
+from models import GenerationJob, GenerationImage
+from schemas import (
+    GenerationPlanRequest, GenerationPlanResponse, PlannedTask,
+    GenerationRunRequest, GenerationRunResponse, GenerationStatusResponse,
+)
+from services.generation import build_task_list, COST_PER_IMAGE_USD
+from services.job_runner import run_generation_job, request_cancel
+from routers.settings import get_settings as get_settings_route, DEFAULTS
+
+router = APIRouter(prefix="/generate", tags=["generation"])
+
+
+def _load_settings_dict(db: Session) -> dict:
+    settings_read = get_settings_route(db)  # reuses the settings router's logic
+    return settings_read.model_dump()
+
+
+@router.post("/plan", response_model=GenerationPlanResponse)
+def plan_generation(payload: GenerationPlanRequest, db: Session = Depends(get_db)):
+    try:
+        tasks = build_task_list(
+            db, payload.category, payload.subjects,
+            payload.new_variations_per_subject, payload.max_images,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return GenerationPlanResponse(
+        tasks=[PlannedTask(**t) for t in tasks],
+        total_images=len(tasks),
+        estimated_cost_usd=round(len(tasks) * COST_PER_IMAGE_USD, 4),
+    )
+
+
+@router.post("/run", response_model=GenerationRunResponse)
+def run_generation(payload: GenerationRunRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    try:
+        tasks = build_task_list(
+            db, payload.category, payload.subjects,
+            payload.new_variations_per_subject, payload.max_images,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if not tasks:
+        raise HTTPException(status_code=400, detail="No images to generate for this request")
+
+    job = GenerationJob(
+        category=payload.category,
+        params_json=json.dumps(payload.model_dump()),
+        status="pending",
+        total_images=len(tasks),
+        completed_images=0,
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+
+    settings = _load_settings_dict(db)
+    background_tasks.add_task(run_generation_job, job.id, tasks, settings)
+
+    return GenerationRunResponse(job_id=job.id, status=job.status, total_images=job.total_images)
+
+
+@router.get("/status/{job_id}", response_model=GenerationStatusResponse)
+def get_status(job_id: int, db: Session = Depends(get_db)):
+    job = db.query(GenerationJob).get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    last_image = (
+        db.query(GenerationImage)
+        .filter(GenerationImage.job_id == job_id)
+        .order_by(GenerationImage.id.desc())
+        .first()
+    )
+    current_task = f"{last_image.subject} v{last_image.variation_number}" if last_image else None
+
+    return GenerationStatusResponse(
+        job_id=job.id,
+        status=job.status,
+        total_images=job.total_images,
+        completed_images=job.completed_images,
+        error_message=job.error_message,
+        current_task=current_task,
+    )
+
+
+@router.post("/cancel/{job_id}")
+def cancel_job(job_id: int, db: Session = Depends(get_db)):
+    job = db.query(GenerationJob).get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+    if job.status not in ("pending", "running"):
+        raise HTTPException(status_code=400, detail=f"Job is already '{job.status}', cannot cancel")
+    request_cancel(job_id)
+    return {"detail": f"Cancel requested for job {job_id}"}

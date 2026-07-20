@@ -1,0 +1,38 @@
+# ===== Backend (Python/FastAPI) =====
+backend/venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.pyc
+backend/.env
+backend/data.db
+
+# Generated working images and published output — never commit actual
+# generated content, just the code that produces it
+backend/output/*
+!backend/output/.gitkeep
+backend/publish/*
+!backend/publish/.gitkeep
+
+# ===== Frontend (Next.js) =====
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/.vercel/
+frontend/*.tsbuildinfo
+frontend/next-env.d.ts
+frontend/.env.local
+frontend/.env*.local
+
+# Next.js debug logs
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/.pnpm-debug.log*
+
+# ===== OS / editor =====
+.DS_Store
+Thumbs.db
+*.pem
+.vscode/
+.idea/

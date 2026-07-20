@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+:root {
+  --paper: #faf8f3;
+  --canvas: #ffffff;
+  --ink: #1c1b1a;
+  --pencil: #8b8579;
+  --pencil-light: #d8d3c8;
+  --teal: #5b7c93;
+  --teal-dark: #435d70;
+  --coral: #e8664f;
+  --coral-dark: #c94f3a;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body), system-ui, sans-serif;
+}
+
+h1, h2, h3, .font-display {
+  font-family: var(--font-display), serif;
+}
