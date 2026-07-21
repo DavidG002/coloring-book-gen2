@@ -1,5 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from fastapi.responses import Response
+from services.publish import build_publish_plan, execute_publish, get_publish_history, generate_manifest_csv
+from models import PublishRun
+
 import json
 
 from database import get_db
@@ -55,3 +59,40 @@ def publish_history(category_name: str, lang: str | None = None, db: Session = D
         )
         for r in runs
     ]
+@router.get("/runs/{run_id}/manifest")
+def download_run_manifest(run_id: int, db: Session = Depends(get_db)):
+    try:
+        csv_content = generate_manifest_csv(db, run_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    return Response(
+        content=csv_content,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=manifest-run-{run_id}.csv"},
+    )
+
+@router.get("/latest-manifest/{category_name}")
+def download_latest_manifest(category_name: str, lang: str, db: Session = Depends(get_db)):
+    latest = (
+        db.query(PublishRun)
+        .filter(PublishRun.category == category_name, PublishRun.lang == lang)
+        .order_by(PublishRun.created_at.desc())
+        .first()
+    )
+    if not latest:
+        raise HTTPException(status_code=404, detail=f"No publish runs found for '{category_name}'/'{lang}'")
+
+    csv_content = generate_manifest_csv(db, latest.id)
+    return Response(
+        content=csv_content,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={category_name}-{lang}-manifest.csv"},
+    )
+
+@router.get("/output-path/{category_name}")
+def get_output_path(category_name: str):
+    import os
+    output_path = os.path.abspath(os.path.join("output", category_name))
+    publish_path = os.path.abspath(os.path.join("publish"))
+    return {"output_path": output_path, "publish_root": publish_path}

@@ -8,6 +8,7 @@ import TranslationsPanel from "@/components/TranslationsPanel";
 import PublishPanel from "@/components/PublishPanel";
 import CollapsibleSection from "@/components/CollapsibleSection";
 import CategorySidebar from "@/components/CategorySidebar";
+import BulkPasteInput from "@/components/BulkPasteInput";
 
 const SECTION_ORDER = ["prompt", "subjects", "variations", "generate", "translations", "publish"] as const;
 type SectionId = (typeof SECTION_ORDER)[number];
@@ -42,6 +43,9 @@ export default function CategoryDetailPage() {
 
   const [openSection, setOpenSection] = useState<SectionId | null>("prompt");
   const [savingMessage, setSavingMessage] = useState<{ section: SectionId; text: string } | null>(null);
+
+  const [subjectFilter, setSubjectFilter] = useState("");
+  const [variationFilter, setVariationFilter] = useState("");
 
   const promptRef = useRef<HTMLDivElement>(null);
   const subjectsRef = useRef<HTMLDivElement>(null);
@@ -327,46 +331,71 @@ export default function CategoryDetailPage() {
             ref={subjectsRef}
           >
             <div className="flex items-center justify-between mb-1.5">
-              <button
-                type="button"
-                onClick={() => addListItem(subjects, setSubjects)}
-                className="text-sm font-medium"
-                style={{ color: "var(--teal)" }}
-              >
-                + Add subject
-              </button>
-              <button
-                onClick={handleSaveSubjects}
-                disabled={savingSubjects}
-                className="text-sm font-medium disabled:opacity-60"
-                style={{ color: "var(--teal)" }}
-              >
-                {savingSubjects ? "Saving..." : "Save & continue"}
-              </button>
-            </div>
-            <div className="space-y-2">
-              {subjects.map((subject, i) => (
-                <div key={i} className="flex gap-2">
-                  <input
-                    type="text"
-                    value={subject}
-                    onChange={(e) => updateListItem(subjects, setSubjects, i, e.target.value)}
-                    className="flex-1 px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
-                    style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeListItem(subjects, setSubjects, i)}
-                    className="px-3 rounded-md text-sm"
-                    style={{ color: "var(--pencil)" }}
-                  >
-                    Remove
+              <div className="flex items-center gap-4">
+                <button
+                  type="button"
+                  onClick={() => addListItem(subjects, setSubjects)}
+                  className="text-sm font-medium"
+                  style={{ color: "var(--teal)" }}
+                >
+                  + Add subject
                   </button>
+                  <BulkPasteInput
+                    placeholder={"Car\nTruck\nAirplane\nBoat"}
+                    onAdd={(lines) => setSubjects((prev) => [...prev.filter(Boolean), ...lines])}
+                  />
                 </div>
-              ))}
+                <button
+                  onClick={handleSaveSubjects}
+                  disabled={savingSubjects}
+                  className="text-sm font-medium disabled:opacity-60"
+                  style={{ color: "var(--teal)" }}
+                >
+                  {savingSubjects ? "Saving..." : "Save & continue"}
+                </button>
+            </div>
+
+            {subjects.length > 8 && (
+              <input
+                type="text"
+                value={subjectFilter}
+                onChange={(e) => setSubjectFilter(e.target.value)}
+                placeholder={`Filter ${subjects.length} subjects...`}
+                className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm mb-2"
+                style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+              />
+            )}
+            <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+              {subjects.map((subject, i) => {
+                if (subjectFilter && !subject.toLowerCase().includes(subjectFilter.toLowerCase())) return null;
+                return (
+                  <div key={i} className="flex gap-2">
+                    <input
+                      type="text"
+                      value={subject}
+                      onChange={(e) => updateListItem(subjects, setSubjects, i, e.target.value)}
+                      className="flex-1 px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
+                      style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeListItem(subjects, setSubjects, i)}
+                      className="px-3 rounded-md text-sm"
+                      style={{ color: "var(--pencil)" }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                );
+              })}
               {subjects.length === 0 && (
                 <p className="text-sm" style={{ color: "var(--pencil)" }}>
                   No subjects yet.
+                </p>
+              )}
+              {subjects.length > 0 && subjectFilter && subjects.every((s) => !s.toLowerCase().includes(subjectFilter.toLowerCase())) && (
+                <p className="text-sm" style={{ color: "var(--pencil)" }}>
+                  No subjects match &quot;{subjectFilter}&quot;.
                 </p>
               )}
             </div>
@@ -382,14 +411,20 @@ export default function CategoryDetailPage() {
             ref={variationsRef}
           >
             <div className="flex items-center justify-between mb-1.5">
-              <button
-                type="button"
-                onClick={() => addListItem(variations, setVariations)}
-                className="text-sm font-medium"
-                style={{ color: "var(--teal)" }}
-              >
-                + Add variation
-              </button>
+              <div className="flex items-center gap-4">
+                <button
+                  type="button"
+                  onClick={() => addListItem(variations, setVariations)}
+                  className="text-sm font-medium"
+                  style={{ color: "var(--teal)" }}
+                > 
+                  + Add variation
+                </button>
+                <BulkPasteInput
+                  placeholder={"side view on a road\nfront three-quarter view\naerial top-down view"}
+                  onAdd={(lines) => setVariations((prev) => [...prev.filter(Boolean), ...lines])}
+                />
+              </div>
               <button
                 onClick={handleSaveVariations}
                 disabled={savingVariations}
@@ -399,26 +434,44 @@ export default function CategoryDetailPage() {
                 {savingVariations ? "Saving..." : "Save & continue"}
               </button>
             </div>
-            <div className="space-y-2">
-              {variations.map((variation, i) => (
-                <div key={i} className="flex gap-2">
-                  <input
-                    type="text"
-                    value={variation}
-                    onChange={(e) => updateListItem(variations, setVariations, i, e.target.value)}
-                    className="flex-1 px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
-                    style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeListItem(variations, setVariations, i)}
-                    className="px-3 rounded-md text-sm"
-                    style={{ color: "var(--pencil)" }}
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
+            {variations.length > 8 && (
+              <input
+                type="text"
+                value={variationFilter}
+                onChange={(e) => setVariationFilter(e.target.value)}
+                placeholder={`Filter ${variations.length} variations...`}
+                className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm mb-2"
+                style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+              />
+            )}
+            <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+              {variations.map((variation, i) => {
+                if (variationFilter && !variation.toLowerCase().includes(variationFilter.toLowerCase())) return null;
+                return (
+                  <div key={i} className="flex gap-2">
+                    <input
+                      type="text"
+                      value={variation}
+                      onChange={(e) => updateListItem(variations, setVariations, i, e.target.value)}
+                      className="flex-1 px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
+                      style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeListItem(variations, setVariations, i)}
+                      className="px-3 rounded-md text-sm"
+                      style={{ color: "var(--pencil)" }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                );
+              })}
+              {variations.length > 0 && variationFilter && variations.every((v) => !v.toLowerCase().includes(variationFilter.toLowerCase())) && (
+                <p className="text-sm" style={{ color: "var(--pencil)" }}>
+                  No variations match &quot;{variationFilter}&quot;.
+                </p>
+              )}
             </div>
           </CollapsibleSection>
 

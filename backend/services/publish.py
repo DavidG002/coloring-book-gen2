@@ -4,6 +4,7 @@ import json
 import csv
 import glob
 import shutil
+import io
 from sqlalchemy.orm import Session
 
 from models import Category, Translation, GenerationImage, PublishRun, PublishedFile
@@ -216,3 +217,28 @@ def get_publish_history(db: Session, category_name: str, lang: str | None = None
     if lang:
         query = query.filter(PublishRun.lang == lang)
     return query.order_by(PublishRun.created_at.desc()).all()
+
+def generate_manifest_csv(db: Session, run_id: int) -> str:
+    """Builds manifest CSV content from a PublishRun's stored PublishedFile
+    rows — works even if the on-disk manifest.csv has since been overwritten
+    by a later run."""
+    run = db.query(PublishRun).filter(PublishRun.id == run_id).first()
+    if not run:
+        raise ValueError(f"Publish run {run_id} not found")
+
+    output = io.StringIO()
+    fieldnames = ["filename", "alt_text", "title", "category_en", "lang", "source_path"]
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+    for f in run.files:
+        writer.writerow({
+            "filename": f.target_filename,
+            "alt_text": f.alt_text,
+            "title": f.title_text,
+            "category_en": run.category,
+            "lang": run.lang,
+            "source_path": f.source_path,
+        })
+
+    # Prepend UTF-8 BOM so Excel displays non-Latin scripts (Hebrew, etc.) correctly
+    return "\ufeff" + output.getvalue()

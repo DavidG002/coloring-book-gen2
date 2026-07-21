@@ -55,8 +55,12 @@ export default function TranslationsPanel({
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
-  const [autoTranslating, setAutoTranslating] = useState(false);
-  const [autoTranslateResult, setAutoTranslateResult] = useState<string | null>(null);
+  const [autoTranslatingSubjects, setAutoTranslatingSubjects] = useState(false);
+  const [autoTranslateResultSubjects, setAutoTranslateResultSubjects] = useState<string | null>(null);
+  const [autoTranslatingVariations, setAutoTranslatingVariations] = useState(false);
+  const [autoTranslateResultVariations, setAutoTranslateResultVariations] = useState<string | null>(null);
+  const [translatingCategoryName, setTranslatingCategoryName] = useState(false);
+  const [variationTranslationFilter, setVariationTranslationFilter] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -219,8 +223,8 @@ export default function TranslationsPanel({
   async function handleAutoTranslateVariations() {
     if (!form.lang || isNewLang) return;
     setError(null);
-    setAutoTranslateResult(null);
-    setAutoTranslating(true);
+    setAutoTranslateResultVariations(null);
+    setAutoTranslatingVariations(true);
     try {
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/categories/${encodeURIComponent(categoryName)}/translations/${encodeURIComponent(form.lang)}/translate-variations`,
@@ -230,18 +234,67 @@ export default function TranslationsPanel({
       if (!res.ok) throw new ApiError(res.status, data.detail);
 
       if (data.translated_count > 0) {
-        setAutoTranslateResult(`Translated ${data.translated_count} new variation${data.translated_count === 1 ? "" : "s"}`);
+        setAutoTranslateResultVariations(`Translated ${data.translated_count} new variation${data.translated_count === 1 ? "" : "s"}`);
         // Reload this translation's data so the newly-translated rows show up immediately
         const refreshed = await getTranslation(categoryName, form.lang);
         setForm(formFromTranslation(refreshed));
       } else {
-        setAutoTranslateResult("All variations already translated");
+        setAutoTranslateResultVariations("All variations already translated");
       }
-      setTimeout(() => setAutoTranslateResult(null), 4000);
+      setTimeout(() => setAutoTranslateResultVariations(null), 4000);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to auto-translate variations");
     } finally {
-      setAutoTranslating(false);
+      setAutoTranslatingVariations(false);
+    }
+  }
+
+  async function handleAutoTranslateCategoryName() {
+      if (!form.lang) return;
+      setError(null);
+      setTranslatingCategoryName(true);
+      try {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/categories/${encodeURIComponent(categoryName)}/translations/${encodeURIComponent(form.lang)}/translate-category-name`,
+          { method: "POST" }
+        );
+        const data = await res.json();
+        if (!res.ok) throw new ApiError(res.status, data.detail);
+        if (data.translated_text) {
+          setForm((f) => ({ ...f, categoryTranslated: data.translated_text }));
+        }
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : "Failed to auto-translate category name");
+      } finally {
+        setTranslatingCategoryName(false);
+      }
+  }
+
+  async function handleAutoTranslateSubjects() {
+    if (!form.lang || isNewLang) return;
+    setError(null);
+    setAutoTranslateResultSubjects(null);
+    setAutoTranslatingSubjects(true);
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/categories/${encodeURIComponent(categoryName)}/translations/${encodeURIComponent(form.lang)}/translate-subjects`,
+        { method: "POST" }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new ApiError(res.status, data.detail);
+
+      if (data.translated_count > 0) {
+        setAutoTranslateResultSubjects(`Translated ${data.translated_count} new subject${data.translated_count === 1 ? "" : "s"}`);
+        const refreshed = await getTranslation(categoryName, form.lang);
+        setForm(formFromTranslation(refreshed));
+      } else {
+        setAutoTranslateResultSubjects("All subjects already translated");
+      }
+      setTimeout(() => setAutoTranslateResultSubjects(null), 4000);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to auto-translate subjects");
+    } finally {
+      setAutoTranslatingSubjects(false);
     }
   }
 
@@ -330,9 +383,20 @@ export default function TranslationsPanel({
         <div className="space-y-5">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
-                Translated category name
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-sm font-medium" style={{ color: "var(--ink)" }}>
+                  Translated category name
+                </label>
+                <button
+                  type="button"
+                  onClick={handleAutoTranslateCategoryName}
+                  disabled={translatingCategoryName || !form.lang}
+                  className="text-xs font-medium disabled:opacity-60"
+                  style={{ color: "var(--teal)" }}
+                >
+                  {translatingCategoryName ? "Translating..." : "Auto-translate"}
+                </button>
+              </div>
               <input
                 type="text"
                 value={form.categoryTranslated}
@@ -402,9 +466,28 @@ export default function TranslationsPanel({
           </p>
 
           <div>
-            <label className="block text-sm font-medium mb-2" style={{ color: "var(--ink)" }}>
-              Subject translations
-            </label>
+            <div className="flex items-baseline justify-between mb-2">
+              <label className="block text-sm font-medium" style={{ color: "var(--ink)" }}>
+                Subject translations
+              </label>
+              <div className="flex items-center gap-3">
+                {autoTranslateResultSubjects && (
+                  <span className="text-xs font-medium" style={{ color: "var(--teal)" }}>
+                    {autoTranslateResultSubjects}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={handleAutoTranslateSubjects}
+                  disabled={autoTranslatingSubjects || isNewLang}
+                  className="text-xs font-medium disabled:opacity-60"
+                  style={{ color: "var(--teal)" }}
+                  title={isNewLang ? "Save this language first" : undefined}
+                >
+                  {autoTranslatingSubjects ? "Translating..." : "Auto-translate missing"}
+                </button>
+              </div>
+            </div>
             <div className="space-y-2">
               {subjects.map((s) => (
                 <div key={s.id} className="flex gap-3 items-center">
@@ -435,48 +518,72 @@ export default function TranslationsPanel({
                 Variation translations
               </label>
               <div className="flex items-center gap-3">
-                {autoTranslateResult && (
+                {autoTranslateResultVariations && (
                   <span className="text-xs font-medium" style={{ color: "var(--teal)" }}>
-                    {autoTranslateResult}
+                    {autoTranslateResultVariations}
                   </span>
                 )}
                 <button
                   type="button"
                   onClick={handleAutoTranslateVariations}
-                  disabled={autoTranslating || isNewLang}
+                  disabled={autoTranslatingVariations || isNewLang}
                   className="text-xs font-medium disabled:opacity-60"
                   style={{ color: "var(--teal)" }}
                   title={isNewLang ? "Save this language first" : undefined}
                 >
-                  {autoTranslating ? "Translating..." : "Auto-translate missing"}
+                  {autoTranslatingVariations ? "Translating..." : "Auto-translate missing"}
                 </button>
               </div>
             </div>
             <p className="text-xs mb-2" style={{ color: "var(--pencil)" }}>
               Optional — enables unique per-image alt text and titles
             </p>
-
-            <div className="space-y-2">
-              {variations.map((v) => (
-                <div key={v.id} className="flex gap-3 items-center">
-                  <span className="w-56 text-xs shrink-0" style={{ color: "var(--pencil)" }}>
-                    {v.text}
-                  </span>
-                  <input
-                    type="text"
-                    value={form.itemsByVariation[v.text] ?? ""}
-                    onChange={(e) => updateVariationItem(v.text, e.target.value)}
-                    placeholder="Not translated yet"
-                    className="flex-1 px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
-                    style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
-                  />
-                </div>
-              ))}
+            {variations.length > 8 && (
+              <input
+                type="text"
+                value={variationTranslationFilter}
+                onChange={(e) => setVariationTranslationFilter(e.target.value)}
+                placeholder={`Filter ${variations.length} variations...`}
+                className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm mb-2"
+                style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+              />
+            )}
+            <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+              {variations.map((v) => {
+                if (
+                  variationTranslationFilter &&
+                  !v.text.toLowerCase().includes(variationTranslationFilter.toLowerCase())
+                ) {
+                  return null;
+                }
+                return (
+                  <div key={v.id} className="flex gap-3 items-center">
+                    <span className="w-56 text-xs shrink-0" style={{ color: "var(--pencil)" }}>
+                      {v.text}
+                    </span>
+                    <input
+                      type="text"
+                      value={form.itemsByVariation[v.text] ?? ""}
+                      onChange={(e) => updateVariationItem(v.text, e.target.value)}
+                      placeholder="Not translated yet"
+                      className="flex-1 px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
+                      style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+                    />
+                  </div>
+                );
+              })}
               {variations.length === 0 && (
                 <p className="text-sm" style={{ color: "var(--pencil)" }}>
                   Add variations to this category first.
                 </p>
               )}
+              {variations.length > 0 &&
+                variationTranslationFilter &&
+                variations.every((v) => !v.text.toLowerCase().includes(variationTranslationFilter.toLowerCase())) && (
+                  <p className="text-sm" style={{ color: "var(--pencil)" }}>
+                    No variations match &quot;{variationTranslationFilter}&quot;.
+                  </p>
+                )}
             </div>
           </div>
 

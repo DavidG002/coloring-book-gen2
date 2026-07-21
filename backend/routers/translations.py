@@ -9,6 +9,8 @@ from schemas import (
     TranslateVariationsRequest, TranslateVariationsResponse,
 )
 from services.translate import translate_phrases
+from schemas import TranslateCategoryNameResponse
+
 
 router = APIRouter(prefix="/categories/{category_name}/translations", tags=["translations"])
 
@@ -206,3 +208,43 @@ def translate_variations(category_name: str, lang: str, db: Session = Depends(ge
         translated_count=len(results),
         skipped_count=len(already_translated),
     )
+
+@router.post("/{lang}/translate-subjects", response_model=TranslateVariationsResponse)
+def translate_subjects(category_name: str, lang: str, db: Session = Depends(get_db)):
+    category = _get_category_or_404(category_name, db)
+    translation = next((t for t in category.translations if t.lang == lang), None)
+    if not translation:
+        raise HTTPException(status_code=404, detail=f"No '{lang}' translation for '{category_name}' — create it first")
+
+    already_translated = {item.subject.name for item in translation.items}
+    to_translate = [s.name for s in category.subjects if s.name not in already_translated]
+
+    if not to_translate:
+        return TranslateVariationsResponse(translated_count=0, skipped_count=len(category.subjects))
+
+    results = translate_phrases(to_translate, lang)
+
+    for subject_name, translated_text in results.items():
+        if not translated_text:
+            continue
+        subject = next((s for s in category.subjects if s.name == subject_name), None)
+        if subject:
+            db.add(TranslationItem(
+                translation_id=translation.id,
+                subject_id=subject.id,
+                translated_text=translated_text,
+            ))
+
+    db.commit()
+
+    return TranslateVariationsResponse(
+        translated_count=len(results),
+        skipped_count=len(already_translated),
+    )
+
+@router.post("/{lang}/translate-category-name", response_model=TranslateCategoryNameResponse)
+def translate_category_name(category_name: str, lang: str, db: Session = Depends(get_db)):
+    category = _get_category_or_404(category_name, db)
+    results = translate_phrases([category.name], lang)
+    translated = results.get(category.name, "")
+    return TranslateCategoryNameResponse(translated_text=translated)

@@ -52,6 +52,11 @@ interface PublishHistoryRun {
   files: PublishHistoryFile[];
 }
 
+interface OutputPathResponse {
+  output_path: string;
+  publish_root: string;
+}
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 async function planPublish(category: string, lang: string, onlyNew: boolean): Promise<PublishPlanResponse> {
@@ -86,6 +91,17 @@ async function getPublishHistory(category: string, lang?: string): Promise<Publi
   return data;
 }
 
+async function getOutputPath(category: string): Promise<OutputPathResponse> {
+  const res = await fetch(`${API_BASE_URL}/publish/output-path/${encodeURIComponent(category)}`);
+  const data = await res.json();
+  if (!res.ok) throw new ApiError(res.status, data.detail);
+  return data;
+}
+
+function downloadManifestUrl(runId: number): string {
+  return `${API_BASE_URL}/publish/runs/${runId}/manifest`;
+}
+
 function formatDate(iso: string): string {
   const d = new Date(iso);
   return d.toLocaleString(undefined, {
@@ -112,6 +128,8 @@ export default function PublishPanel({ categoryName }: { categoryName: string })
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [expandedRunId, setExpandedRunId] = useState<number | null>(null);
   const [onlyNew, setOnlyNew] = useState(true);
+  const [outputPath, setOutputPath] = useState<string | null>(null);
+  const [pathCopied, setPathCopied] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -132,6 +150,20 @@ export default function PublishPanel({ categoryName }: { categoryName: string })
       cancelled = true;
     };
   }, [categoryName]);
+
+  useEffect(() => {
+    getOutputPath(categoryName)
+      .then((data) => setOutputPath(data.output_path))
+      .catch(() => {});
+  }, [categoryName]);
+
+  function handleCopyPath() {
+    if (!outputPath) return;
+    navigator.clipboard.writeText(outputPath).then(() => {
+      setPathCopied(true);
+      setTimeout(() => setPathCopied(false), 2000);
+    });
+  }
 
   const loadHistory = useCallback((lang: string) => {
     if (!lang) return;
@@ -211,65 +243,65 @@ export default function PublishPanel({ categoryName }: { categoryName: string })
         </p>
       ) : (
         <>
-        <div className="mb-5 flex gap-6">
-          <div>
-            <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
-              Language
-            </label>
-            <select
-              value={selectedLang}
-              onChange={(e) => {
-                setSelectedLang(e.target.value);
-                handleReset();
-              }}
-              className="w-40 px-3 py-2 rounded-md border-[1.5px] outline-none text-sm uppercase"
-              style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
-            >
-              {languages.map((lang) => (
-                <option key={lang} value={lang}>
-                  {lang}
-                </option>
-              ))}
-            </select>
+          <div className="mb-5 flex gap-6">
+            <div>
+              <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
+                Language
+              </label>
+              <select
+                value={selectedLang}
+                onChange={(e) => {
+                  setSelectedLang(e.target.value);
+                  handleReset();
+                }}
+                className="w-40 px-3 py-2 rounded-md border-[1.5px] outline-none text-sm uppercase"
+                style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+              >
+                {languages.map((lang) => (
+                  <option key={lang} value={lang}>
+                    {lang}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
+                Scope
+              </label>
+              <div className="flex items-center gap-2 h-[38px]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOnlyNew(true);
+                    handleReset();
+                  }}
+                  className="px-3 py-1.5 rounded-md text-sm border-[1.5px]"
+                  style={
+                    onlyNew
+                      ? { background: "var(--teal)", borderColor: "var(--teal)", color: "white" }
+                      : { borderColor: "var(--pencil-light)", color: "var(--pencil)" }
+                  }
+                >
+                  Only new
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOnlyNew(false);
+                    handleReset();
+                  }}
+                  className="px-3 py-1.5 rounded-md text-sm border-[1.5px]"
+                  style={
+                    !onlyNew
+                      ? { background: "var(--teal)", borderColor: "var(--teal)", color: "white" }
+                      : { borderColor: "var(--pencil-light)", color: "var(--pencil)" }
+                  }
+                >
+                  Everything
+                </button>
+              </div>
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
-              Scope
-            </label>
-            <div className="flex items-center gap-2 h-[38px]">
-              <button
-              type="button"
-              onClick={() => {
-                setOnlyNew(true);
-                handleReset();
-              }}
-              className="px-3 py-1.5 rounded-md text-sm border-[1.5px]"
-              style={
-                onlyNew
-                  ? { background: "var(--teal)", borderColor: "var(--teal)", color: "white" }
-                  : { borderColor: "var(--pencil-light)", color: "var(--pencil)" }
-              }
-            >
-              Only new
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setOnlyNew(false);
-                handleReset();
-              }}
-              className="px-3 py-1.5 rounded-md text-sm border-[1.5px]"
-              style={
-                !onlyNew
-                  ? { background: "var(--teal)", borderColor: "var(--teal)", color: "white" }
-                  : { borderColor: "var(--pencil-light)", color: "var(--pencil)" }
-              }
-            >
-              Everything
-            </button>
-          </div>
-        </div>
-      </div>
 
           {(panelState === "idle" || panelState === "planning") && (
             <button
@@ -370,12 +402,39 @@ export default function PublishPanel({ categoryName }: { categoryName: string })
                   Skipped: {result.skipped_subjects.join(", ")}
                 </p>
               )}
+              <div className="flex gap-3">
+                <button
+                  onClick={handleReset}
+                  className="px-5 py-2.5 rounded-md text-sm font-medium text-white"
+                  style={{ background: "var(--teal)" }}
+                >
+                  Done
+                </button>
+                <button
+                  onClick={() => window.open(downloadManifestUrl(result.run_id), "_blank")}
+                  className="px-5 py-2.5 rounded-md text-sm font-medium"
+                  style={{ color: "var(--pencil)", border: "1.5px solid var(--pencil-light)" }}
+                >
+                  Download manifest
+                </button>
+              </div>
+            </div>
+          )}
+
+          {outputPath && (
+            <div
+              className="mt-6 flex items-center justify-between rounded-md border-[1.5px] px-4 py-2.5"
+              style={{ borderColor: "var(--pencil-light)" }}
+            >
+              <span className="text-xs font-mono truncate" style={{ color: "var(--pencil)" }}>
+                {outputPath}
+              </span>
               <button
-                onClick={handleReset}
-                className="px-5 py-2.5 rounded-md text-sm font-medium text-white"
-                style={{ background: "var(--teal)" }}
+                onClick={handleCopyPath}
+                className="ml-3 shrink-0 text-xs font-medium"
+                style={{ color: "var(--teal)" }}
               >
-                Done
+                {pathCopied ? "Copied!" : "Copy path"}
               </button>
             </div>
           )}
@@ -396,22 +455,31 @@ export default function PublishPanel({ categoryName }: { categoryName: string })
               <div className="space-y-2">
                 {history.map((run) => (
                   <div key={run.id} className="rounded-md border-[1.5px]" style={{ borderColor: "var(--pencil-light)" }}>
-                    <button
-                      onClick={() => setExpandedRunId(expandedRunId === run.id ? null : run.id)}
-                      className="w-full flex items-center justify-between px-4 py-3 text-left"
-                    >
-                      <div>
+                    <div className="w-full flex items-center justify-between px-4 py-3">
+                      <button
+                        onClick={() => setExpandedRunId(expandedRunId === run.id ? null : run.id)}
+                        className="text-left flex-1"
+                      >
                         <span className="text-sm font-medium" style={{ color: "var(--ink)" }}>
                           {formatDate(run.created_at)}
                         </span>
                         <span className="ml-3 text-xs" style={{ color: "var(--pencil)" }}>
                           {run.published_count} files ({run.new_count} new, {run.already_published_count} repeat)
                         </span>
+                      </button>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            window.open(downloadManifestUrl(run.id), "_blank");
+                          }}
+                          className="text-xs font-medium"
+                          style={{ color: "var(--teal)" }}
+                        >
+                          Download
+                        </button>
                       </div>
-                      <span className="text-xs" style={{ color: "var(--teal)" }}>
-                        {expandedRunId === run.id ? "Hide" : "View"}
-                      </span>
-                    </button>
+                    </div>
                     {expandedRunId === run.id && (
                       <div className="px-4 pb-3 space-y-1.5 max-h-48 overflow-y-auto">
                         {run.files.map((f, i) => (

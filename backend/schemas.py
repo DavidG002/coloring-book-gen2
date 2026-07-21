@@ -132,6 +132,9 @@ class TranslateVariationsResponse(BaseModel):
     translated_count: int
     skipped_count: int  # already had a translation, left untouched
 
+class TranslateCategoryNameResponse(BaseModel):
+    translated_text: str
+
 # ---------- Settings ----------
 
 class SettingRead(BaseModel):
