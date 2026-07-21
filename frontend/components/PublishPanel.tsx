@@ -54,22 +54,22 @@ interface PublishHistoryRun {
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-async function planPublish(category: string, lang: string): Promise<PublishPlanResponse> {
+async function planPublish(category: string, lang: string, onlyNew: boolean): Promise<PublishPlanResponse> {
   const res = await fetch(`${API_BASE_URL}/publish/plan`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ category, lang }),
+    body: JSON.stringify({ category, lang, only_new: onlyNew }),
   });
   const data = await res.json();
   if (!res.ok) throw new ApiError(res.status, data.detail);
   return data;
 }
 
-async function runPublish(category: string, lang: string): Promise<PublishRunResponse> {
+async function runPublish(category: string, lang: string, onlyNew: boolean): Promise<PublishRunResponse> {
   const res = await fetch(`${API_BASE_URL}/publish/run`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ category, lang }),
+    body: JSON.stringify({ category, lang, only_new: onlyNew }),
   });
   const data = await res.json();
   if (!res.ok) throw new ApiError(res.status, data.detail);
@@ -111,6 +111,7 @@ export default function PublishPanel({ categoryName }: { categoryName: string })
   const [history, setHistory] = useState<PublishHistoryRun[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [expandedRunId, setExpandedRunId] = useState<number | null>(null);
+  const [onlyNew, setOnlyNew] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -151,7 +152,7 @@ export default function PublishPanel({ categoryName }: { categoryName: string })
     setError(null);
     setPanelState("planning");
     try {
-      const data = await planPublish(categoryName, selectedLang);
+      const data = await planPublish(categoryName, selectedLang, onlyNew);
       setPlan(data);
       setPanelState("planned");
     } catch (err) {
@@ -165,7 +166,7 @@ export default function PublishPanel({ categoryName }: { categoryName: string })
     setError(null);
     setPanelState("publishing");
     try {
-      const data = await runPublish(categoryName, selectedLang);
+      const data = await runPublish(categoryName, selectedLang, onlyNew);
       setResult(data);
       setPanelState("done");
       loadHistory(selectedLang);
@@ -210,7 +211,8 @@ export default function PublishPanel({ categoryName }: { categoryName: string })
         </p>
       ) : (
         <>
-          <div className="mb-5">
+        <div className="mb-5 flex gap-6">
+          <div>
             <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
               Language
             </label>
@@ -230,6 +232,44 @@ export default function PublishPanel({ categoryName }: { categoryName: string })
               ))}
             </select>
           </div>
+          <div>
+            <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
+              Scope
+            </label>
+            <div className="flex items-center gap-2 h-[38px]">
+              <button
+              type="button"
+              onClick={() => {
+                setOnlyNew(true);
+                handleReset();
+              }}
+              className="px-3 py-1.5 rounded-md text-sm border-[1.5px]"
+              style={
+                onlyNew
+                  ? { background: "var(--teal)", borderColor: "var(--teal)", color: "white" }
+                  : { borderColor: "var(--pencil-light)", color: "var(--pencil)" }
+              }
+            >
+              Only new
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setOnlyNew(false);
+                handleReset();
+              }}
+              className="px-3 py-1.5 rounded-md text-sm border-[1.5px]"
+              style={
+                !onlyNew
+                  ? { background: "var(--teal)", borderColor: "var(--teal)", color: "white" }
+                  : { borderColor: "var(--pencil-light)", color: "var(--pencil)" }
+              }
+            >
+              Everything
+            </button>
+          </div>
+        </div>
+      </div>
 
           {(panelState === "idle" || panelState === "planning") && (
             <button

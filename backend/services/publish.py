@@ -50,7 +50,7 @@ def _already_published_source_paths(db: Session, category_name: str, lang: str) 
     return {r[0] for r in rows}
 
 
-def build_publish_plan(db: Session, category_name: str, lang: str) -> dict:
+def build_publish_plan(db: Session, category_name: str, lang: str, only_new: bool = False) -> dict:
     category = db.query(Category).filter(Category.name == category_name).first()
     if not category:
         raise ValueError(f"Category '{category_name}' not found")
@@ -134,6 +134,9 @@ def build_publish_plan(db: Session, category_name: str, lang: str) -> dict:
     new_count = sum(1 for f in files_info if f["is_new"])
     already_count = len(files_info) - new_count
 
+    if only_new:
+        files_info = [f for f in files_info if f["is_new"]]
+
     return {
         "files": files_info,
         "skipped_subjects": skipped_subjects,
@@ -142,8 +145,8 @@ def build_publish_plan(db: Session, category_name: str, lang: str) -> dict:
     }
 
 
-def execute_publish(db: Session, category_name: str, lang: str) -> dict:
-    plan = build_publish_plan(db, category_name, lang)
+def execute_publish(db: Session, category_name: str, lang: str, only_new: bool = False) -> dict:
+    plan = build_publish_plan(db, category_name, lang, only_new=only_new)
     files_info = plan["files"]
 
     publish_category_dir = os.path.join(PUBLISH_DIR, lang, category_name)

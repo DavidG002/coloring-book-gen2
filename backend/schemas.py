@@ -222,6 +222,7 @@ class PromptDefaultsUpdate(BaseModel):
 class PublishRequest(BaseModel):
     category: str
     lang: str
+    only_new: bool = False
 
 
 class PublishedFileInfo(BaseModel):

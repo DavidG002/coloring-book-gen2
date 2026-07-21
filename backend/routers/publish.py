@@ -15,7 +15,7 @@ router = APIRouter(prefix="/publish", tags=["publish"])
 @router.post("/plan", response_model=PublishPlanResponse)
 def plan_publish(payload: PublishRequest, db: Session = Depends(get_db)):
     try:
-        result = build_publish_plan(db, payload.category, payload.lang)
+        result = build_publish_plan(db, payload.category, payload.lang, only_new=payload.only_new)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -31,7 +31,7 @@ def plan_publish(payload: PublishRequest, db: Session = Depends(get_db)):
 @router.post("/run", response_model=PublishRunResponse)
 def run_publish(payload: PublishRequest, db: Session = Depends(get_db)):
     try:
-        result = execute_publish(db, payload.category, payload.lang)
+        result = execute_publish(db, payload.category, payload.lang, only_new=payload.only_new)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
