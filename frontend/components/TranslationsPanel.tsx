@@ -121,6 +121,14 @@ export default function TranslationsPanel({
     setForm({ ...BLANK_FORM });
   }
 
+  function collapseLanguage() {
+  setSelectedLang(null);
+  setIsNewLang(false);
+  setForm(BLANK_FORM);
+  setError(null);
+  setSaved(false);
+  }
+
   function confirmNewLanguageCode() {
     const code = newLangCode.trim().toLowerCase();
     if (!code) {
@@ -266,7 +274,7 @@ export default function TranslationsPanel({
           {languages.map((lang) => (
             <button
               key={lang}
-              onClick={() => selectLanguage(lang)}
+              onClick={() => (selectedLang === lang ? collapseLanguage() : selectLanguage(lang))}
               className="px-3 py-1.5 rounded-full text-sm border-[1.5px] uppercase"
               style={
                 selectedLang === lang
