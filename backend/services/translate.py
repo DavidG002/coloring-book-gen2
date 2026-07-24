@@ -53,3 +53,41 @@ def translate_phrases(phrases: list[str], target_lang: str) -> dict[str, str]:
             result[phrase] = ""
 
     return result
+
+def translate_template(text: str, target_lang: str) -> str:
+    """Translates surrounding text while leaving {category}/{item}/{variant}
+    tokens completely untouched — used for one-time template structure setup
+    per language, not per category."""
+    language_name = LANGUAGE_NAMES.get(target_lang.lower(), target_lang)
+
+    prompt = (
+        f"Translate the following text into {language_name}. "
+        f"The text contains placeholder tokens like {{category}}, {{item}}, {{variant}} — "
+        f"keep every such token EXACTLY as written, with the exact same braces and spelling, "
+        f"do not translate or alter the tokens themselves, only translate the surrounding words. "
+        f"Respond with ONLY the translated text, no explanation, no quotes:\n\n{text}"
+    )
+
+    response = client.chat.completions.create(
+        model=TRANSLATE_MODEL,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.3,
+    )
+
+    return (response.choices[0].message.content or "").strip()
+
+
+NEUTRAL_TEMPLATES = {
+    "filename_template": "coloring-page-{category}-{item}",
+    "alt_template": "{category} {item} coloring page, free printable",
+    "title_template": "{category} {item} coloring page",
+}
+
+
+def translate_template_structure(target_lang: str) -> dict[str, str]:
+    """Translates the neutral English template structure into a new
+    language, once — the result becomes that language's reusable default."""
+    return {
+        key: translate_template(text, target_lang)
+        for key, text in NEUTRAL_TEMPLATES.items()
+    }

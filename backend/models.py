@@ -97,6 +97,13 @@ class VariationTranslationItem(Base):
        UniqueConstraint("translation_id", "variation_id", name="uq_variation_item_per_translation_variation"),
     )
 
+class LanguageTemplateDefault(Base):
+    __tablename__ = "language_template_defaults"
+
+    lang = Column(String, primary_key=True)
+    filename_template = Column(Text, nullable=False)
+    alt_template = Column(Text, nullable=False)
+    title_template = Column(Text, nullable=False)
 
 class GenerationJob(Base):
     __tablename__ = "generation_jobs"
@@ -125,6 +132,7 @@ class GenerationImage(Base):
     variation_number = Column(Integer, nullable=False)
     variation_text = Column(Text, nullable=True)  # nullable: images generated before this column existed won't have it
     file_path = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="approved")
     created_at = Column(DateTime, default=datetime.utcnow)
 
     job = relationship("GenerationJob", back_populates="images")

@@ -9,8 +9,9 @@ import PublishPanel from "@/components/PublishPanel";
 import CollapsibleSection from "@/components/CollapsibleSection";
 import CategorySidebar from "@/components/CategorySidebar";
 import BulkPasteInput from "@/components/BulkPasteInput";
+import ReviewPanel from "@/components/ReviewPanel";
 
-const SECTION_ORDER = ["prompt", "subjects", "variations", "generate", "translations", "publish"] as const;
+const SECTION_ORDER = ["prompt", "subjects", "variations", "generate", "review", "translations", "publish"] as const;
 type SectionId = (typeof SECTION_ORDER)[number];
 
 const SECTION_LABELS: Record<SectionId, string> = {
@@ -18,6 +19,7 @@ const SECTION_LABELS: Record<SectionId, string> = {
   subjects: "Subjects",
   variations: "Variations",
   generate: "Generate",
+  review: "Review",
   translations: "Translations",
   publish: "Publish",
 };
@@ -54,6 +56,8 @@ export default function CategoryDetailPage() {
   const translationsRef = useRef<HTMLDivElement>(null);
   const publishRef = useRef<HTMLDivElement>(null);
 
+  const reviewRef = useRef<HTMLDivElement>(null);
+
   function getSectionRef(id: SectionId): React.RefObject<HTMLDivElement | null> {
     switch (id) {
       case "prompt":
@@ -68,6 +72,8 @@ export default function CategoryDetailPage() {
         return translationsRef;
       case "publish":
         return publishRef;
+      case "review":
+        return reviewRef;
     }
   }
 
@@ -483,6 +489,16 @@ export default function CategoryDetailPage() {
             ref={generateRef}
           >
             {category && <GeneratePanel categoryName={categoryName} subjects={category.subjects} />}
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            id="review"
+            title="Review"
+            isOpen={openSection === "review"}
+            onToggle={() => setOpenSection(openSection === "review" ? null : "review")}
+            ref={reviewRef}
+          >
+            <ReviewPanel categoryName={categoryName} />
           </CollapsibleSection>
 
           <CollapsibleSection

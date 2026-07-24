@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import TemplateField, { type TemplateToken } from "@/components/TemplateField";
 import {
   getTranslations,
   getTranslation,
@@ -33,6 +34,12 @@ const BLANK_FORM: FormState = {
   itemsByVariation: {},
 };
 
+const TEMPLATE_TOKENS: TemplateToken[] = [
+  { key: "category", label: "Category" },
+  { key: "item", label: "Item" },
+  { key: "variant", label: "Variant" },
+];
+
 export default function TranslationsPanel({
   categoryName,
   subjects,
@@ -61,6 +68,9 @@ export default function TranslationsPanel({
   const [autoTranslateResultVariations, setAutoTranslateResultVariations] = useState<string | null>(null);
   const [translatingCategoryName, setTranslatingCategoryName] = useState(false);
   const [variationTranslationFilter, setVariationTranslationFilter] = useState("");
+
+  const [hasLanguageDefault, setHasLanguageDefault] = useState(true);
+  const [translatingTemplateStructure, setTranslatingTemplateStructure] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -133,7 +143,7 @@ export default function TranslationsPanel({
   setSaved(false);
   }
 
-  function confirmNewLanguageCode() {
+  async function confirmNewLanguageCode() {
     const code = newLangCode.trim().toLowerCase();
     if (!code) {
       setError("Language code is required, e.g. 'he' or 'es'.");
@@ -144,7 +154,27 @@ export default function TranslationsPanel({
       return;
     }
     setError(null);
-    setForm({ ...BLANK_FORM, lang: code });
+
+    try {
+      const savedDefault = await getLanguageTemplateDefault(code);
+      if (savedDefault) {
+        setHasLanguageDefault(true);
+        setForm({
+          ...BLANK_FORM,
+          lang: code,
+          filenameTemplate: savedDefault.filename_template,
+          altTemplate: savedDefault.alt_template,
+          titleTemplate: savedDefault.title_template,
+        });
+      } else {
+        setHasLanguageDefault(false);
+        setForm({ ...BLANK_FORM, lang: code });
+      }
+    } catch {
+      setHasLanguageDefault(false);
+      setForm({ ...BLANK_FORM, lang: code });
+    }
+
     setSelectedLang(code);
   }
 
@@ -298,6 +328,46 @@ export default function TranslationsPanel({
     }
   }
 
+  async function getLanguageTemplateDefault(lang: string) {
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/language-templates/${encodeURIComponent(lang)}`
+    );
+    if (res.status === 404) return null;
+    const data = await res.json();
+    if (!res.ok) throw new ApiError(res.status, data.detail);
+    return data as { filename_template: string; alt_template: string; title_template: string };
+  }
+
+  async function autoTranslateLanguageTemplate(lang: string) {
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/language-templates/${encodeURIComponent(lang)}/auto-translate`,
+      { method: "POST" }
+    );
+    const data = await res.json();
+    if (!res.ok) throw new ApiError(res.status, data.detail);
+    return data as { filename_template: string; alt_template: string; title_template: string };
+  }
+
+  async function handleAutoTranslateTemplateStructure() {
+    if (!form.lang) return;
+    setError(null);
+    setTranslatingTemplateStructure(true);
+    try {
+      const result = await autoTranslateLanguageTemplate(form.lang);
+      setForm((f) => ({
+        ...f,
+        filenameTemplate: result.filename_template,
+        altTemplate: result.alt_template,
+        titleTemplate: result.title_template,
+      }));
+      setHasLanguageDefault(true);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to auto-translate template structure");
+    } finally {
+      setTranslatingTemplateStructure(false);
+    }
+  }
+
   const showForm = selectedLang !== null || isNewLang;
 
   return (
@@ -418,53 +488,86 @@ export default function TranslationsPanel({
               />
             </div>
           </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
-              Filename template
-            </label>
-            <input
-              type="text"
+              {isNewLang && !hasLanguageDefault && (
+                <div
+                  className="rounded-md border-[1.5px] border-dashed p-4"
+                  style={{ borderColor: "var(--pencil-light)" }}
+                >
+                  <p className="text-sm mb-2" style={{ color: "var(--ink)" }}>
+                    First time using <span className="uppercase font-medium">{form.lang}</span>? Auto-translate the template
+                    structure once — it&apos;ll be remembered for every future category in this language.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleAutoTranslateTemplateStructure}
+                    disabled={translatingTemplateStructure}
+                    className="px-4 py-2 rounded-md text-sm font-medium text-white disabled:opacity-60"
+                    style={{ background: "var(--teal)" }}
+                  >
+                    {translatingTemplateStructure ? "Translating..." : "Auto-translate template structure"}
+                  </button>
+                </div>
+              )}
+            <TemplateField
+              label="Filename template"
               value={form.filenameTemplate}
-              onChange={(e) => setForm((f) => ({ ...f, filenameTemplate: e.target.value }))}
+              onChange={(v) => setForm((f) => ({ ...f, filenameTemplate: v }))}
+              tokens={TEMPLATE_TOKENS.filter((t) => t.key !== "variant")}
+              previewValues={{ category: form.categoryTranslated || "Category", item: "Item" }}
               placeholder="e.g. coloring-page-{category}-{item}"
-              className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm font-mono"
-              style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
             />
-          </div>
 
-          <div>
-            <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
-              Alt text template
-            </label>
-            <input
-              type="text"
+            <TemplateField
+              label="Alt text template"
               value={form.altTemplate}
-              onChange={(e) => setForm((f) => ({ ...f, altTemplate: e.target.value }))}
+              onChange={(v) => setForm((f) => ({ ...f, altTemplate: v }))}
+              tokens={TEMPLATE_TOKENS}
+              previewValues={{ category: form.categoryTranslated || "Category", item: "Item", variant: "Variant" }}
               placeholder="e.g. {category} {item} coloring page, free to print"
-              className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm font-mono"
-              style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
             />
-          </div>
 
-          <div>
-            <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
-              Title template
-            </label>
-            <input
-              type="text"
+            <TemplateField
+              label="Title template"
               value={form.titleTemplate}
-              onChange={(e) => setForm((f) => ({ ...f, titleTemplate: e.target.value }))}
+              onChange={(v) => setForm((f) => ({ ...f, titleTemplate: v }))}
+              tokens={TEMPLATE_TOKENS}
+              previewValues={{ category: form.categoryTranslated || "Category", item: "Item", variant: "Variant" }}
               placeholder="e.g. {category} {item} coloring page"
-              className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm font-mono"
-              style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
             />
-          </div>
 
-          <p className="text-xs" style={{ color: "var(--pencil)" }}>
-            Use {"{category}"} and {"{item}"} as placeholders in the templates above — filled in automatically when publishing.
-          </p>
+            <p className="text-xs" style={{ color: "var(--pencil)" }}>
+              Click a token button to insert it into the field above, or type your own text around it. Filenames never use Variant — it only changes once a URL is already published, so it&apos;s left out to keep links stable.
+            </p>
 
+            {isNewLang && (
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="px-5 py-2.5 rounded-md text-sm font-medium text-white disabled:opacity-60"
+                  style={{ background: "var(--teal)" }}
+                >
+                  {saving ? "Saving..." : "Save & continue"}
+                </button>
+                {saved && (
+                  <span className="text-sm font-medium" style={{ color: "var(--teal)" }}>
+                    Saved
+                  </span>
+                )}
+              </div>
+            )}
+
+            {isNewLang ? (
+              <div
+                className="rounded-md border-[1.5px] border-dashed p-5 text-center"
+                style={{ borderColor: "var(--pencil-light)" }}
+              >
+                <p className="text-sm" style={{ color: "var(--pencil)" }}>
+                  Save the language setup above to start translating subjects and variations.
+                </p>
+              </div>
+            ) : (
+              <>
           <div>
             <div className="flex items-baseline justify-between mb-2">
               <label className="block text-sm font-medium" style={{ color: "var(--ink)" }}>
@@ -586,7 +689,8 @@ export default function TranslationsPanel({
                 )}
             </div>
           </div>
-
+          </>
+        )}
           <div className="flex items-center gap-3 pt-2">
             <button
               onClick={handleSave}

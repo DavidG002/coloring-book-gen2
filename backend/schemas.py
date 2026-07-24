@@ -135,6 +135,18 @@ class TranslateVariationsResponse(BaseModel):
 class TranslateCategoryNameResponse(BaseModel):
     translated_text: str
 
+class LanguageTemplateDefaultRead(BaseModel):
+    lang: str
+    filename_template: str
+    alt_template: str
+    title_template: str
+
+
+class LanguageTemplateDefaultUpdate(BaseModel):
+    filename_template: Optional[str] = None
+    alt_template: Optional[str] = None
+    title_template: Optional[str] = None
+
 # ---------- Settings ----------
 
 class SettingRead(BaseModel):
