@@ -205,6 +205,24 @@ class SettingsRead(BaseModel):
     sleep_between_calls: float
     sleep_on_failure: float
 
+# ---------- BookPreview ---------
+
+class BookPreviewRequest(BaseModel):
+    canvas_width: int
+    canvas_height: int
+    subject_size_ratio: float
+    white_clean_threshold: int
+    black_clean_threshold: int
+    palette_colors: int
+    category_name: Optional[str] = None
+
+class BookPreviewAvailability(BaseModel):
+    available: bool
+    all_categories: list[str] = []
+    eligible_categories: list[str] = []
+    sample_subject: Optional[str] = None
+    sample_variation: Optional[str] = None
+    sample_category: Optional[str] = None
 
 # ---------- Generation ----------
 

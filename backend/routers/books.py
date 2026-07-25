@@ -1,9 +1,12 @@
+from fastapi.responses import Response
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from database import get_db
 from models import Book
-from schemas import BookCreate, BookUpdate, BookRead, BookSummary
+from services.generation import generate_preview_image, get_sample_task_for_book, get_eligible_preview_categories
+from schemas import BookCreate, BookUpdate, BookRead, BookSummary, BookPreviewRequest, BookPreviewAvailability
 
 router = APIRouter(prefix="/books", tags=["books"])
 
@@ -16,6 +19,59 @@ def list_books(db: Session = Depends(get_db)):
         for b in books
     ]
 
+@router.get("/{book_id}/preview-availability", response_model=BookPreviewAvailability)
+def check_preview_availability(book_id: int, db: Session = Depends(get_db)):
+    book = db.query(Book).filter(Book.id == book_id).first()
+    if not book:
+        raise HTTPException(status_code=404, detail=f"Book {book_id} not found")
+
+    all_category_names = [c.name for c in book.categories]
+    eligible = get_eligible_preview_categories(db, book_id)
+
+    if not eligible:
+        return BookPreviewAvailability(available=False, all_categories=all_category_names)
+
+    task = get_sample_task_for_book(db, book_id)
+    return BookPreviewAvailability(
+        available=True,
+        all_categories=all_category_names,
+        eligible_categories=eligible,
+        sample_subject=task["subject"] if task else None,
+        sample_variation=task["variation_text"] if task else None,
+        sample_category=task["category"] if task else None,
+    )
+
+
+@router.post("/{book_id}/preview")
+def preview_book_settings(book_id: int, payload: BookPreviewRequest, db: Session = Depends(get_db)):
+    book = db.query(Book).filter(Book.id == book_id).first()
+    if not book:
+        raise HTTPException(status_code=404, detail=f"Book {book_id} not found")
+
+    task = get_sample_task_for_book(db, book_id, category_name=payload.category_name)
+    if not task:
+        raise HTTPException(
+            status_code=400,
+            detail="Add at least one subject and one variation to a category in this book first.",
+        )
+
+    image_bytes = generate_preview_image(
+        book.base_prompt,
+        task["subject"],
+        task["variation_text"],
+        {
+            "canvas_width": payload.canvas_width,
+            "canvas_height": payload.canvas_height,
+            "subject_size_ratio": payload.subject_size_ratio,
+            "white_clean_threshold": payload.white_clean_threshold,
+            "black_clean_threshold": payload.black_clean_threshold,
+            "palette_colors": payload.palette_colors,
+        },
+    )
+    if image_bytes is None:
+        raise HTTPException(status_code=500, detail="Failed to generate preview image")
+
+    return Response(content=image_bytes, media_type="image/png")
 
 @router.get("/{book_id}", response_model=BookRead)
 def get_book(book_id: int, db: Session = Depends(get_db)):

@@ -5,7 +5,7 @@ from PIL import Image
 from openai import OpenAI
 from sqlalchemy.orm import Session
 
-from models import Category, Subject, Variation
+from models import Category, Subject, Variation, Book
 
 client = OpenAI()  # reads OPENAI_API_KEY from env automatically
 
@@ -71,6 +71,64 @@ def _get_existing_max_variation(category_name: str, subject_name: str) -> int:
     return max(numbers) if numbers else 0
 
 
+def get_sample_task_for_book(db: Session, book_id: int, category_name: str | None = None) -> dict | None:
+    """Finds a real subject+variation combination from this book's categories,
+    to use as a realistic settings preview. If category_name is given, uses
+    that specific category; otherwise picks the first eligible one found.
+    Returns None if no eligible category exists."""
+    book = db.query(Book).filter(Book.id == book_id).first()
+    if not book:
+        return None
+
+    candidates = book.categories
+    if category_name:
+        candidates = [c for c in candidates if c.name == category_name]
+
+    for category in candidates:
+        if category.subjects and category.variations:
+            subject = category.subjects[0]
+            variation = sorted(category.variations, key=lambda v: v.order)[0]
+            return {
+                "category": category.name,
+                "subject": subject.name,
+                "variation_text": variation.text,
+            }
+    return None
+
+
+def get_eligible_preview_categories(db: Session, book_id: int) -> list[str]:
+    """Categories in this book that have at least one subject and one
+    variation — i.e. could actually be used for a settings preview."""
+    book = db.query(Book).filter(Book.id == book_id).first()
+    if not book:
+        return []
+    return [c.name for c in book.categories if c.subjects and c.variations]
+
+
+def _process_raw_image(image_bytes: bytes, settings: dict):
+    """Shared resize/cleanup/palette pipeline — used by both real generation
+    and settings preview, so they can never silently drift apart."""
+    image = Image.open(io.BytesIO(image_bytes))
+
+    canvas_width = settings["canvas_width"]
+    canvas_height = settings["canvas_height"]
+    max_subject_size = int(canvas_height * settings["subject_size_ratio"])
+    image.thumbnail((max_subject_size, max_subject_size), Image.LANCZOS)
+
+    gray = image.convert("L")
+    white_t = settings["white_clean_threshold"]
+    black_t = settings["black_clean_threshold"]
+    clean_lut = [0 if v < black_t else (255 if v > white_t else v) for v in range(256)]
+    cleaned = gray.point(clean_lut, mode="L")
+
+    canvas = Image.new("L", (canvas_width, canvas_height), 255)
+    x = (canvas_width - cleaned.width) // 2
+    y = (canvas_height - cleaned.height) // 2
+    canvas.paste(cleaned, (x, y))
+
+    return canvas.convert("P", palette=Image.ADAPTIVE, colors=settings["palette_colors"], dither=Image.NONE)
+
+
 def generate_image_file(task: dict, settings: dict, output_path: str) -> bool:
     """Direct port of generate_image() from generate_pages.py, parameterized
     by settings instead of hardcoded constants."""
@@ -84,25 +142,7 @@ def generate_image_file(task: dict, settings: dict, output_path: str) -> bool:
             quality="low",
         )
         image_bytes = base64.b64decode(response.data[0].b64_json)
-        image = Image.open(io.BytesIO(image_bytes))
-
-        canvas_width = settings["canvas_width"]
-        canvas_height = settings["canvas_height"]
-        max_subject_size = int(canvas_height * settings["subject_size_ratio"])
-        image.thumbnail((max_subject_size, max_subject_size), Image.LANCZOS)
-
-        gray = image.convert("L")
-        white_t = settings["white_clean_threshold"]
-        black_t = settings["black_clean_threshold"]
-        clean_lut = [0 if v < black_t else (255 if v > white_t else v) for v in range(256)]
-        cleaned = gray.point(clean_lut, mode="L")
-
-        canvas = Image.new("L", (canvas_width, canvas_height), 255)
-        x = (canvas_width - cleaned.width) // 2
-        y = (canvas_height - cleaned.height) // 2
-        canvas.paste(cleaned, (x, y))
-
-        final = canvas.convert("P", palette=Image.ADAPTIVE, colors=settings["palette_colors"], dither=Image.NONE)
+        final = _process_raw_image(image_bytes, settings)
         final.save(output_path, "PNG", optimize=True, compress_level=9)
         return True
 
@@ -111,3 +151,30 @@ def generate_image_file(task: dict, settings: dict, output_path: str) -> bool:
         print(f"Error generating image: {e}")
         traceback.print_exc()
         return False
+
+
+def generate_preview_image(base_prompt: str, subject: str, variation_text: str, settings: dict) -> bytes | None:
+    """Runs a real, billed generation call using an actual subject + variation
+    from the book's categories, so the preview matches genuine output exactly.
+    Returns raw PNG bytes, nothing is written to disk or the database."""
+    prompt = base_prompt + f" Cute {subject}. {variation_text}."
+
+    try:
+        response = client.images.generate(
+            model="gpt-image-2",
+            prompt=prompt,
+            size="1024x1024",
+            quality="low",
+        )
+        image_bytes = base64.b64decode(response.data[0].b64_json)
+        final = _process_raw_image(image_bytes, settings)
+
+        buf = io.BytesIO()
+        final.save(buf, "PNG")
+        return buf.getvalue()
+
+    except Exception as e:
+        import traceback
+        print(f"Error generating preview: {e}")
+        traceback.print_exc()
+        return None
