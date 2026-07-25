@@ -1,5 +1,6 @@
 export * from "./types";
 export * from "./client";
+export * from "./books";
 export * from "./categories";
 export * from "./translations";
 export * from "./settings";

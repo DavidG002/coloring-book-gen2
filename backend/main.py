@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from models import init_db
-from routers import categories, translations, settings, generation, prompt_defaults, publish, language_templates, review
+from routers import categories, translations, settings, generation, prompt_defaults, publish, language_templates, review, books
 
 app = FastAPI(title="Coloring Book Generator API")
 
@@ -26,6 +26,7 @@ app.include_router(prompt_defaults.router)
 app.include_router(publish.router)
 app.include_router(language_templates.router)
 app.include_router(review.router)
+app.include_router(books.router)
 
 
 @app.get("/health")

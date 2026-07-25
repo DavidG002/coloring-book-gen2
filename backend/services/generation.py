@@ -44,7 +44,7 @@ def build_task_list(
                 "subject": subject.name,
                 "variation_number": variation_num,
                 "variation_text": modifier.text,
-                "base_prompt": category.base_prompt,
+                "base_prompt": category.book.base_prompt,
             })
 
     if max_images:

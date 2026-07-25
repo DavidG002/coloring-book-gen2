@@ -2,19 +2,32 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 
 from database import get_db
-from models import Category, Subject, Variation
+from models import Category, Subject, Variation, Book
 from schemas import CategoryCreate, CategoryUpdate, CategoryRead, CategorySummary
 
 router = APIRouter(prefix="/categories", tags=["categories"])
 
 
+def _to_category_read(category: Category) -> CategoryRead:
+    return CategoryRead(
+        id=category.id,
+        name=category.name,
+        book_id=category.book_id,
+        book_name=category.book.name,
+        subjects=category.subjects,
+        variations=category.variations,
+    )
+
+
 @router.get("", response_model=list[CategorySummary])
 def list_categories(db: Session = Depends(get_db)):
-    categories = db.query(Category).all()
+    categories = db.query(Category).options(joinedload(Category.book)).all()
     return [
         CategorySummary(
             id=c.id,
             name=c.name,
+            book_id=c.book_id,
+            book_name=c.book.name,
             subject_count=len(c.subjects),
             variation_count=len(c.variations),
         )
@@ -26,13 +39,13 @@ def list_categories(db: Session = Depends(get_db)):
 def get_category(name: str, db: Session = Depends(get_db)):
     category = (
         db.query(Category)
-        .options(joinedload(Category.subjects), joinedload(Category.variations))
+        .options(joinedload(Category.subjects), joinedload(Category.variations), joinedload(Category.book))
         .filter(Category.name == name)
         .first()
     )
     if not category:
         raise HTTPException(status_code=404, detail=f"Category '{name}' not found")
-    return category
+    return _to_category_read(category)
 
 
 @router.post("", response_model=CategoryRead, status_code=201)
@@ -41,9 +54,13 @@ def create_category(payload: CategoryCreate, db: Session = Depends(get_db)):
     if existing:
         raise HTTPException(status_code=409, detail=f"Category '{payload.name}' already exists")
 
-    category = Category(name=payload.name, base_prompt=payload.base_prompt)
+    book = db.query(Book).filter(Book.id == payload.book_id).first()
+    if not book:
+        raise HTTPException(status_code=400, detail=f"Book {payload.book_id} not found")
+
+    category = Category(name=payload.name, book_id=payload.book_id)
     db.add(category)
-    db.flush()  # assigns category.id without committing yet, so we can use it below
+    db.flush()
 
     for subject_name in payload.subjects:
         db.add(Subject(category_id=category.id, name=subject_name))
@@ -53,7 +70,7 @@ def create_category(payload: CategoryCreate, db: Session = Depends(get_db)):
 
     db.commit()
     db.refresh(category)
-    return category
+    return _to_category_read(category)
 
 
 @router.put("/{name}", response_model=CategoryRead)
@@ -62,29 +79,21 @@ def update_category(name: str, payload: CategoryUpdate, db: Session = Depends(ge
     if not category:
         raise HTTPException(status_code=404, detail=f"Category '{name}' not found")
 
-    if payload.base_prompt is not None:
-        category.base_prompt = payload.base_prompt
-
     if payload.subjects is not None:
-        # Diff-based update: only remove subjects no longer present, only add
-        # genuinely new ones. Untouched subjects keep their existing row/ID,
-        # so their linked translations survive edits that don't concern them.
         existing_by_name = {s.name: s for s in category.subjects}
         desired_names = set(payload.subjects)
 
-        for name, subject in existing_by_name.items():
-            if name not in desired_names:
+        for subj_name, subject in existing_by_name.items():
+            if subj_name not in desired_names:
                 db.delete(subject)
 
-        for name in payload.subjects:
-            if name not in existing_by_name:
-                db.add(Subject(category_id=category.id, name=name))
+        for subj_name in payload.subjects:
+            if subj_name not in existing_by_name:
+                db.add(Subject(category_id=category.id, name=subj_name))
 
         db.flush()
 
     if payload.variations is not None:
-        # Same diff approach, plus re-sync `order` for everything since
-        # position can change even when the set of variations doesn't.
         existing_by_text = {v.text: v for v in category.variations}
         desired_texts = set(payload.variations)
 
@@ -99,10 +108,12 @@ def update_category(name: str, payload: CategoryUpdate, db: Session = Depends(ge
                 existing_by_text[text].order = i
             else:
                 db.add(Variation(category_id=category.id, text=text, order=i))
-    db.flush()
+
+        db.flush()
+
     db.commit()
     db.refresh(category)
-    return category
+    return _to_category_read(category)
 
 
 @router.delete("/{name}", status_code=204)
@@ -110,5 +121,5 @@ def delete_category(name: str, db: Session = Depends(get_db)):
     category = db.query(Category).filter(Category.name == name).first()
     if not category:
         raise HTTPException(status_code=404, detail=f"Category '{name}' not found")
-    db.delete(category)  # cascade in models.py cleans up subjects/variations/translations
+    db.delete(category)
     db.commit()

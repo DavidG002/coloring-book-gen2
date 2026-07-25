@@ -34,22 +34,59 @@ class VariationRead(VariationBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
 
+# ---------- Book ----------
+
+class BookBase(BaseModel):
+    name: str
+    base_prompt: str
+    canvas_width: int = 595
+    canvas_height: int = 842
+    subject_size_ratio: float = 0.50
+    white_clean_threshold: int = 245
+    black_clean_threshold: int = 10
+    palette_colors: int = 8
+
+
+class BookCreate(BookBase):
+    pass
+
+
+class BookUpdate(BaseModel):
+    name: Optional[str] = None
+    base_prompt: Optional[str] = None
+    canvas_width: Optional[int] = None
+    canvas_height: Optional[int] = None
+    subject_size_ratio: Optional[float] = None
+    white_clean_threshold: Optional[int] = None
+    black_clean_threshold: Optional[int] = None
+    palette_colors: Optional[int] = None
+
+
+class BookRead(BookBase):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    category_count: int = 0
+
+
+class BookSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    category_count: int
 
 # ---------- Category ----------
 
 class CategoryBase(BaseModel):
     name: str
-    base_prompt: str
 
 
 class CategoryCreate(CategoryBase):
+    book_id: int
     subjects: list[str] = []
     variations: list[str] = []
 
 
 class CategoryUpdate(BaseModel):
-    # All optional — PUT can update just the prompt, just subjects, etc.
-    base_prompt: Optional[str] = None
     subjects: Optional[list[str]] = None
     variations: Optional[list[str]] = None
 
@@ -57,16 +94,18 @@ class CategoryUpdate(BaseModel):
 class CategoryRead(CategoryBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    book_id: int
+    book_name: str
     subjects: list[SubjectRead] = []
     variations: list[VariationRead] = []
 
 
 class CategorySummary(BaseModel):
-    """Lightweight version for list views — no need to ship every subject/variation
-    when just showing a dropdown of category names."""
     model_config = ConfigDict(from_attributes=True)
     id: int
     name: str
+    book_id: int
+    book_name: str
     subject_count: int
     variation_count: int
 
@@ -156,26 +195,12 @@ class SettingRead(BaseModel):
 
 
 class SettingsUpdate(BaseModel):
-    # Partial update — only send the keys you want to change.
-    # Typed loosely as strings here; the route casts on read where needed.
-    canvas_width: Optional[int] = None
-    canvas_height: Optional[int] = None
-    subject_size_ratio: Optional[float] = None
-    white_clean_threshold: Optional[int] = None
-    black_clean_threshold: Optional[int] = None
-    palette_colors: Optional[int] = None
     batch_confirmation_threshold: Optional[int] = None
     sleep_between_calls: Optional[float] = None
     sleep_on_failure: Optional[float] = None
 
 
 class SettingsRead(BaseModel):
-    canvas_width: int
-    canvas_height: int
-    subject_size_ratio: float
-    white_clean_threshold: int
-    black_clean_threshold: int
-    palette_colors: int
     batch_confirmation_threshold: int
     sleep_between_calls: float
     sleep_on_failure: float

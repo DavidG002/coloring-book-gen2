@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
 import { getCategory, updateCategory, deleteCategory, ApiError, type Category } from "@/lib/api";
 import GeneratePanel from "@/components/GeneratePanel";
@@ -11,11 +12,10 @@ import CategorySidebar from "@/components/CategorySidebar";
 import BulkPasteInput from "@/components/BulkPasteInput";
 import ReviewPanel from "@/components/ReviewPanel";
 
-const SECTION_ORDER = ["prompt", "subjects", "variations", "generate", "review", "translations", "publish"] as const;
+const SECTION_ORDER = ["subjects", "variations", "generate", "review", "translations", "publish"] as const;
 type SectionId = (typeof SECTION_ORDER)[number];
 
 const SECTION_LABELS: Record<SectionId, string> = {
-  prompt: "Prompt",
   subjects: "Subjects",
   variations: "Variations",
   generate: "Generate",
@@ -34,34 +34,28 @@ export default function CategoryDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
 
-  const [basePrompt, setBasePrompt] = useState("");
   const [subjects, setSubjects] = useState<string[]>([]);
   const [variations, setVariations] = useState<string[]>([]);
 
-  const [savingPrompt, setSavingPrompt] = useState(false);
   const [savingSubjects, setSavingSubjects] = useState(false);
   const [savingVariations, setSavingVariations] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  const [openSection, setOpenSection] = useState<SectionId | null>("prompt");
+  const [openSection, setOpenSection] = useState<SectionId | null>("subjects");
   const [savingMessage, setSavingMessage] = useState<{ section: SectionId; text: string } | null>(null);
 
   const [subjectFilter, setSubjectFilter] = useState("");
   const [variationFilter, setVariationFilter] = useState("");
 
-  const promptRef = useRef<HTMLDivElement>(null);
   const subjectsRef = useRef<HTMLDivElement>(null);
   const variationsRef = useRef<HTMLDivElement>(null);
   const generateRef = useRef<HTMLDivElement>(null);
   const translationsRef = useRef<HTMLDivElement>(null);
   const publishRef = useRef<HTMLDivElement>(null);
-
   const reviewRef = useRef<HTMLDivElement>(null);
 
   function getSectionRef(id: SectionId): React.RefObject<HTMLDivElement | null> {
     switch (id) {
-      case "prompt":
-        return promptRef;
       case "subjects":
         return subjectsRef;
       case "variations":
@@ -87,7 +81,6 @@ export default function CategoryDetailPage() {
         const data = await getCategory(categoryName);
         if (cancelled) return;
         setCategory(data);
-        setBasePrompt(data.base_prompt);
         setSubjects(data.subjects.map((s) => s.name));
         setVariations(data.variations.sort((a, b) => a.order - b.order).map((v) => v.text));
       } catch (err) {
@@ -137,25 +130,6 @@ export default function CategoryDetailPage() {
 
   function addListItem(list: string[], setList: (v: string[]) => void) {
     setList([...list, ""]);
-  }
-
-  async function handleSavePrompt() {
-    setError(null);
-    const trimmed = basePrompt.trim();
-    if (!trimmed) {
-      setError("Base prompt cannot be empty.");
-      return;
-    }
-    setSavingPrompt(true);
-    try {
-      const updated = await updateCategory(categoryName, { base_prompt: trimmed });
-      setCategory(updated);
-      advanceAfterSave("prompt", "Saved — moving to Subjects");
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to save prompt");
-    } finally {
-      setSavingPrompt(false);
-    }
   }
 
   async function handleSaveSubjects() {
@@ -229,7 +203,7 @@ export default function CategoryDetailPage() {
           There is no category named &quot;{categoryName}&quot;.
         </p>
         <button
-          onClick={() => router.push("/")}
+          onClick={() => router.push("/books")}
           className="mt-6 px-5 py-2.5 rounded-md text-sm font-medium text-white"
           style={{ background: "var(--teal)" }}
         >
@@ -243,9 +217,7 @@ export default function CategoryDetailPage() {
     id,
     label: SECTION_LABELS[id],
     complete:
-      id === "prompt"
-        ? basePrompt.trim().length > 0
-        : id === "subjects"
+      id === "subjects"
         ? subjects.filter(Boolean).length > 0
         : id === "variations"
         ? variations.filter(Boolean).length > 0
@@ -259,11 +231,11 @@ export default function CategoryDetailPage() {
       <header className="mb-8 flex items-start justify-between">
         <div>
           <button
-            onClick={() => router.push("/")}
+            onClick={() => router.push("/books")}
             className="text-sm mb-3 inline-block"
             style={{ color: "var(--pencil)" }}
           >
-            {"\u2190"} All categories
+            {"\u2190"} Back to books
           </button>
           <h1 className="text-3xl font-display font-semibold capitalize" style={{ color: "var(--ink)" }}>
             {categoryName}
@@ -291,6 +263,16 @@ export default function CategoryDetailPage() {
         </div>
       )}
 
+      {category && (
+        <Link
+          href={`/books/${category.book_id}`}
+          className="inline-block mb-3 text-sm font-medium"
+          style={{ color: "var(--teal)" }}
+        >
+          Part of book: {category.book_name} {"\u2192"}
+        </Link>
+      )}
+
       <div className="flex gap-6 items-start">
         <CategorySidebar
           items={sidebarItems}
@@ -299,34 +281,6 @@ export default function CategoryDetailPage() {
         />
 
         <div className="flex-1 min-w-0 space-y-4">
-          <CollapsibleSection
-            id="prompt"
-            title="Prompt"
-            isOpen={openSection === "prompt"}
-            onToggle={() => setOpenSection(openSection === "prompt" ? null : "prompt")}
-            complete={basePrompt.trim().length > 0}
-            savingMessage={savingMessage?.section === "prompt" ? savingMessage.text : null}
-            ref={promptRef}
-          >
-            <div className="flex items-center justify-end mb-1.5">
-              <button
-                onClick={handleSavePrompt}
-                disabled={savingPrompt}
-                className="text-sm font-medium disabled:opacity-60"
-                style={{ color: "var(--teal)" }}
-              >
-                {savingPrompt ? "Saving..." : "Save & continue"}
-              </button>
-            </div>
-            <textarea
-              value={basePrompt}
-              onChange={(e) => setBasePrompt(e.target.value)}
-              rows={8}
-              className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm leading-relaxed"
-              style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
-            />
-          </CollapsibleSection>
-
           <CollapsibleSection
             id="subjects"
             title="Subjects"
@@ -345,20 +299,20 @@ export default function CategoryDetailPage() {
                   style={{ color: "var(--teal)" }}
                 >
                   + Add subject
-                  </button>
-                  <BulkPasteInput
-                    placeholder={"Car\nTruck\nAirplane\nBoat"}
-                    onAdd={(lines) => setSubjects((prev) => [...prev.filter(Boolean), ...lines])}
-                  />
-                </div>
-                <button
-                  onClick={handleSaveSubjects}
-                  disabled={savingSubjects}
-                  className="text-sm font-medium disabled:opacity-60"
-                  style={{ color: "var(--teal)" }}
-                >
-                  {savingSubjects ? "Saving..." : "Save & continue"}
                 </button>
+                <BulkPasteInput
+                  placeholder={"Car\nTruck\nAirplane\nBoat"}
+                  onAdd={(lines) => setSubjects((prev) => [...prev.filter(Boolean), ...lines])}
+                />
+              </div>
+              <button
+                onClick={handleSaveSubjects}
+                disabled={savingSubjects}
+                className="text-sm font-medium disabled:opacity-60"
+                style={{ color: "var(--teal)" }}
+              >
+                {savingSubjects ? "Saving..." : "Save & continue"}
+              </button>
             </div>
 
             {subjects.length > 8 && (
@@ -423,7 +377,7 @@ export default function CategoryDetailPage() {
                   onClick={() => addListItem(variations, setVariations)}
                   className="text-sm font-medium"
                   style={{ color: "var(--teal)" }}
-                > 
+                >
                   + Add variation
                 </button>
                 <BulkPasteInput

@@ -9,19 +9,12 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 
 # Defaults mirror the constants from the original generate_pages.py
 DEFAULTS = {
-    "canvas_width": "595",
-    "canvas_height": "842",
-    "subject_size_ratio": "0.50",
-    "white_clean_threshold": "245",
-    "black_clean_threshold": "10",
-    "palette_colors": "8",
     "batch_confirmation_threshold": "15",
     "sleep_between_calls": "1.2",
     "sleep_on_failure": "5.0",
 }
 
-# Which defaults are floats vs ints, so we cast correctly on read
-FLOAT_KEYS = {"subject_size_ratio", "sleep_between_calls", "sleep_on_failure"}
+FLOAT_KEYS = {"sleep_between_calls", "sleep_on_failure"}
 
 
 def _ensure_defaults(db: Session):

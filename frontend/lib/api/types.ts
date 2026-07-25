@@ -1,3 +1,40 @@
+
+//  ---------- Books ----------
+
+export interface Book {
+  id: number;
+  name: string;
+  base_prompt: string;
+  canvas_width: number;
+  canvas_height: number;
+  subject_size_ratio: number;
+  white_clean_threshold: number;
+  black_clean_threshold: number;
+  palette_colors: number;
+  category_count: number;
+}
+
+export interface BookSummary {
+  id: number;
+  name: string;
+  category_count: number;
+}
+
+export interface BookCreateInput {
+  name: string;
+  base_prompt: string;
+  canvas_width?: number;
+  canvas_height?: number;
+  subject_size_ratio?: number;
+  white_clean_threshold?: number;
+  black_clean_threshold?: number;
+  palette_colors?: number;
+}
+
+export type BookUpdateInput = Partial<BookCreateInput>;
+
+
+
 // ---------- Category ----------
 
 export interface Subject {
@@ -14,7 +51,8 @@ export interface Variation {
 export interface Category {
   id: number;
   name: string;
-  base_prompt: string;
+  book_id: number;
+  book_name: string;
   subjects: Subject[];
   variations: Variation[];
 }
@@ -22,19 +60,20 @@ export interface Category {
 export interface CategorySummary {
   id: number;
   name: string;
+  book_id: number;
+  book_name: string;
   subject_count: number;
   variation_count: number;
 }
 
 export interface CategoryCreateInput {
   name: string;
-  base_prompt: string;
+  book_id: number;
   subjects: string[];
   variations: string[];
 }
 
 export interface CategoryUpdateInput {
-  base_prompt?: string;
   subjects?: string[];
   variations?: string[];
 }
@@ -99,12 +138,6 @@ export interface TranslationUpdateInput {
 // ---------- Settings ----------
 
 export interface Settings {
-  canvas_width: number;
-  canvas_height: number;
-  subject_size_ratio: number;
-  white_clean_threshold: number;
-  black_clean_threshold: number;
-  palette_colors: number;
   batch_confirmation_threshold: number;
   sleep_between_calls: number;
   sleep_on_failure: number;

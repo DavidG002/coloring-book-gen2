@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 import json
 
 from database import get_db
-from models import GenerationJob, GenerationImage
+from models import GenerationJob, GenerationImage, Category
 from schemas import (
     GenerationPlanRequest, GenerationPlanResponse, PlannedTask,
     GenerationRunRequest, GenerationRunResponse, GenerationStatusResponse,
@@ -15,9 +15,21 @@ from routers.settings import get_settings as get_settings_route, DEFAULTS
 router = APIRouter(prefix="/generate", tags=["generation"])
 
 
-def _load_settings_dict(db: Session) -> dict:
-    settings_read = get_settings_route(db)  # reuses the settings router's logic
-    return settings_read.model_dump()
+def _load_settings_dict(db: Session, category_name: str) -> dict:
+    category = db.query(Category).filter(Category.name == category_name).first()
+    if not category or not category.book:
+        raise HTTPException(status_code=400, detail=f"Category '{category_name}' has no associated book")
+    book = category.book
+    return {
+        "canvas_width": book.canvas_width,
+        "canvas_height": book.canvas_height,
+        "subject_size_ratio": book.subject_size_ratio,
+        "white_clean_threshold": book.white_clean_threshold,
+        "black_clean_threshold": book.black_clean_threshold,
+        "palette_colors": book.palette_colors,
+        "sleep_between_calls": get_settings_route(db).sleep_between_calls,
+        "sleep_on_failure": get_settings_route(db).sleep_on_failure,
+    }
 
 
 @router.post("/plan", response_model=GenerationPlanResponse)
@@ -61,7 +73,7 @@ def run_generation(payload: GenerationRunRequest, background_tasks: BackgroundTa
     db.commit()
     db.refresh(job)
 
-    settings = _load_settings_dict(db)
+    settings = _load_settings_dict(db, payload.category)
     background_tasks.add_task(run_generation_job, job.id, tasks, settings)
 
     return GenerationRunResponse(job_id=job.id, status=job.status, total_images=job.total_images)

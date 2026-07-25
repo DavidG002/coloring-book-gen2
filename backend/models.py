@@ -8,22 +8,34 @@ from datetime import datetime
 Base = declarative_base()
 
 
+class Book(Base):
+    __tablename__ = "books"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String, unique=True, nullable=False)
+    base_prompt = Column(Text, nullable=False)
+
+    canvas_width = Column(Integer, nullable=False, default=595)
+    canvas_height = Column(Integer, nullable=False, default=842)
+    subject_size_ratio = Column(Float, nullable=False, default=0.50)
+    white_clean_threshold = Column(Integer, nullable=False, default=245)
+    black_clean_threshold = Column(Integer, nullable=False, default=10)
+    palette_colors = Column(Integer, nullable=False, default=8)
+
+    categories = relationship("Category", back_populates="book", cascade="all, delete-orphan")
+
+
 class Category(Base):
     __tablename__ = "categories"
 
     id = Column(Integer, primary_key=True)
     name = Column(String, unique=True, nullable=False)       # e.g. "dinosaurs"
-    base_prompt = Column(Text, nullable=False)
+    book_id = Column(Integer, ForeignKey("books.id"), nullable=False)
 
-    subjects = relationship(
-        "Subject", 
-        back_populates="category", 
-        cascade="all, delete-orphan",
-        order_by="Subject.id",
-        )
+    book = relationship("Book", back_populates="categories")
+    subjects = relationship("Subject", back_populates="category", cascade="all, delete-orphan", order_by="Subject.id")
     variations = relationship("Variation", back_populates="category", cascade="all, delete-orphan")
     translations = relationship("Translation", back_populates="category", cascade="all, delete-orphan")
-
 
 class Subject(Base):
     __tablename__ = "subjects"
