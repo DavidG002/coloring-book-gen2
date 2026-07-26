@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { getBook, updateBook, ApiError, type Book } from "@/lib/api";
 
@@ -12,6 +12,20 @@ const PAPER_PRESETS: { label: string; width: number; height: number }[] = [
   { label: "A5 (420 × 595)", width: 420, height: 595 },
   { label: "Square (800 × 800)", width: 800, height: 800 },
 ];
+
+interface BookPreviewHistoryItem {
+  id: number;
+  category: string;
+  subject: string;
+  variation_text: string;
+  canvas_width: number;
+  canvas_height: number;
+  subject_size_ratio: number;
+  white_clean_threshold: number;
+  black_clean_threshold: number;
+  palette_colors: number;
+  created_at: string;
+}
 
 async function checkPreviewAvailability(bookId: number) {
   const res = await fetch(`${API_BASE_URL}/books/${bookId}/preview-availability`);
@@ -47,6 +61,25 @@ async function fetchPreviewImage(
     throw new Error(data.detail || "Failed to generate preview");
   }
   return res.blob();
+}
+
+async function getPreviewHistory(bookId: number): Promise<BookPreviewHistoryItem[]> {
+  const res = await fetch(`${API_BASE_URL}/books/${bookId}/previews`);
+  return res.json();
+}
+
+function previewFileUrl(previewId: number): string {
+  return `${API_BASE_URL}/books/previews/${previewId}/file`;
+}
+
+function formatPreviewDate(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 function Field({
@@ -122,11 +155,34 @@ export default function BookSettingsPage() {
   const [previewState, setPreviewState] = useState<"idle" | "confirming" | "loading" | "done">("idle");
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [showFullSize, setShowFullSize] = useState(false);
-  const [trueSizeView, setTrueSizeView] = useState(true);
+  const [trueSizeView, setTrueSizeView] = useState(false);
 
   const viewerRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const dragStart = useRef({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 });
+
+  const [previewHistory, setPreviewHistory] = useState<BookPreviewHistoryItem[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [expandedPreviewId, setExpandedPreviewId] = useState<number | null>(null);
+  const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null);
+
+  const loadPreviewHistory = useCallback(() => {
+    setLoadingHistory(true);
+    getPreviewHistory(bookId)
+      .then(setPreviewHistory)
+      .catch(() => {})
+      .finally(() => setLoadingHistory(false));
+  }, [bookId]);
+
+  useEffect(() => {
+    if (showFullSize && trueSizeView && viewerRef.current) {
+      const el = viewerRef.current;
+      requestAnimationFrame(() => {
+        el.scrollLeft = Math.max(0, (canvasWidth - el.clientWidth) / 2);
+        el.scrollTop = Math.max(0, (canvasHeight - el.clientHeight) / 2);
+      });
+    }
+  }, [showFullSize, trueSizeView, lightboxImageUrl, canvasWidth, canvasHeight]);
 
   useEffect(() => {
     let cancelled = false;
@@ -155,6 +211,7 @@ export default function BookSettingsPage() {
           setSampleSubject(availability.sample_subject ?? null);
           setSampleVariation(availability.sample_variation ?? null);
           setSelectedPreviewCategory(availability.sample_category ?? "");
+          loadPreviewHistory();
         }
       } catch (err) {
         if (!cancelled) setError(err instanceof ApiError ? err.message : "Failed to load book");
@@ -167,7 +224,7 @@ export default function BookSettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [bookId]);
+  }, [bookId, loadPreviewHistory]);
 
   function applyPreset(label: string) {
     const preset = PAPER_PRESETS.find((p) => p.label === label);
@@ -237,6 +294,7 @@ export default function BookSettingsPage() {
       setSavingSettings(false);
     }
   }
+
   function handleMouseDown(e: React.MouseEvent) {
     if (!viewerRef.current) return;
     setIsDragging(true);
@@ -260,6 +318,7 @@ export default function BookSettingsPage() {
   function handleMouseUp() {
     setIsDragging(false);
   }
+
   async function handleGeneratePreview() {
     setError(null);
     setPreviewState("loading");
@@ -276,6 +335,7 @@ export default function BookSettingsPage() {
       if (previewImageUrl) URL.revokeObjectURL(previewImageUrl);
       setPreviewImageUrl(URL.createObjectURL(blob));
       setPreviewState("done");
+      loadPreviewHistory();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to generate preview");
       setPreviewState("idle");
@@ -479,30 +539,30 @@ export default function BookSettingsPage() {
                 <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
                   Preview using category
                 </label>
-                  <select
-                    value={selectedPreviewCategory}
-                    onChange={(e) => handlePreviewCategoryChange(e.target.value)}
-                    className="w-56 px-3 py-2 rounded-md border-[1.5px] outline-none text-sm capitalize"
-                    style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
-                  >
-                    {allCategories.map((cat) => (
-                      <option key={cat} value={cat} className="capitalize">
-                        {cat}
-                      </option>
-                    ))}
-                  </select>
-                  {eligibleCategories.includes(selectedPreviewCategory) ? (
-                    sampleSubject &&
-                    selectedPreviewCategory === (allCategories.length > 0 ? selectedPreviewCategory : "") && (
-                      <p className="mt-1.5 text-xs" style={{ color: "var(--pencil)" }}>
-                        Default sample: {sampleSubject} — {sampleVariation}
-                      </p>
-                    )
-                  ) : (
-                    <p className="mt-1.5 text-xs" style={{ color: "var(--coral-dark)" }}>
-                      This category has no subject and variation yet — add at least one of each on its own page before previewing.
+                <select
+                  value={selectedPreviewCategory}
+                  onChange={(e) => handlePreviewCategoryChange(e.target.value)}
+                  className="w-56 px-3 py-2 rounded-md border-[1.5px] outline-none text-sm capitalize"
+                  style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+                >
+                  {allCategories.map((cat) => (
+                    <option key={cat} value={cat} className="capitalize">
+                      {cat}
+                    </option>
+                  ))}
+                </select>
+                {eligibleCategories.includes(selectedPreviewCategory) ? (
+                  sampleSubject && (
+                    <p className="mt-1.5 text-xs" style={{ color: "var(--pencil)" }}>
+                      Default sample: {sampleSubject} — {sampleVariation}
                     </p>
-                  )}
+                  )
+                ) : (
+                  <p className="mt-1.5 text-xs" style={{ color: "var(--coral-dark)" }}>
+                    This category has no subject and variation yet — add at least one of each on its own page
+                    before previewing.
+                  </p>
+                )}
               </div>
 
               {previewState === "idle" ? (
@@ -550,12 +610,16 @@ export default function BookSettingsPage() {
                     <img
                       src={previewImageUrl}
                       alt="Settings preview"
-                      onClick={() => setShowFullSize(true)}
+                      onClick={() => {
+                        setLightboxImageUrl(previewImageUrl);
+                        setShowFullSize(true);
+                      }}
                       className="max-w-xs rounded-md border-[1.5px] mb-3 cursor-pointer hover:opacity-90 transition-opacity"
                       style={{ borderColor: "var(--pencil-light)" }}
                     />
                     <p className="text-xs mb-3" style={{ color: "var(--pencil)" }}>
-                      Click to view at true size ({canvasWidth} × {canvasHeight}px, {(canvasWidth / 72).toFixed(2)}&quot; × {(canvasHeight / 72).toFixed(2)}&quot; at 72 DPI)
+                      Click to view at true size ({canvasWidth} × {canvasHeight}px,{" "}
+                      {(canvasWidth / 72).toFixed(2)}&quot; × {(canvasHeight / 72).toFixed(2)}&quot; at 72 DPI)
                     </p>
                     <div className="flex gap-3">
                       <button
@@ -579,64 +643,138 @@ export default function BookSettingsPage() {
             </>
           )}
         </section>
+
+        <section>
+          <h2 className="font-display text-lg font-semibold mb-1" style={{ color: "var(--ink)" }}>
+            Preview history
+          </h2>
+          <p className="text-sm mb-4" style={{ color: "var(--pencil)" }}>
+            Every preview you&apos;ve generated for this book, kept so nothing paid for goes to waste.
+          </p>
+
+          {loadingHistory ? (
+            <p className="text-sm" style={{ color: "var(--pencil)" }}>
+              Loading...
+            </p>
+          ) : previewHistory.length === 0 ? (
+            <p className="text-sm" style={{ color: "var(--pencil)" }}>
+              No previews generated yet.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {previewHistory.map((p) => (
+                <div key={p.id} className="rounded-md border-[1.5px]" style={{ borderColor: "var(--pencil-light)" }}>
+                  <button
+                    onClick={() => setExpandedPreviewId(expandedPreviewId === p.id ? null : p.id)}
+                    className="w-full flex items-center justify-between px-4 py-3 text-left"
+                  >
+                    <div>
+                      <span className="text-sm font-medium capitalize" style={{ color: "var(--ink)" }}>
+                        {p.category} — {p.subject}
+                      </span>
+                      <span className="ml-3 text-xs" style={{ color: "var(--pencil)" }}>
+                        {formatPreviewDate(p.created_at)}
+                      </span>
+                    </div>
+                    <span className="text-xs" style={{ color: "var(--teal)" }}>
+                      {expandedPreviewId === p.id ? "Hide" : "View"}
+                    </span>
+                  </button>
+                  {expandedPreviewId === p.id && (
+                    <div className="px-4 pb-4">
+                      <img
+                        src={previewFileUrl(p.id)}
+                        alt={`${p.subject} preview`}
+                        onClick={() => {
+                          setLightboxImageUrl(previewFileUrl(p.id));
+                          setShowFullSize(true);
+                        }}
+                        className="max-w-xs rounded-md border-[1.5px] mb-2 cursor-pointer hover:opacity-90 transition-opacity"
+                        style={{ borderColor: "var(--pencil-light)" }}
+                      />
+                      <p className="text-xs" style={{ color: "var(--pencil)" }}>
+                        {p.canvas_width}×{p.canvas_height}px, ratio {p.subject_size_ratio}, palette{" "}
+                        {p.palette_colors} — {p.variation_text}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
       </div>
-        {showFullSize && previewImageUrl && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-8"
-            style={{ background: "rgba(28, 27, 26, 0.85)" }}
-            onClick={() => setShowFullSize(false)}
-          >
+
+      {showFullSize && lightboxImageUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-8"
+          style={{ background: "rgba(28, 27, 26, 0.85)" }}
+          onClick={() => setShowFullSize(false)}
+        >
+          <div className="flex flex-col items-center max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
             <div
-              className="flex flex-col items-center max-h-[90vh]"
-              onClick={(e) => e.stopPropagation()}
+              ref={viewerRef}
+              onMouseDown={trueSizeView ? handleMouseDown : undefined}
+              onMouseMove={trueSizeView ? handleMouseMove : undefined}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+              className="rounded-md shadow-2xl flex items-center justify-center"
+              style={{
+                width: "90vw",
+                height: "75vh",
+                overflow: trueSizeView ? "auto" : "hidden",
+                cursor: trueSizeView ? (isDragging ? "grabbing" : "grab") : "default",
+                background: "var(--pencil-light)",
+              }}
             >
-              <div
-                ref={viewerRef}
-                onMouseDown={trueSizeView ? handleMouseDown : undefined}
-                onMouseMove={trueSizeView ? handleMouseMove : undefined}
-                onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseUp}
-                className="rounded-md shadow-2xl"
-                style={{
-                  width: "90vw",
-                  height: "75vh",
-                  overflow: trueSizeView ? "hidden" : "auto",
-                  cursor: trueSizeView ? (isDragging ? "grabbing" : "grab") : "default",
-                }}
+              <img
+                src={lightboxImageUrl}
+                alt="Settings preview at true size"
+                draggable={false}
+                style={
+                  trueSizeView
+                    ? {
+                        width: `${canvasWidth}px`,
+                        height: `${canvasHeight}px`,
+                        background: "white",
+                        display: "block",
+                        boxShadow: "0 0 0 1px rgba(0,0,0,0.15)",
+                      }
+                    : {
+                        maxWidth: "100%",
+                        maxHeight: "100%",
+                        width: "auto",
+                        height: "auto",
+                        background: "white",
+                        display: "block",
+                        boxShadow: "0 0 0 1px rgba(0,0,0,0.15)",
+                      }
+                }
+              />
+            </div>
+            <div className="flex items-center gap-4 mt-4">
+              <span className="text-sm" style={{ color: "white" }}>
+                {canvasWidth} × {canvasHeight}px — {(canvasWidth / 72).toFixed(2)}&quot; ×{" "}
+                {(canvasHeight / 72).toFixed(2)}&quot; at 72 DPI
+              </span>
+              <button
+                onClick={() => setTrueSizeView((v) => !v)}
+                className="px-4 py-2 rounded-md text-sm font-medium"
+                style={{ background: "var(--teal)", color: "white" }}
               >
-                <img
-                  src={previewImageUrl}
-                  alt="Settings preview at true size"
-                  draggable={false}
-                  style={
-                    trueSizeView
-                      ? { width: `${canvasWidth}px`, height: `${canvasHeight}px`, background: "white", display: "block" }
-                      : { width: "100%", height: "100%", objectFit: "contain", background: "white", display: "block" }
-                  }
-                />
-              </div>
-              <div className="flex items-center gap-4 mt-4">
-                <span className="text-sm" style={{ color: "white" }}>
-                  {canvasWidth} × {canvasHeight}px — {(canvasWidth / 72).toFixed(2)}&quot; × {(canvasHeight / 72).toFixed(2)}&quot; at 72 DPI
-                </span>
-                <button
-                  onClick={() => setTrueSizeView((v) => !v)}
-                  className="px-4 py-2 rounded-md text-sm font-medium"
-                  style={{ background: "var(--teal)", color: "white" }}
-                >
-                  {trueSizeView ? "Fit to screen" : "True size (scroll)"}
-                </button>
-                <button
-                  onClick={() => setShowFullSize(false)}
-                  className="px-4 py-2 rounded-md text-sm font-medium"
-                  style={{ background: "var(--canvas)", color: "var(--ink)" }}
-                >
-                  Close
-                </button>
-              </div>
+                {trueSizeView ? "See full page (composition check)" : "Zoom to actual size (detail check)"}
+              </button>
+              <button
+                onClick={() => setShowFullSize(false)}
+                className="px-4 py-2 rounded-md text-sm font-medium"
+                style={{ background: "var(--canvas)", color: "var(--ink)" }}
+              >
+                Close
+              </button>
             </div>
           </div>
-        )}
-      </main>
-    );
-  }
+        </div>
+      )}
+    </main>
+  );
+}

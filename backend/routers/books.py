@@ -1,12 +1,16 @@
-from fastapi.responses import Response
+import os
+from fastapi.responses import Response, FileResponse
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import Book
-from services.generation import generate_preview_image, get_sample_task_for_book, get_eligible_preview_categories
-from schemas import BookCreate, BookUpdate, BookRead, BookSummary, BookPreviewRequest, BookPreviewAvailability
+from models import Book, BookPreview
+from services.generation import (
+    generate_preview_image, get_sample_task_for_book, 
+    get_eligible_preview_categories, save_preview_to_history,
+)
+from schemas import BookCreate, BookUpdate, BookRead, BookSummary, BookPreviewRequest, BookPreviewAvailability, BookPreviewRead
 
 router = APIRouter(prefix="/books", tags=["books"])
 
@@ -55,23 +59,44 @@ def preview_book_settings(book_id: int, payload: BookPreviewRequest, db: Session
             detail="Add at least one subject and one variation to a category in this book first.",
         )
 
-    image_bytes = generate_preview_image(
-        book.base_prompt,
-        task["subject"],
-        task["variation_text"],
-        {
-            "canvas_width": payload.canvas_width,
-            "canvas_height": payload.canvas_height,
-            "subject_size_ratio": payload.subject_size_ratio,
-            "white_clean_threshold": payload.white_clean_threshold,
-            "black_clean_threshold": payload.black_clean_threshold,
-            "palette_colors": payload.palette_colors,
-        },
-    )
+    settings = {
+        "canvas_width": payload.canvas_width,
+        "canvas_height": payload.canvas_height,
+        "subject_size_ratio": payload.subject_size_ratio,
+        "white_clean_threshold": payload.white_clean_threshold,
+        "black_clean_threshold": payload.black_clean_threshold,
+        "palette_colors": payload.palette_colors,
+    }
+
+    image_bytes = generate_preview_image(book.base_prompt, task["subject"], task["variation_text"], settings)
     if image_bytes is None:
         raise HTTPException(status_code=500, detail="Failed to generate preview image")
 
+    save_preview_to_history(db, book_id, task["category"], task["subject"], task["variation_text"], settings, image_bytes)
+
     return Response(content=image_bytes, media_type="image/png")
+
+
+@router.get("/{book_id}/previews", response_model=list[BookPreviewRead])
+def list_previews(book_id: int, db: Session = Depends(get_db)):
+    previews = (
+        db.query(BookPreview)
+        .filter(BookPreview.book_id == book_id)
+        .order_by(BookPreview.created_at.desc())
+        .all()
+    )
+    return previews
+
+
+@router.get("/previews/{preview_id}/file")
+def get_preview_file(preview_id: int, db: Session = Depends(get_db)):
+    preview = db.query(BookPreview).filter(BookPreview.id == preview_id).first()
+    if not preview:
+        raise HTTPException(status_code=404, detail="Preview not found")
+    if not os.path.exists(preview.file_path):
+        raise HTTPException(status_code=404, detail="Preview file missing on disk")
+    return FileResponse(preview.file_path, media_type="image/png")
+
 
 @router.get("/{book_id}", response_model=BookRead)
 def get_book(book_id: int, db: Session = Depends(get_db)):

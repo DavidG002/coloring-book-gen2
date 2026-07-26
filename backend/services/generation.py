@@ -5,7 +5,7 @@ from PIL import Image
 from openai import OpenAI
 from sqlalchemy.orm import Session
 
-from models import Category, Subject, Variation, Book
+from models import Category, Subject, Variation, Book, BookPreview
 
 client = OpenAI()  # reads OPENAI_API_KEY from env automatically
 
@@ -153,10 +153,15 @@ def generate_image_file(task: dict, settings: dict, output_path: str) -> bool:
         return False
 
 
+PREVIEW_DIR = "preview_cache"
+
+
 def generate_preview_image(base_prompt: str, subject: str, variation_text: str, settings: dict) -> bytes | None:
     """Runs a real, billed generation call using an actual subject + variation
     from the book's categories, so the preview matches genuine output exactly.
-    Returns raw PNG bytes, nothing is written to disk or the database."""
+    Returns raw PNG bytes. Saving to disk + history is handled separately by
+    the caller (save_preview_to_history), since this function stays focused
+    on just producing the image."""
     prompt = base_prompt + f" Cute {subject}. {variation_text}."
 
     try:
@@ -178,3 +183,44 @@ def generate_preview_image(base_prompt: str, subject: str, variation_text: str, 
         print(f"Error generating preview: {e}")
         traceback.print_exc()
         return None
+
+
+def save_preview_to_history(
+    db: Session,
+    book_id: int,
+    category: str,
+    subject: str,
+    variation_text: str,
+    settings: dict,
+    image_bytes: bytes,
+) -> "BookPreview":
+    """Writes a generated preview image to disk and records it in history,
+    so paid-for previews are never silently discarded."""
+    from models import BookPreview
+    import time
+
+    book_dir = os.path.join(PREVIEW_DIR, str(book_id))
+    os.makedirs(book_dir, exist_ok=True)
+    filename = f"preview_{int(time.time() * 1000)}.png"
+    file_path = os.path.join(book_dir, filename)
+
+    with open(file_path, "wb") as f:
+        f.write(image_bytes)
+
+    record = BookPreview(
+        book_id=book_id,
+        category=category,
+        subject=subject,
+        variation_text=variation_text,
+        canvas_width=settings["canvas_width"],
+        canvas_height=settings["canvas_height"],
+        subject_size_ratio=settings["subject_size_ratio"],
+        white_clean_threshold=settings["white_clean_threshold"],
+        black_clean_threshold=settings["black_clean_threshold"],
+        palette_colors=settings["palette_colors"],
+        file_path=file_path,
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return record

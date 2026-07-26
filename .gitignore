@@ -13,6 +13,9 @@ backend/output/*
 backend/publish/*
 !backend/publish/.gitkeep
 
+backend/preview_cache/*
+!backend/preview_cache/.gitkeep
+
 # ===== Frontend (Next.js) =====
 frontend/node_modules/
 frontend/.next/

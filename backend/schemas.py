@@ -224,6 +224,20 @@ class BookPreviewAvailability(BaseModel):
     sample_variation: Optional[str] = None
     sample_category: Optional[str] = None
 
+class BookPreviewRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    category: str
+    subject: str
+    variation_text: str
+    canvas_width: int
+    canvas_height: int
+    subject_size_ratio: float
+    white_clean_threshold: int
+    black_clean_threshold: int
+    palette_colors: int
+    created_at: datetime
+
 # ---------- Generation ----------
 
 class GenerationPlanRequest(BaseModel):

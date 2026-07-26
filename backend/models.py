@@ -7,7 +7,25 @@ from datetime import datetime
 
 Base = declarative_base()
 
+class BookPreview(Base):
+    __tablename__ = "book_previews"
 
+    id = Column(Integer, primary_key=True)
+    book_id = Column(Integer, ForeignKey("books.id"), nullable=False)
+    category = Column(String, nullable=False)
+    subject = Column(String, nullable=False)
+    variation_text = Column(Text, nullable=False)
+    canvas_width = Column(Integer, nullable=False)
+    canvas_height = Column(Integer, nullable=False)
+    subject_size_ratio = Column(Float, nullable=False)
+    white_clean_threshold = Column(Integer, nullable=False)
+    black_clean_threshold = Column(Integer, nullable=False)
+    palette_colors = Column(Integer, nullable=False)
+    file_path = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    book = relationship("Book")
+    
 class Book(Base):
     __tablename__ = "books"
 
