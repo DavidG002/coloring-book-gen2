@@ -211,3 +211,70 @@ engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 
 def init_db():
     Base.metadata.create_all(bind=engine)
+
+
+class AppCredential(Base):
+    """Single-row table (id=1 always) holding provider credentials.
+    DB-backed rather than .env so it's editable from the UI and ready
+    for a future multi-user model."""
+    __tablename__ = "app_credentials"
+
+    id = Column(Integer, primary_key=True, default=1)
+    openai_api_key = Column(String, nullable=True)
+
+
+class WordPressIntegration(Base):
+    __tablename__ = "wordpress_integration"
+
+    id = Column(Integer, primary_key=True, default=1)
+    site_url = Column(String, nullable=True)
+    username = Column(String, nullable=True)
+    app_password = Column(String, nullable=True)
+    post_type = Column(String, nullable=False, default="post")
+    taxonomy = Column(String, nullable=False, default="category")
+    last_test_status = Column(String, nullable=True)
+    last_test_message = Column(Text, nullable=True)
+    last_tested_at = Column(DateTime, nullable=True)
+
+
+class WordPressCategoryTerm(Base):
+    """Tracks the WP taxonomy term ID created for a given (category, language)
+    pair — created once, reused for every image ever published under it."""
+    __tablename__ = "wordpress_category_terms"
+
+    id = Column(Integer, primary_key=True)
+    category = Column(String, nullable=False)
+    lang = Column(String, nullable=False)
+    wp_term_id = Column(Integer, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("category", "lang", name="uq_wp_term_per_category_lang"),
+    )
+
+
+class WordPressPublishedItem(Base):
+    """Tracks each (image, language) pair that has been pushed to WordPress —
+    the source of truth for 'already pushed' vs 'new' on future batches."""
+    __tablename__ = "wordpress_published_items"
+
+    id = Column(Integer, primary_key=True)
+    source_path = Column(String, nullable=False)
+    category = Column(String, nullable=False)
+    lang = Column(String, nullable=False)
+    wp_media_id = Column(Integer, nullable=False)
+    wp_post_id = Column(Integer, nullable=False)
+    wp_post_url = Column(String, nullable=True)
+    status = Column(String, nullable=False, default="publish")  # "publish" | "draft"
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("source_path", "lang", name="uq_wp_item_per_source_lang"),
+    )
+
+
+class SupportedLanguage(Base):
+    __tablename__ = "supported_languages"
+
+    code = Column(String, primary_key=True)  # e.g. "he"
+    name = Column(String, nullable=False)    # e.g. "Hebrew"

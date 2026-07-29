@@ -2,12 +2,13 @@ import os
 import base64
 import io
 from PIL import Image
-from openai import OpenAI
 from sqlalchemy.orm import Session
+
+from services.openai_client import get_openai_client
 
 from models import Category, Subject, Variation, Book, BookPreview
 
-client = OpenAI()  # reads OPENAI_API_KEY from env automatically
+
 
 OUTPUT_DIR = "output"
 COST_PER_IMAGE_USD = 0.007  # matches README's low-quality tier estimate
@@ -130,11 +131,10 @@ def _process_raw_image(image_bytes: bytes, settings: dict):
 
 
 def generate_image_file(task: dict, settings: dict, output_path: str) -> bool:
-    """Direct port of generate_image() from generate_pages.py, parameterized
-    by settings instead of hardcoded constants."""
     prompt = task["base_prompt"] + f" Cute {task['subject']}. {task['variation_text']}."
 
     try:
+        client = get_openai_client()
         response = client.images.generate(
             model="gpt-image-2",
             prompt=prompt,
@@ -165,6 +165,7 @@ def generate_preview_image(base_prompt: str, subject: str, variation_text: str, 
     prompt = base_prompt + f" Cute {subject}. {variation_text}."
 
     try:
+        client = get_openai_client()
         response = client.images.generate(
             model="gpt-image-2",
             prompt=prompt,

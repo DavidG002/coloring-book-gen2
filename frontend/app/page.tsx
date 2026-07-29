@@ -8,14 +8,23 @@ export default async function DashboardPage() {
 
   return (
     <main className="min-h-screen px-8 py-12 max-w-5xl mx-auto">
-      <header className="mb-10 pb-6 border-b-2" style={{ borderColor: "var(--pencil-light)" }}>
+    <header className="mb-10 pb-6 border-b-2 flex items-start justify-between" style={{ borderColor: "var(--pencil-light)" }}>
+      <div>
         <h1 className="text-4xl font-semibold tracking-tight font-display" style={{ color: "var(--ink)" }}>
           Dashboard
         </h1>
         <p className="mt-1" style={{ color: "var(--pencil)" }}>
           Overview of your books and categories.
         </p>
-      </header>
+      </div>
+      <Link
+        href="/settings"
+        className="px-4 py-2.5 rounded-md text-sm font-medium"
+        style={{ color: "var(--pencil)", border: "1.5px solid var(--pencil-light)" }}
+      >
+        Settings
+      </Link>
+    </header>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-10">
         {[
@@ -38,7 +47,6 @@ export default async function DashboardPage() {
           </div>
         ))}
       </div>
-
       <div className="flex gap-4">
         <Link
           href="/books"
@@ -46,13 +54,6 @@ export default async function DashboardPage() {
           style={{ background: "var(--teal)" }}
         >
           Go to books {"\u2192"}
-        </Link>
-        <Link
-          href="/settings"
-          className="px-5 py-2.5 rounded-md text-sm font-medium"
-          style={{ color: "var(--pencil)", border: "1.5px solid var(--pencil-light)" }}
-        >
-          Settings
         </Link>
       </div>
     </main>

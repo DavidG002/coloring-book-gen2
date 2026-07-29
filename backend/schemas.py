@@ -346,3 +346,78 @@ class PublishHistoryRunRead(BaseModel):
     manifest_path: str
     created_at: datetime
     files: list[PublishHistoryFileRead] = []
+
+# ---------- Account / Credentials ----------
+
+class OpenAIKeyRead(BaseModel):
+    has_key: bool
+    masked_key: Optional[str] = None
+
+
+class OpenAIKeyUpdate(BaseModel):
+    openai_api_key: str
+
+
+# ---------- WordPress Integration ----------
+
+class WordPressIntegrationRead(BaseModel):
+    site_url: Optional[str] = None
+    username: Optional[str] = None
+    has_password: bool = False
+    post_type: str = "post"
+    taxonomy: str = "category"
+    last_test_status: Optional[str] = None
+    last_test_message: Optional[str] = None
+    last_tested_at: Optional[datetime] = None
+
+
+class WordPressIntegrationUpdate(BaseModel):
+    site_url: Optional[str] = None
+    username: Optional[str] = None
+    app_password: Optional[str] = None
+    post_type: Optional[str] = None
+    taxonomy: Optional[str] = None
+
+
+class WordPressTestResult(BaseModel):
+    success: bool
+    message: str
+
+class WordPressPushRequest(BaseModel):
+    category: str
+    lang: str
+    status: str = "draft"  # "draft" | "publish"
+    only_new: bool = True
+
+
+class WordPressPushedItem(BaseModel):
+    source_path: str
+    wp_post_id: int
+    wp_post_url: str
+    title: str
+
+
+class WordPressPushFailedItem(BaseModel):
+    source_path: str
+    error: str
+
+
+class WordPressPushResponse(BaseModel):
+    pushed_count: int
+    skipped_count: int
+    failed_count: int
+    pushed_items: list[WordPressPushedItem]
+    failed_items: list[WordPressPushFailedItem]
+    skipped_subjects: list[str]
+
+# ---------- Languages ----------
+
+class SupportedLanguageRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    code: str
+    name: str
+
+
+class SupportedLanguageCreate(BaseModel):
+    code: str
+    name: str

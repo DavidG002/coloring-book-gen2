@@ -24,13 +24,6 @@ export default async function BooksPage() {
         </div>
         <div className="flex items-center gap-3">
           <Link
-            href="/settings"
-            className="px-4 py-2.5 rounded-md text-sm font-medium"
-            style={{ color: "var(--pencil)", border: "1.5px solid var(--pencil-light)" }}
-          >
-            Settings
-          </Link>
-          <Link
             href="/books/new"
             className="px-5 py-2.5 rounded-md text-sm font-medium text-white transition-colors"
             style={{ background: "var(--teal)" }}

@@ -1,6 +1,4 @@
-from openai import OpenAI
-
-client = OpenAI()
+from services.openai_client import get_openai_client
 
 TRANSLATE_MODEL = "gpt-4o-mini"
 
@@ -34,6 +32,7 @@ def translate_phrases(phrases: list[str], target_lang: str) -> dict[str, str]:
         f"no extra commentary:\n\n{numbered}"
     )
 
+    client = get_openai_client()
     response = client.chat.completions.create(
         model=TRANSLATE_MODEL,
         messages=[{"role": "user", "content": prompt}],
