@@ -2,9 +2,13 @@ import os
 import httpx
 from sqlalchemy.orm import Session
 from models import Category, Translation
-from services.publish import build_publish_plan
+from services.publish import build_publish_plan, slugify
+from services.content_variants import ensure_content_variant, ensure_category_description
 
-from models import WordPressIntegration, WordPressCategoryTerm, WordPressPublishedItem
+from models import (
+    WordPressIntegration, WordPressCategoryTerm, WordPressPublishedItem,
+    GenerationImage, PublishedFile, PublishRun,
+)
 
 
 def _get_wp_config(db: Session) -> WordPressIntegration:
@@ -22,7 +26,14 @@ TAXONOMY_REST_BASE = {"category": "categories", "post_tag": "tags"}
 POST_TYPE_REST_BASE = {"post": "posts", "page": "pages"}
 
 
-def ensure_category_term(db: Session, config: WordPressIntegration, category: str, lang: str, translated_name: str) -> int:
+def ensure_category_term(
+    db: Session,
+    config: WordPressIntegration,
+    category: str,
+    lang: str,
+    translated_name: str,
+    description: str | None = None,
+) -> int:
     """Returns the WP term ID for this category+language, creating it on
     WordPress only the first time it's ever needed."""
     existing = (
@@ -35,7 +46,12 @@ def ensure_category_term(db: Session, config: WordPressIntegration, category: st
 
     rest_base = TAXONOMY_REST_BASE.get(config.taxonomy, config.taxonomy)
     url = config.site_url.rstrip("/") + f"/wp-json/wp/v2/{rest_base}"
-    response = httpx.post(url, auth=_auth(config), json={"name": translated_name}, timeout=15.0)
+
+    payload = {"name": translated_name}
+    if description:
+        payload["description"] = description
+
+    response = httpx.post(url, auth=_auth(config), json=payload, timeout=15.0)
 
     if response.status_code not in (200, 201):
         raise RuntimeError(f"Failed to create taxonomy term '{translated_name}': {response.status_code} {response.text}")
@@ -64,8 +80,6 @@ def upload_media(config: WordPressIntegration, file_path: str, filename: str, al
 
     media_id = response.json()["id"]
 
-    # Set alt text + title on the media item itself (a second call —
-    # the initial upload doesn't accept these fields directly)
     update_url = f"{url}/{media_id}"
     httpx.post(
         update_url,
@@ -83,14 +97,15 @@ def create_post(
     media_id: int,
     term_id: int,
     status: str,
+    content: str | None = None,
+    excerpt: str | None = None,
+    slug: str | None = None,
     lang: str | None = None,
     translations_link: dict | None = None,
 ) -> dict:
     post_rest_base = POST_TYPE_REST_BASE.get(config.post_type, config.post_type)
     url = config.site_url.rstrip("/") + f"/wp-json/wp/v2/{post_rest_base}"
 
-    # Built-in WordPress taxonomies use fixed REST field names that differ
-    # from their taxonomy slug; custom taxonomies use their own slug directly.
     taxonomy_field = TAXONOMY_REST_BASE.get(config.taxonomy, config.taxonomy)
 
     payload: dict = {
@@ -100,6 +115,12 @@ def create_post(
         taxonomy_field: [term_id],
     }
 
+    if content:
+        payload["content"] = content
+    if excerpt:
+        payload["excerpt"] = excerpt
+    if slug:
+        payload["slug"] = slug
     if lang:
         payload["lang"] = lang
     if translations_link:
@@ -147,19 +168,26 @@ def get_already_pushed_paths(db: Session, category: str, lang: str) -> set[str]:
     )
     return {r[0] for r in rows}
 
-def push_batch_to_wordpress(
-    db: Session,
-    category_name: str,
-    lang: str,
-    status: str = "draft",
-    only_new: bool = True,
-) -> dict:
-    """The main entry point: pushes a category's images, in one language,
-    to WordPress — reusing the same translated alt/title text already
-    computed for local publish, so there's exactly one source of truth
-    for what an image's metadata should say in a given language."""
-    config = _get_wp_config(db)
 
+def get_locally_published_paths(db: Session, category: str, lang: str) -> set[str]:
+    """Only files that have actually gone through a local Publish run for
+    this category+language are eligible for WordPress — this is the real
+    approval gate: reviewed, translated, and deliberately confirmed."""
+    rows = (
+        db.query(PublishedFile.source_path)
+        .join(PublishRun, PublishedFile.run_id == PublishRun.id)
+        .filter(PublishRun.category == category, PublishRun.lang == lang)
+        .distinct()
+        .all()
+    )
+    return {r[0] for r in rows}
+
+
+def preview_wordpress_push(db: Session, category_name: str, lang: str) -> dict:
+    """Shows every locally-published-and-eligible file for this category+
+    language — each tagged with push status, exclusion status, and which
+    local publish run it came from — so the user can see and choose
+    exactly what to push, not just a count."""
     category = db.query(Category).filter(Category.name == category_name).first()
     if not category:
         raise ValueError(f"Category '{category_name}' not found")
@@ -173,74 +201,89 @@ def push_batch_to_wordpress(
         raise ValueError(f"No '{lang}' translation for '{category_name}' — create it first")
 
     plan = build_publish_plan(db, category_name, lang)
-    all_files = plan["files"]
-
     already_pushed = get_already_pushed_paths(db, category_name, lang)
-    files_to_push = [f for f in all_files if f["source_path"] not in already_pushed] if only_new else all_files
-    skipped_count = len(all_files) - len(files_to_push)
+    locally_published = get_locally_published_paths(db, category_name, lang)
+    eligible_files = [f for f in plan["files"] if f["source_path"] in locally_published]
 
-    term_id = ensure_category_term(db, config, category_name, lang, translation.category_translated)
+    existing_term = (
+        db.query(WordPressCategoryTerm)
+        .filter(WordPressCategoryTerm.category == category_name, WordPressCategoryTerm.lang == lang)
+        .first()
+    )
 
-    pushed_items = []
-    failed_items = []
+    files_info = []
+    for f in eligible_files:
+        image_record = db.query(GenerationImage).filter(GenerationImage.file_path == f["source_path"]).first()
 
-    for f in files_to_push:
-        try:
-            filename = os.path.basename(f["source_path"])
-            media_id = upload_media(
-                config,
-                file_path=f["source_path"],
-                filename=filename,
-                alt_text=f["alt_text"],
-                title=f["title_text"],
+        publish_file_record = (
+            db.query(PublishedFile)
+            .join(PublishRun, PublishedFile.run_id == PublishRun.id)
+            .filter(
+                PublishedFile.source_path == f["source_path"],
+                PublishRun.category == category_name,
+                PublishRun.lang == lang,
             )
-            result = create_post(
-                config,
-                title=f["title_text"],
-                media_id=media_id,
-                term_id=term_id,
-                status=status,
-                lang=None,  # Polylang lang/translations linking deferred until Pro is confirmed
-            )
-            record = record_published_item(
-                db,
-                source_path=f["source_path"],
-                category=category_name,
-                lang=lang,
-                wp_media_id=media_id,
-                wp_post_id=result["id"],
-                wp_post_url=result.get("link", ""),
-                status=status,
-            )
-            pushed_items.append({
-                "source_path": f["source_path"],
-                "wp_post_id": result["id"],
-                "wp_post_url": result.get("link", ""),
-                "title": f["title_text"],
-            })
-        except Exception as e:
-            failed_items.append({"source_path": f["source_path"], "error": str(e)})
+            .order_by(PublishRun.created_at.asc())
+            .first()
+        )
+
+        # Show the real content that would actually be pushed — cached if
+        # already generated, or a note that it's not ready yet.
+        seo_error = None
+        display_title = f["title_text"]
+        display_alt = f["alt_text"]
+        if image_record and image_record.variation_text:
+            try:
+                variant = ensure_content_variant(
+                    db,
+                    category_name=category_name,
+                    subject_name=image_record.subject,
+                    variation_text=image_record.variation_text,
+                    lang=lang,
+                )
+                display_title = variant.seo_title
+                display_alt = variant.seo_alt_text
+            except Exception as e:
+                seo_error = str(e)
+        elif not (image_record and image_record.variation_text):
+            seo_error = "Missing subject/variation data — this image predates SEO content tracking and cannot be pushed."
+
+        files_info.append({
+            "source_path": f["source_path"],
+            "title": display_title,
+            "alt_text": display_alt,
+            "already_pushed": f["source_path"] in already_pushed,
+            "wp_excluded": image_record.wp_excluded if image_record else False,
+            "publish_run_id": publish_file_record.run_id if publish_file_record else None,
+            "published_at": publish_file_record.run.created_at.isoformat() if publish_file_record else None,
+            "seo_error": seo_error,
+        })
+
+    new_count = sum(1 for f in files_info if not f["already_pushed"])
 
     return {
-        "pushed_count": len(pushed_items),
-        "skipped_count": skipped_count,
-        "failed_count": len(failed_items),
-        "pushed_items": pushed_items,
-        "failed_items": failed_items,
+        "new_count": new_count,
+        "already_pushed_count": len(files_info) - new_count,
+        "term_already_exists": bool(existing_term),
+        "category_translated": translation.category_translated,
+        "files": files_info,
         "skipped_subjects": plan["skipped_subjects"],
     }
 
+
 def push_batch_to_wordpress(
     db: Session,
     category_name: str,
     lang: str,
     status: str = "draft",
     only_new: bool = True,
+    source_paths: list[str] | None = None,
 ) -> dict:
     """The main entry point: pushes a category's images, in one language,
     to WordPress — reusing the same translated alt/title text already
     computed for local publish, so there's exactly one source of truth
-    for what an image's metadata should say in a given language."""
+    for what an image's metadata should say in a given language. Only
+    files that have gone through a local Publish run are eligible."""
     config = _get_wp_config(db)
 
     category = db.query(Category).filter(Category.name == category_name).first()
@@ -256,36 +299,70 @@ def push_batch_to_wordpress(
         raise ValueError(f"No '{lang}' translation for '{category_name}' — create it first")
 
     plan = build_publish_plan(db, category_name, lang)
-    all_files = plan["files"]
-
     already_pushed = get_already_pushed_paths(db, category_name, lang)
-    files_to_push = [f for f in all_files if f["source_path"] not in already_pushed] if only_new else all_files
-    skipped_count = len(all_files) - len(files_to_push)
+    excluded_paths = {
+        img.file_path for img in db.query(GenerationImage).filter(GenerationImage.wp_excluded == True).all()
+    }
+    locally_published = get_locally_published_paths(db, category_name, lang)
 
-    term_id = ensure_category_term(db, config, category_name, lang, translation.category_translated)
+    all_files = [f for f in plan["files"] if f["source_path"] in locally_published]
+
+    if source_paths is not None:
+        selected = set(source_paths)
+        files_to_push = [
+            f for f in all_files
+            if f["source_path"] in selected
+            and f["source_path"] not in already_pushed
+            and f["source_path"] not in excluded_paths
+        ]
+        skipped_count = len(selected) - len(files_to_push)
+    else:
+        files_to_push = [
+            f for f in all_files
+            if f["source_path"] not in already_pushed and f["source_path"] not in excluded_paths
+        ] if only_new else all_files
+        skipped_count = len(all_files) - len(files_to_push)
+
+    category_description = ensure_category_description(db, category_name, translation.category_translated, lang)
+    term_id = ensure_category_term(db, config, category_name, lang, translation.category_translated, description=category_description)
 
     pushed_items = []
     failed_items = []
 
     for f in files_to_push:
         try:
+            image_record = db.query(GenerationImage).filter(GenerationImage.file_path == f["source_path"]).first()
+            if not image_record or not image_record.variation_text:
+                raise ValueError("Missing subject/variation record for this image — cannot generate SEO content.")
+
+            variant = ensure_content_variant(
+                db,
+                category_name=category_name,
+                subject_name=image_record.subject,
+                variation_text=image_record.variation_text,
+                lang=lang,
+            )
+
             filename = os.path.basename(f["source_path"])
             media_id = upload_media(
                 config,
                 file_path=f["source_path"],
                 filename=filename,
-                alt_text=f["alt_text"],
-                title=f["title_text"],
+                alt_text=variant.seo_alt_text,
+                title=variant.seo_title,
             )
             result = create_post(
                 config,
-                title=f["title_text"],
+                title=variant.seo_title,
                 media_id=media_id,
                 term_id=term_id,
                 status=status,
+                content=variant.seo_content,
+                excerpt=variant.seo_excerpt,
+                slug=slugify(variant.seo_title),
                 lang=None,  # Polylang lang/translations linking deferred until Pro is confirmed
             )
-            record = record_published_item(
+            record_published_item(
                 db,
                 source_path=f["source_path"],
                 category=category_name,
@@ -299,7 +376,7 @@ def push_batch_to_wordpress(
                 "source_path": f["source_path"],
                 "wp_post_id": result["id"],
                 "wp_post_url": result.get("link", ""),
-                "title": f["title_text"],
+                "title": variant.seo_title,
             })
         except Exception as e:
             failed_items.append({"source_path": f["source_path"], "error": str(e)})

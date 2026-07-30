@@ -11,8 +11,9 @@ import CollapsibleSection from "@/components/CollapsibleSection";
 import CategorySidebar from "@/components/CategorySidebar";
 import BulkPasteInput from "@/components/BulkPasteInput";
 import ReviewPanel from "@/components/ReviewPanel";
+import WordPressPushPanel from "@/components/WordPressPushPanel";
 
-const SECTION_ORDER = ["subjects", "variations", "generate", "review", "translations", "publish"] as const;
+const SECTION_ORDER = ["subjects", "variations", "generate", "review", "translations", "publish", "wordpress"] as const;
 type SectionId = (typeof SECTION_ORDER)[number];
 
 const SECTION_LABELS: Record<SectionId, string> = {
@@ -22,6 +23,7 @@ const SECTION_LABELS: Record<SectionId, string> = {
   review: "Review",
   translations: "Translations",
   publish: "Publish",
+  wordpress: "WordPress", 
 };
 
 export default function CategoryDetailPage() {
@@ -54,6 +56,8 @@ export default function CategoryDetailPage() {
   const publishRef = useRef<HTMLDivElement>(null);
   const reviewRef = useRef<HTMLDivElement>(null);
 
+  const wordpressRef = useRef<HTMLDivElement>(null);
+
   function getSectionRef(id: SectionId): React.RefObject<HTMLDivElement | null> {
     switch (id) {
       case "subjects":
@@ -68,6 +72,8 @@ export default function CategoryDetailPage() {
         return publishRef;
       case "review":
         return reviewRef;
+      case "wordpress":
+      return wordpressRef;
     }
   }
 
@@ -479,6 +485,16 @@ export default function CategoryDetailPage() {
             ref={publishRef}
           >
             {category && <PublishPanel categoryName={categoryName} />}
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            id="wordpress"
+            title="WordPress"
+            isOpen={openSection === "wordpress"}
+            onToggle={() => setOpenSection(openSection === "wordpress" ? null : "wordpress")}
+            ref={wordpressRef}
+          >
+            <WordPressPushPanel categoryName={categoryName} />
           </CollapsibleSection>
         </div>
       </div>

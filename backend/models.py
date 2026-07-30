@@ -164,6 +164,7 @@ class GenerationImage(Base):
     file_path = Column(String, nullable=False)
     status = Column(String, nullable=False, default="approved")
     created_at = Column(DateTime, default=datetime.utcnow)
+    wp_excluded = Column(Boolean, nullable=False, default=False)
 
     job = relationship("GenerationJob", back_populates="images")
 
@@ -192,6 +193,8 @@ class PublishedFile(Base):
     target_filename = Column(String, nullable=False)
     alt_text = Column(Text, nullable=False)
     title_text = Column(Text, nullable=False)
+    excerpt_text = Column(Text, nullable=True)
+    content_text = Column(Text, nullable=True)
     was_new = Column(Boolean, nullable=False, default=True)
 
     run = relationship("PublishRun", back_populates="files")
@@ -278,3 +281,44 @@ class SupportedLanguage(Base):
 
     code = Column(String, primary_key=True)  # e.g. "he"
     name = Column(String, nullable=False)    # e.g. "Hebrew"
+
+
+class ContentVariant(Base):
+    """Naturally-written, SEO-oriented text for a specific subject+variation+
+    language combination — generated once, reused for every image that uses
+    this exact subject+variation+language, regardless of how many exist."""
+    __tablename__ = "content_variants"
+
+    id = Column(Integer, primary_key=True)
+    subject_id = Column(Integer, ForeignKey("subjects.id"), nullable=False)
+    variation_id = Column(Integer, ForeignKey("variations.id"), nullable=False)
+    lang = Column(String, nullable=False)
+
+    seo_title = Column(String, nullable=False)
+    seo_alt_text = Column(String, nullable=False)
+    seo_excerpt = Column(Text, nullable=False)
+    seo_content = Column(Text, nullable=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    subject = relationship("Subject")
+    variation = relationship("Variation")
+
+    __table_args__ = (
+        UniqueConstraint("subject_id", "variation_id", "lang", name="uq_content_variant"),
+    )
+
+class CategoryDescription(Base):
+    """One generated description per (category, language) — used as the
+    WordPress taxonomy term's description, cached and reused forever."""
+    __tablename__ = "category_descriptions"
+
+    id = Column(Integer, primary_key=True)
+    category = Column(String, nullable=False)
+    lang = Column(String, nullable=False)
+    description = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("category", "lang", name="uq_category_description"),
+    )

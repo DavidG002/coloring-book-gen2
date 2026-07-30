@@ -4,6 +4,7 @@ TRANSLATE_MODEL = "gpt-4o-mini"
 
 
 LANGUAGE_NAMES = {
+    "en": "English",
     "he": "Hebrew",
     "es": "Spanish",
     "fr": "French",
@@ -66,7 +67,7 @@ def translate_template(text: str, target_lang: str) -> str:
         f"do not translate or alter the tokens themselves, only translate the surrounding words. "
         f"Respond with ONLY the translated text, no explanation, no quotes:\n\n{text}"
     )
-
+    client = get_openai_client()
     response = client.chat.completions.create(
         model=TRANSLATE_MODEL,
         messages=[{"role": "user", "content": prompt}],

@@ -383,11 +383,13 @@ class WordPressTestResult(BaseModel):
     success: bool
     message: str
 
+
 class WordPressPushRequest(BaseModel):
     category: str
     lang: str
-    status: str = "draft"  # "draft" | "publish"
+    status: str = "draft"
     only_new: bool = True
+    source_paths: Optional[list[str]] = None
 
 
 class WordPressPushedItem(BaseModel):
@@ -410,6 +412,32 @@ class WordPressPushResponse(BaseModel):
     failed_items: list[WordPressPushFailedItem]
     skipped_subjects: list[str]
 
+
+class WordPressPreviewFile(BaseModel):
+    source_path: str
+    title: str
+    alt_text: str
+    already_pushed: bool
+    wp_excluded: bool
+    publish_run_id: Optional[int] = None
+    published_at: Optional[str] = None
+    seo_error: Optional[str] = None
+
+
+class WordPressPreviewResponse(BaseModel):
+    new_count: int
+    already_pushed_count: int
+    term_already_exists: bool
+    category_translated: str
+    files: list[WordPressPreviewFile]
+    skipped_subjects: list[str]
+
+
+class WordPressPreviewRequest(BaseModel):
+    category: str
+    lang: str
+
+    
 # ---------- Languages ----------
 
 class SupportedLanguageRead(BaseModel):

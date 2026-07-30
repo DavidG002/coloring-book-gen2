@@ -8,6 +8,7 @@ import io
 from sqlalchemy.orm import Session
 
 from models import Category, Translation, GenerationImage, PublishRun, PublishedFile
+from services.content_variants import ensure_content_variant
 
 OUTPUT_DIR = "output"
 PUBLISH_DIR = "publish"
@@ -155,12 +156,40 @@ def execute_publish(db: Session, category_name: str, lang: str, only_new: bool =
 
     rows = []
     for info in files_info:
+        # Prefer real, natural-language SEO content (same source WordPress
+        # push uses, cached and shared) — fall back to the mechanical
+        # template text for legacy images that predate variation tracking,
+        # so local publish never hard-fails the way WordPress push does.
+        alt_text = info["alt_text"]
+        title_text = info["title_text"]
+        excerpt_text = ""
+        content_text = ""
+
+        image_record = db.query(GenerationImage).filter(GenerationImage.file_path == info["source_path"]).first()
+        if image_record and image_record.variation_text:
+            try:
+                variant = ensure_content_variant(
+                    db,
+                    category_name=category_name,
+                    subject_name=image_record.subject,
+                    variation_text=image_record.variation_text,
+                    lang=lang,
+                )
+                alt_text = variant.seo_alt_text
+                title_text = variant.seo_title
+                excerpt_text = variant.seo_excerpt
+                content_text = variant.seo_content
+            except Exception:
+                pass  # fall back silently to mechanical text on any generation failure
+
         target_path = os.path.join(publish_category_dir, info["target_filename"])
         shutil.copy2(info["source_path"], target_path)
         rows.append({
             "filename": info["target_filename"],
-            "alt_text": info["alt_text"],
-            "title": info["title_text"],
+            "alt_text": alt_text,
+            "title": title_text,
+            "excerpt": excerpt_text,
+            "content": content_text,
             "category_en": category_name,
             "subject_en": info["subject_en"],
             "subject_translated": info["subject_translated"],
@@ -190,13 +219,15 @@ def execute_publish(db: Session, category_name: str, lang: str, only_new: bool =
     db.add(run)
     db.flush()
 
-    for info in files_info:
+    for info, row in zip(files_info, rows):
         db.add(PublishedFile(
             run_id=run.id,
             source_path=info["source_path"],
             target_filename=info["target_filename"],
-            alt_text=info["alt_text"],
-            title_text=info["title_text"],
+            alt_text=row["alt_text"],
+            title_text=row["title"],
+            excerpt_text=row["excerpt"],
+            content_text=row["content"],
             was_new=info["is_new"],
         ))
 
@@ -218,6 +249,7 @@ def get_publish_history(db: Session, category_name: str, lang: str | None = None
         query = query.filter(PublishRun.lang == lang)
     return query.order_by(PublishRun.created_at.desc()).all()
 
+
 def generate_manifest_csv(db: Session, run_id: int) -> str:
     """Builds manifest CSV content from a PublishRun's stored PublishedFile
     rows — works even if the on-disk manifest.csv has since been overwritten
@@ -227,7 +259,7 @@ def generate_manifest_csv(db: Session, run_id: int) -> str:
         raise ValueError(f"Publish run {run_id} not found")
 
     output = io.StringIO()
-    fieldnames = ["filename", "alt_text", "title", "category_en", "lang", "source_path"]
+    fieldnames = ["filename", "alt_text", "title", "excerpt", "content", "category_en", "lang", "source_path"]
     writer = csv.DictWriter(output, fieldnames=fieldnames)
     writer.writeheader()
     for f in run.files:
@@ -235,10 +267,11 @@ def generate_manifest_csv(db: Session, run_id: int) -> str:
             "filename": f.target_filename,
             "alt_text": f.alt_text,
             "title": f.title_text,
+            "excerpt": f.excerpt_text or "",
+            "content": f.content_text or "",
             "category_en": run.category,
             "lang": run.lang,
             "source_path": f.source_path,
         })
 
-    # Prepend UTF-8 BOM so Excel displays non-Latin scripts (Hebrew, etc.) correctly
     return "\ufeff" + output.getvalue()
