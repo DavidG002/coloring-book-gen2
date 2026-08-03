@@ -1,40 +1,43 @@
+from unicodedata import category
+
 from sqlalchemy.orm import Session
 from services.openai_client import get_openai_client
 from services.translate import LANGUAGE_NAMES
-from models import Subject, Variation, ContentVariant, Category
+from models import Subject, Variation, ContentVariant, Category, CategoryDescription
 
 
 def generate_content_variant(
     book_base_prompt: str,
+    product_noun: str,
     category_name: str,
     subject_name: str,
     variation_text: str,
     lang: str,
 ) -> dict:
-    """One LLM call produces natural, SEO-oriented title/alt/excerpt/content
-    for a specific subject+variation, in the target language. Not a naive
-    template concatenation — genuinely written, grammatical text. Style and
-    audience come from the Book's own prompt, so tone stays correct whether
-    this is a kids' coloring book, a teen stencil set, or anything else."""
     language_name = LANGUAGE_NAMES.get(lang.lower(), lang)
 
     prompt = f"""You are writing SEO metadata for an image on a website.
-The site/book's style and intended audience is described as:
+The site/product is described as:
 "{book_base_prompt}"
+The product type is: {product_noun}
 
 Subject: {subject_name}
 Pose/scene description: {variation_text}
 Category: {category_name}
 
 Write natural, grammatically correct {language_name} for each of the following,
-matching the style and audience described above. Do not just concatenate the
-subject and pose — write real sentences a native speaker would use.
+matching the style and audience described above, and consistently referring to
+this as a "{product_noun}". Do not just concatenate the subject and pose \u2014
+write real sentences a native speaker would use. Keep everything short, plain,
+and concrete. Avoid vague or overselling marketing language (e.g. "captures the
+essence," "invites viewers to appreciate," "a testament to"). State plainly
+what the image shows.
 
 Respond with EXACTLY this format, one field per line, no extra commentary:
-TITLE: <a short page title, e.g. "Car Coloring Page \u2014 Side View on a Road">
-ALT: <a natural, descriptive alt-text sentence for accessibility and image search>
-EXCERPT: <one short sentence summarizing the page, for use as a meta description>
-CONTENT: <two to three short sentences of body text for the page, matching the site's tone>
+TITLE: <a short page title>
+ALT: <ONE natural, descriptive alt-text sentence for accessibility and image search>
+EXCERPT: <ONE short, plain sentence, under 20 words, stating what the image shows>
+CONTENT: <ONE to TWO short, plain sentences \u2014 mention the subject and category naturally for search visibility, no overselling>
 """
 
     client = get_openai_client()
@@ -86,7 +89,7 @@ def ensure_content_variant(
     if existing:
         return existing
 
-    generated = generate_content_variant(category.book.base_prompt, category_name, subject_name, variation_text, lang)
+    generated = generate_content_variant(category.book.base_prompt, category.book.product_noun, category_name, subject_name, variation_text, lang)
 
     record = ContentVariant(
         subject_id=subject.id,
@@ -99,18 +102,19 @@ def ensure_content_variant(
     db.refresh(record)
     return record
 
-def generate_category_description(book_base_prompt: str, category_name: str, translated_category_name: str, lang: str) -> str:
-    """One short, natural-language description for a category's WordPress
-    taxonomy term — generated once per (category, language), reused forever.
-    Style/audience comes from the Book's own prompt, not a hardcoded assumption."""
+
+def generate_category_description(book_base_prompt: str, product_noun: str, category_name: str, translated_category_name: str, lang: str) -> str:
     language_name = LANGUAGE_NAMES.get(lang.lower(), lang)
 
-    prompt = f"""The site/book's style and intended audience is described as:
+    prompt = f"""The site/product is described as:
 "{book_base_prompt}"
+The product type is: {product_noun}
 
-Write one short, natural {language_name} sentence (max 25 words) describing a
-category called "{translated_category_name}" (in English: "{category_name}") on this site,
-matching its style and audience. Respond with ONLY the sentence, no quotes, no explanation."""
+Write one short, plain {language_name} sentence (max 25 words) describing a
+category called "{translated_category_name}" (in English: "{category_name}") on this
+site, consistently referring to this as a "{product_noun}". Match the style and
+audience described above. Avoid vague or overselling language. Respond with
+ONLY the sentence, no quotes, no explanation."""
 
     client = get_openai_client()
     response = client.chat.completions.create(
@@ -120,11 +124,10 @@ matching its style and audience. Respond with ONLY the sentence, no quotes, no e
     )
     return (response.choices[0].message.content or "").strip()
 
+
 def ensure_category_description(db: Session, category_name: str, translated_category_name: str, lang: str) -> str:
     """Returns the cached description if this category+language has one
     already; otherwise generates and stores it once."""
-    from models import CategoryDescription
-
     category = db.query(Category).filter(Category.name == category_name).first()
     if not category:
         raise ValueError(f"Category '{category_name}' not found")
@@ -137,8 +140,8 @@ def ensure_category_description(db: Session, category_name: str, translated_cate
     if existing:
         return existing.description
 
-    description = generate_category_description(category.book.base_prompt, category_name, translated_category_name, lang)
-
+    description = generate_category_description(category.book.base_prompt, category.book.product_noun, category_name, translated_category_name, lang)
+    
     record = CategoryDescription(category=category_name, lang=lang, description=description)
     db.add(record)
     db.commit()

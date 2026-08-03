@@ -166,6 +166,11 @@ export default function BookSettingsPage() {
   const [expandedPreviewId, setExpandedPreviewId] = useState<number | null>(null);
   const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null);
 
+  const [productNoun, setProductNoun] = useState("coloring page");
+
+  const [savingProductNoun, setSavingProductNoun] = useState(false);
+  const [productNounSaved, setProductNounSaved] = useState(false);
+
   const loadPreviewHistory = useCallback(() => {
     setLoadingHistory(true);
     getPreviewHistory(bookId)
@@ -196,6 +201,7 @@ export default function BookSettingsPage() {
         setBook(data);
         setName(data.name);
         setBasePrompt(data.base_prompt);
+        setProductNoun(data.product_noun);
         setCanvasWidth(data.canvas_width);
         setCanvasHeight(data.canvas_height);
         setSubjectSizeRatio(data.subject_size_ratio);
@@ -270,6 +276,27 @@ export default function BookSettingsPage() {
       setError(err instanceof ApiError ? err.message : "Failed to save prompt");
     } finally {
       setSavingPrompt(false);
+    }
+  }
+
+  async function handleSaveProductNoun() {
+    setError(null);
+    const trimmed = productNoun.trim();
+    if (!trimmed) {
+      setError("Product type cannot be empty.");
+      return;
+    }
+    setSavingProductNoun(true);
+    try {
+      const updated = await updateBook(bookId, { product_noun: trimmed });
+      setBook(updated);
+      setProductNounSaved(true);
+      router.refresh();
+      setTimeout(() => setProductNounSaved(false), 2000);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to save product type");
+    } finally {
+      setSavingProductNoun(false);
     }
   }
 
@@ -423,7 +450,38 @@ export default function BookSettingsPage() {
             style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
           />
         </section>
-
+        <section>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="block text-sm font-medium" style={{ color: "var(--ink)" }}>
+              Product type
+            </label>
+            <div className="flex items-center gap-3">
+              {productNounSaved && (
+                <span className="text-xs font-medium" style={{ color: "var(--teal)" }}>
+                  Saved
+                </span>
+              )}
+              <button
+                onClick={handleSaveProductNoun}
+                disabled={savingProductNoun}
+                className="text-sm font-medium disabled:opacity-60"
+                style={{ color: "var(--teal)" }}
+              >
+                {savingProductNoun ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+          <input
+            type="text"
+            value={productNoun}
+            onChange={(e) => setProductNoun(e.target.value)}
+            className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
+            style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+          />
+          <p className="mt-1.5 text-xs" style={{ color: "var(--pencil)" }}>
+            The word used consistently across generated titles, descriptions, and SEO content.
+          </p>
+        </section>
         <section>
           <div className="flex items-center justify-between mb-1.5">
             <label className="block text-sm font-medium" style={{ color: "var(--ink)" }}>

@@ -78,9 +78,9 @@ def translate_template(text: str, target_lang: str) -> str:
 
 
 NEUTRAL_TEMPLATES = {
-    "filename_template": "coloring-page-{category}-{item}",
-    "alt_template": "{category} {item} coloring page, free printable",
-    "title_template": "{category} {item} coloring page",
+    "filename_template": "{category}-{item}",
+    "alt_template": "{category} {item}, free printable",
+    "title_template": "{category} {item}",
 }
 
 

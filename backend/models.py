@@ -32,6 +32,7 @@ class Book(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String, unique=True, nullable=False)
     base_prompt = Column(Text, nullable=False)
+    product_noun = Column(String, nullable=False, default="coloring page")
 
     canvas_width = Column(Integer, nullable=False, default=595)
     canvas_height = Column(Integer, nullable=False, default=842)

@@ -39,6 +39,7 @@ class VariationRead(VariationBase):
 class BookBase(BaseModel):
     name: str
     base_prompt: str
+    product_noun: str = "coloring page"
     canvas_width: int = 595
     canvas_height: int = 842
     subject_size_ratio: float = 0.50
@@ -54,6 +55,7 @@ class BookCreate(BookBase):
 class BookUpdate(BaseModel):
     name: Optional[str] = None
     base_prompt: Optional[str] = None
+    product_noun: Optional[str] = None
     canvas_width: Optional[int] = None
     canvas_height: Optional[int] = None
     subject_size_ratio: Optional[float] = None

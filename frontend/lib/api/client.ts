@@ -32,6 +32,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     method,
     headers: body ? { "Content-Type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined,
+    cache: "no-store",
   });
 
   // 204 No Content (e.g. DELETE) has no body to parse

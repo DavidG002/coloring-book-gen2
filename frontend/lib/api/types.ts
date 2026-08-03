@@ -5,6 +5,7 @@ export interface Book {
   id: number;
   name: string;
   base_prompt: string;
+  product_noun: string;
   canvas_width: number;
   canvas_height: number;
   subject_size_ratio: number;
@@ -23,6 +24,7 @@ export interface BookSummary {
 export interface BookCreateInput {
   name: string;
   base_prompt: string;
+  product_noun?: string;
   canvas_width?: number;
   canvas_height?: number;
   subject_size_ratio?: number;

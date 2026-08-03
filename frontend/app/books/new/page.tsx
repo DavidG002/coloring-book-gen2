@@ -10,6 +10,7 @@ export default function NewBookPage() {
   const [basePrompt, setBasePrompt] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [productNoun, setProductNoun] = useState("coloring page");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
