@@ -2,19 +2,24 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import LanguageTemplateDefault
+from models import LanguageTemplateDefault, Book
 from schemas import LanguageTemplateDefaultRead, LanguageTemplateDefaultUpdate
-from services.translate import translate_template_structure
+from services.translate import translate_template_structure_for_book
 
-router = APIRouter(prefix="/language-templates", tags=["language-templates"])
+router = APIRouter(prefix="/books/{book_id}/language-templates", tags=["language-templates"])
 
 
 @router.get("/{lang}", response_model=LanguageTemplateDefaultRead)
-def get_language_template(lang: str, db: Session = Depends(get_db)):
-    row = db.query(LanguageTemplateDefault).filter(LanguageTemplateDefault.lang == lang).first()
+def get_language_template(book_id: int, lang: str, db: Session = Depends(get_db)):
+    row = (
+        db.query(LanguageTemplateDefault)
+        .filter(LanguageTemplateDefault.book_id == book_id, LanguageTemplateDefault.lang == lang)
+        .first()
+    )
     if not row:
-        raise HTTPException(status_code=404, detail=f"No saved template default for '{lang}' yet")
+        raise HTTPException(status_code=404, detail=f"No saved template default for '{lang}' on this book yet")
     return LanguageTemplateDefaultRead(
+        book_id=row.book_id,
         lang=row.lang,
         filename_template=row.filename_template,
         alt_template=row.alt_template,
@@ -23,10 +28,15 @@ def get_language_template(lang: str, db: Session = Depends(get_db)):
 
 
 @router.put("/{lang}", response_model=LanguageTemplateDefaultRead)
-def update_language_template(lang: str, payload: LanguageTemplateDefaultUpdate, db: Session = Depends(get_db)):
-    row = db.query(LanguageTemplateDefault).filter(LanguageTemplateDefault.lang == lang).first()
+def update_language_template(book_id: int, lang: str, payload: LanguageTemplateDefaultUpdate, db: Session = Depends(get_db)):
+    row = (
+        db.query(LanguageTemplateDefault)
+        .filter(LanguageTemplateDefault.book_id == book_id, LanguageTemplateDefault.lang == lang)
+        .first()
+    )
     if not row:
         row = LanguageTemplateDefault(
+            book_id=book_id,
             lang=lang,
             filename_template=payload.filename_template or "",
             alt_template=payload.alt_template or "",
@@ -44,6 +54,7 @@ def update_language_template(lang: str, payload: LanguageTemplateDefaultUpdate, 
     db.commit()
     db.refresh(row)
     return LanguageTemplateDefaultRead(
+        book_id=row.book_id,
         lang=row.lang,
         filename_template=row.filename_template,
         alt_template=row.alt_template,
@@ -52,12 +63,21 @@ def update_language_template(lang: str, payload: LanguageTemplateDefaultUpdate, 
 
 
 @router.post("/{lang}/auto-translate", response_model=LanguageTemplateDefaultRead)
-def auto_translate_language_template(lang: str, db: Session = Depends(get_db)):
-    translated = translate_template_structure(lang)
+def auto_translate_language_template(book_id: int, lang: str, db: Session = Depends(get_db)):
+    book = db.query(Book).filter(Book.id == book_id).first()
+    if not book:
+        raise HTTPException(status_code=404, detail=f"Book {book_id} not found")
 
-    row = db.query(LanguageTemplateDefault).filter(LanguageTemplateDefault.lang == lang).first()
+    translated = translate_template_structure_for_book(book.product_noun, lang)
+
+    row = (
+        db.query(LanguageTemplateDefault)
+        .filter(LanguageTemplateDefault.book_id == book_id, LanguageTemplateDefault.lang == lang)
+        .first()
+    )
     if not row:
         row = LanguageTemplateDefault(
+            book_id=book_id,
             lang=lang,
             filename_template=translated["filename_template"],
             alt_template=translated["alt_template"],
@@ -72,6 +92,7 @@ def auto_translate_language_template(lang: str, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(row)
     return LanguageTemplateDefaultRead(
+        book_id=row.book_id,
         lang=row.lang,
         filename_template=row.filename_template,
         alt_template=row.alt_template,

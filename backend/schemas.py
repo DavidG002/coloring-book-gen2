@@ -177,6 +177,7 @@ class TranslateCategoryNameResponse(BaseModel):
     translated_text: str
 
 class LanguageTemplateDefaultRead(BaseModel):
+    book_id: int
     lang: str
     filename_template: str
     alt_template: str
@@ -279,6 +280,43 @@ class GenerationStatusResponse(BaseModel):
     completed_images: int
     error_message: Optional[str] = None
     current_task: Optional[str] = None
+
+# ---------- Book / Catagory Deletion ----------
+
+
+class BookDeletionCategoryInfo(BaseModel):
+    name: str
+    image_count: int
+    locally_published_count: int
+    wordpress_draft_count: int
+    wordpress_live_count: int
+
+
+class BookDeletionInfo(BaseModel):
+    book_name: str
+    categories: list[BookDeletionCategoryInfo]
+    total_images: int
+    has_wordpress_content: bool
+
+
+class BookDeletionResult(BaseModel):
+    categories_deleted: int
+    files_deleted: bool
+    deleted_file_count: int
+
+class CategoryDeletionInfo(BaseModel):
+    category_name: str
+    image_count: int
+    locally_published_count: int
+    wordpress_draft_count: int
+    wordpress_live_count: int
+    has_wordpress_content: bool
+
+
+class CategoryDeletionResult(BaseModel):
+    files_deleted: bool
+    deleted_file_count: int
+
 
 # ---------- Prompt Defaults ----------
 
@@ -451,3 +489,39 @@ class SupportedLanguageRead(BaseModel):
 class SupportedLanguageCreate(BaseModel):
     code: str
     name: str
+
+
+# --------- SEO -------------------
+
+
+class SeoContentVariantRow(BaseModel):
+    subject_name: str
+    variation_text: str
+    seo_title: str
+    seo_alt_text: str
+    seo_excerpt: str
+    seo_content: str
+    generated: bool
+
+
+class SeoContentVariantUpdate(BaseModel):
+    subject_name: str
+    variation_text: str
+    seo_title: str
+    seo_alt_text: str
+    seo_excerpt: str
+    seo_content: str
+
+
+class SeoRegenerateRequest(BaseModel):
+    subject_name: str
+    variation_text: str
+
+
+class CategoryDescriptionUpdate(BaseModel):
+    description: str
+
+
+class SeoDataResponse(BaseModel):
+    category_description: str
+    content_variants: list[SeoContentVariantRow]

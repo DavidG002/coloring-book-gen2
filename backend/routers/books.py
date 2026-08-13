@@ -10,7 +10,10 @@ from services.generation import (
     generate_preview_image, get_sample_task_for_book, 
     get_eligible_preview_categories, save_preview_to_history,
 )
-from schemas import BookCreate, BookUpdate, BookRead, BookSummary, BookPreviewRequest, BookPreviewAvailability, BookPreviewRead
+from schemas import BookCreate, BookUpdate, BookRead, BookSummary, BookPreviewRequest, BookPreviewAvailability, BookPreviewRead, BookDeletionInfo, BookDeletionResult
+from services.book_deletion import get_book_deletion_info, delete_book_cascade
+
+
 
 router = APIRouter(prefix="/books", tags=["books"])
 
@@ -107,6 +110,7 @@ def get_book(book_id: int, db: Session = Depends(get_db)):
         id=book.id,
         name=book.name,
         base_prompt=book.base_prompt,
+        product_noun=book.product_noun,
         canvas_width=book.canvas_width,
         canvas_height=book.canvas_height,
         subject_size_ratio=book.subject_size_ratio,
@@ -131,6 +135,7 @@ def create_book(payload: BookCreate, db: Session = Depends(get_db)):
         id=book.id,
         name=book.name,
         base_prompt=book.base_prompt,
+        product_noun=book.product_noun,
         canvas_width=book.canvas_width,
         canvas_height=book.canvas_height,
         subject_size_ratio=book.subject_size_ratio,
@@ -157,6 +162,7 @@ def update_book(book_id: int, payload: BookUpdate, db: Session = Depends(get_db)
         id=book.id,
         name=book.name,
         base_prompt=book.base_prompt,
+        product_noun=book.product_noun,
         canvas_width=book.canvas_width,
         canvas_height=book.canvas_height,
         subject_size_ratio=book.subject_size_ratio,
@@ -167,15 +173,17 @@ def update_book(book_id: int, payload: BookUpdate, db: Session = Depends(get_db)
     )
 
 
-@router.delete("/{book_id}", status_code=204)
-def delete_book(book_id: int, db: Session = Depends(get_db)):
-    book = db.query(Book).filter(Book.id == book_id).first()
-    if not book:
-        raise HTTPException(status_code=404, detail=f"Book {book_id} not found")
-    if book.categories:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Cannot delete Book '{book.name}' — it still has {len(book.categories)} categories. Move or delete them first.",
-        )
-    db.delete(book)
-    db.commit()
+@router.get("/{book_id}/deletion-info", response_model=BookDeletionInfo)
+def deletion_info(book_id: int, db: Session = Depends(get_db)):
+    try:
+        return get_book_deletion_info(db, book_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.delete("/{book_id}", response_model=BookDeletionResult)
+def delete_book(book_id: int, delete_files: bool = False, db: Session = Depends(get_db)):
+    try:
+        return delete_book_cascade(db, book_id, delete_files)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))

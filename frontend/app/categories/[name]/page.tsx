@@ -3,17 +3,19 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
-import { getCategory, updateCategory, deleteCategory, ApiError, type Category } from "@/lib/api";
+import { getCategory, updateCategory, ApiError, type Category } from "@/lib/api";
 import GeneratePanel from "@/components/GeneratePanel";
 import TranslationsPanel from "@/components/TranslationsPanel";
+import SeoPanel from "@/components/SeoPanel";
 import PublishPanel from "@/components/PublishPanel";
 import CollapsibleSection from "@/components/CollapsibleSection";
 import CategorySidebar from "@/components/CategorySidebar";
 import BulkPasteInput from "@/components/BulkPasteInput";
 import ReviewPanel from "@/components/ReviewPanel";
 import WordPressPushPanel from "@/components/WordPressPushPanel";
+import DeleteCategoryModal from "@/components/DeleteCategoryModal";
 
-const SECTION_ORDER = ["subjects", "variations", "generate", "review", "translations", "publish", "wordpress"] as const;
+const SECTION_ORDER = ["subjects", "variations", "generate", "review", "translations","seo", "publish", "wordpress"] as const;
 type SectionId = (typeof SECTION_ORDER)[number];
 
 const SECTION_LABELS: Record<SectionId, string> = {
@@ -22,6 +24,7 @@ const SECTION_LABELS: Record<SectionId, string> = {
   generate: "Generate",
   review: "Review",
   translations: "Translations",
+  seo: "SEO",
   publish: "Publish",
   wordpress: "WordPress", 
 };
@@ -41,7 +44,7 @@ export default function CategoryDetailPage() {
 
   const [savingSubjects, setSavingSubjects] = useState(false);
   const [savingVariations, setSavingVariations] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+
 
   const [openSection, setOpenSection] = useState<SectionId | null>("subjects");
   const [savingMessage, setSavingMessage] = useState<{ section: SectionId; text: string } | null>(null);
@@ -56,7 +59,10 @@ export default function CategoryDetailPage() {
   const publishRef = useRef<HTMLDivElement>(null);
   const reviewRef = useRef<HTMLDivElement>(null);
 
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+
   const wordpressRef = useRef<HTMLDivElement>(null);
+  const seoRef = useRef<HTMLDivElement>(null);
 
   function getSectionRef(id: SectionId): React.RefObject<HTMLDivElement | null> {
     switch (id) {
@@ -68,6 +74,8 @@ export default function CategoryDetailPage() {
         return generateRef;
       case "translations":
         return translationsRef;
+      case "seo":
+        return seoRef;  
       case "publish":
         return publishRef;
       case "review":
@@ -174,23 +182,6 @@ export default function CategoryDetailPage() {
     }
   }
 
-  async function handleDelete() {
-    const confirmed = window.confirm(
-      "Delete category \"" + categoryName + "\"? This removes its subjects, variations, and translations. Generated files on disk are not affected."
-    );
-    if (!confirmed) return;
-
-    setDeleting(true);
-    setError(null);
-    try {
-      await deleteCategory(categoryName);
-      router.push("/");
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to delete category");
-      setDeleting(false);
-    }
-  }
-
   if (loading) {
     return (
       <main className="min-h-screen px-8 py-12 max-w-6xl mx-auto">
@@ -251,12 +242,11 @@ export default function CategoryDetailPage() {
           </p>
         </div>
         <button
-          onClick={handleDelete}
-          disabled={deleting}
-          className="px-4 py-2 rounded-md text-sm font-medium disabled:opacity-60"
+          onClick={() => setShowDeleteModal(true)}
+          className="px-4 py-2 rounded-md text-sm font-medium"
           style={{ color: "var(--coral-dark)", border: "1.5px solid var(--coral)" }}
         >
-          {deleting ? "Deleting..." : "Delete category"}
+          Delete category
         </button>
       </header>
 
@@ -471,10 +461,21 @@ export default function CategoryDetailPage() {
             {category && (
               <TranslationsPanel
                 categoryName={categoryName}
+                bookId={category.book_id}
                 subjects={category.subjects}
                 variations={category.variations}
               />
             )}
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            id="seo"
+            title="SEO"
+            isOpen={openSection === "seo"}
+            onToggle={() => setOpenSection(openSection === "seo" ? null : "seo")}
+            ref={seoRef}
+          >
+            <SeoPanel categoryName={categoryName} />
           </CollapsibleSection>
 
           <CollapsibleSection
@@ -498,6 +499,15 @@ export default function CategoryDetailPage() {
           </CollapsibleSection>
         </div>
       </div>
+
+
+      {showDeleteModal && category && (
+        <DeleteCategoryModal
+          categoryName={categoryName}
+          bookId={category.book_id}
+          onClose={() => setShowDeleteModal(false)}
+        />
+      )}
     </main>
   );
 }

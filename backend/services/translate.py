@@ -77,17 +77,16 @@ def translate_template(text: str, target_lang: str) -> str:
     return (response.choices[0].message.content or "").strip()
 
 
-NEUTRAL_TEMPLATES = {
-    "filename_template": "{category}-{item}",
-    "alt_template": "{category} {item}, free printable",
-    "title_template": "{category} {item}",
-}
-
-
-def translate_template_structure(target_lang: str) -> dict[str, str]:
-    """Translates the neutral English template structure into a new
-    language, once — the result becomes that language's reusable default."""
+def translate_template_structure_for_book(product_noun: str, target_lang: str) -> dict[str, str]:
+    """Translates a neutral template structure, using this specific Book's
+    product noun, into a new language, once — the result becomes that
+    Book+language's reusable default."""
+    neutral_templates = {
+        "filename_template": "{category}-{item}",
+        "alt_template": f"{{category}} {{item}} {product_noun}, free printable",
+        "title_template": f"{{category}} {{item}} {product_noun}",
+    }
     return {
         key: translate_template(text, target_lang)
-        for key, text in NEUTRAL_TEMPLATES.items()
+        for key, text in neutral_templates.items()
     }

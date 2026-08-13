@@ -131,10 +131,16 @@ class VariationTranslationItem(Base):
 class LanguageTemplateDefault(Base):
     __tablename__ = "language_template_defaults"
 
-    lang = Column(String, primary_key=True)
+    id = Column(Integer, primary_key=True)
+    book_id = Column(Integer, ForeignKey("books.id"), nullable=False)
+    lang = Column(String, nullable=False)
     filename_template = Column(Text, nullable=False)
     alt_template = Column(Text, nullable=False)
     title_template = Column(Text, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("book_id", "lang", name="uq_template_default_per_book_lang"),
+    )
 
 class GenerationJob(Base):
     __tablename__ = "generation_jobs"

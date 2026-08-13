@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session, joinedload
 
 from database import get_db
 from models import Category, Subject, Variation, Book
-from schemas import CategoryCreate, CategoryUpdate, CategoryRead, CategorySummary
+from services.book_deletion import get_category_deletion_info, delete_category_cascade
+from schemas import CategoryCreate, CategoryUpdate, CategoryRead, CategorySummary, CategoryDeletionInfo, CategoryDeletionResult
 
 router = APIRouter(prefix="/categories", tags=["categories"])
 
@@ -116,10 +117,17 @@ def update_category(name: str, payload: CategoryUpdate, db: Session = Depends(ge
     return _to_category_read(category)
 
 
-@router.delete("/{name}", status_code=204)
-def delete_category(name: str, db: Session = Depends(get_db)):
-    category = db.query(Category).filter(Category.name == name).first()
-    if not category:
-        raise HTTPException(status_code=404, detail=f"Category '{name}' not found")
-    db.delete(category)
-    db.commit()
+@router.get("/{name}/deletion-info", response_model=CategoryDeletionInfo)
+def category_deletion_info(name: str, db: Session = Depends(get_db)):
+    try:
+        return get_category_deletion_info(db, name)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.delete("/{name}", response_model=CategoryDeletionResult)
+def delete_category(name: str, delete_files: bool = False, db: Session = Depends(get_db)):
+    try:
+        return delete_category_cascade(db, name, delete_files)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))

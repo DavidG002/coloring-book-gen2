@@ -542,13 +542,17 @@ export default function BookSettingsPage() {
               Paper size preset
             </label>
             <select
-              onChange={(e) => e.target.value && applyPreset(e.target.value)}
-              defaultValue=""
+              value={
+                PAPER_PRESETS.find((p) => p.width === canvasWidth && p.height === canvasHeight)?.label ?? "custom"
+              }
+              onChange={(e) => e.target.value !== "custom" && applyPreset(e.target.value)}
               className="w-56 px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
               style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
             >
-              <option value="" disabled>
-                Choose a preset...
+              <option value="custom" disabled>
+                {PAPER_PRESETS.some((p) => p.width === canvasWidth && p.height === canvasHeight)
+                  ? "Choose a preset..."
+                  : "Custom size"}
               </option>
               {PAPER_PRESETS.map((preset) => (
                 <option key={preset.label} value={preset.label}>

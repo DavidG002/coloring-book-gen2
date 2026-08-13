@@ -146,3 +146,91 @@ def ensure_category_description(db: Session, category_name: str, translated_cate
     db.add(record)
     db.commit()
     return description
+def regenerate_content_variant(
+    db: Session,
+    category_name: str,
+    subject_name: str,
+    variation_text: str,
+    lang: str,
+) -> ContentVariant:
+    """Forces a fresh generation even if one is already cached — the fix
+    for when the existing AI-written copy is wrong and needs a redo."""
+    category = db.query(Category).filter(Category.name == category_name).first()
+    if not category:
+        raise ValueError(f"Category '{category_name}' not found")
+    subject = db.query(Subject).filter(Subject.category_id == category.id, Subject.name == subject_name).first()
+    variation = db.query(Variation).filter(Variation.category_id == category.id, Variation.text == variation_text).first()
+    if not subject or not variation:
+        raise ValueError("Subject or variation not found")
+
+    generated = generate_content_variant(category.book.base_prompt, category.book.product_noun, category_name, subject_name, variation_text, lang)
+
+    existing = (
+        db.query(ContentVariant)
+        .filter(ContentVariant.subject_id == subject.id, ContentVariant.variation_id == variation.id, ContentVariant.lang == lang)
+        .first()
+    )
+    if existing:
+        existing.seo_title = generated["seo_title"]
+        existing.seo_alt_text = generated["seo_alt_text"]
+        existing.seo_excerpt = generated["seo_excerpt"]
+        existing.seo_content = generated["seo_content"]
+        db.commit()
+        db.refresh(existing)
+        return existing
+
+    record = ContentVariant(subject_id=subject.id, variation_id=variation.id, lang=lang, **generated)
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+def list_content_variants(db: Session, category_name: str, lang: str) -> list[dict]:
+    """Every subject×variation combination for this category, showing
+    generated content if it exists, blank fields if it doesn't yet."""
+    category = db.query(Category).filter(Category.name == category_name).first()
+    if not category:
+        raise ValueError(f"Category '{category_name}' not found")
+
+    rows = []
+    for subject in category.subjects:
+        for variation in sorted(category.variations, key=lambda v: v.order):
+            existing = (
+                db.query(ContentVariant)
+                .filter(ContentVariant.subject_id == subject.id, ContentVariant.variation_id == variation.id, ContentVariant.lang == lang)
+                .first()
+            )
+            rows.append({
+                "subject_name": subject.name,
+                "variation_text": variation.text,
+                "seo_title": existing.seo_title if existing else "",
+                "seo_alt_text": existing.seo_alt_text if existing else "",
+                "seo_excerpt": existing.seo_excerpt if existing else "",
+                "seo_content": existing.seo_content if existing else "",
+                "generated": existing is not None,
+            })
+    return rows
+
+
+def regenerate_category_description(db: Session, category_name: str, translated_category_name: str, lang: str) -> str:
+    category = db.query(Category).filter(Category.name == category_name).first()
+    if not category:
+        raise ValueError(f"Category '{category_name}' not found")
+
+    description = generate_category_description(category.book.base_prompt, category.book.product_noun, category_name, translated_category_name, lang)
+
+    existing = (
+        db.query(CategoryDescription)
+        .filter(CategoryDescription.category == category_name, CategoryDescription.lang == lang)
+        .first()
+    )
+    if existing:
+        existing.description = description
+        db.commit()
+        return description
+
+    record = CategoryDescription(category=category_name, lang=lang, description=description)
+    db.add(record)
+    db.commit()
+    return description

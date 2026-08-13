@@ -4,13 +4,15 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createBook, ApiError } from "@/lib/api";
 
+const PRODUCT_NOUN_PRESETS = ["coloring page", "stencil", "icon", "sticker", "logo", "print"];
+
 export default function NewBookPage() {
   const router = useRouter();
   const [name, setName] = useState("");
+  const [productNoun, setProductNoun] = useState("");
   const [basePrompt, setBasePrompt] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [productNoun, setProductNoun] = useState("coloring page");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -20,6 +22,10 @@ export default function NewBookPage() {
       setError("Book name is required.");
       return;
     }
+    if (!productNoun.trim()) {
+      setError("Product type is required — choose a preset or type your own.");
+      return;
+    }
     if (!basePrompt.trim()) {
       setError("Base prompt is required.");
       return;
@@ -27,8 +33,12 @@ export default function NewBookPage() {
 
     setSubmitting(true);
     try {
-      const book = await createBook({ name: name.trim(), base_prompt: basePrompt.trim() });
-      router.push(`/books/${book.id}`);
+      const book = await createBook({
+        name: name.trim(),
+        base_prompt: basePrompt.trim(),
+        product_noun: productNoun.trim(),
+      });
+      router.push(`/books/${book.id}/settings`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to create book");
       setSubmitting(false);
@@ -42,8 +52,8 @@ export default function NewBookPage() {
           New book
         </h1>
         <p className="mt-1" style={{ color: "var(--pencil)" }}>
-          Set the shared style and prompt for this book. Categories inside it will inherit this — image size and
-          cleanup settings can be fine-tuned after creating it.
+          Set the name, product type, and style for this book. Categories inside it will inherit these — image
+          size and cleanup settings can be fine-tuned right after creating it.
         </p>
       </header>
 
@@ -67,6 +77,41 @@ export default function NewBookPage() {
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. Coloring Books — Ages 3-10"
             className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none"
+            style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
+            Product type
+          </label>
+          <p className="text-xs mb-2" style={{ color: "var(--pencil)" }}>
+            The word used consistently in generated titles, descriptions, and SEO content — e.g. &quot;coloring
+            page,&quot; &quot;stencil,&quot; &quot;icon.&quot;
+          </p>
+          <div className="flex gap-2 mb-2 flex-wrap">
+            {PRODUCT_NOUN_PRESETS.map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                onClick={() => setProductNoun(preset)}
+                className="px-3 py-1.5 rounded-full text-sm border-[1.5px]"
+                style={
+                  productNoun === preset
+                    ? { background: "var(--teal)", borderColor: "var(--teal)", color: "white" }
+                    : { borderColor: "var(--pencil-light)", color: "var(--pencil)" }
+                }
+              >
+                {preset}
+              </button>
+            ))}
+          </div>
+          <input
+            type="text"
+            value={productNoun}
+            onChange={(e) => setProductNoun(e.target.value)}
+            placeholder="Or type a custom term..."
+            className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
             style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
           />
         </div>

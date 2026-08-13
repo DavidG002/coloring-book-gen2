@@ -42,13 +42,17 @@ const TEMPLATE_TOKENS: TemplateToken[] = [
 
 export default function TranslationsPanel({
   categoryName,
+  bookId,
   subjects,
   variations,
 }: {
   categoryName: string;
+  bookId: number;
   subjects: Subject[];
   variations: Variation[];
 }) {
+
+
   const [languages, setLanguages] = useState<string[]>([]);
   const [loadingList, setLoadingList] = useState(true);
   const [selectedLang, setSelectedLang] = useState<string | null>(null);
@@ -330,17 +334,16 @@ export default function TranslationsPanel({
 
   async function getLanguageTemplateDefault(lang: string) {
     const res = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/language-templates/${encodeURIComponent(lang)}`
+      `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/books/${bookId}/language-templates/${encodeURIComponent(lang)}`
     );
     if (res.status === 404) return null;
     const data = await res.json();
     if (!res.ok) throw new ApiError(res.status, data.detail);
     return data as { filename_template: string; alt_template: string; title_template: string };
   }
-
   async function autoTranslateLanguageTemplate(lang: string) {
     const res = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/language-templates/${encodeURIComponent(lang)}/auto-translate`,
+      `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/books/${bookId}/language-templates/${encodeURIComponent(lang)}/auto-translate`,
       { method: "POST" }
     );
     const data = await res.json();
@@ -350,6 +353,7 @@ export default function TranslationsPanel({
 
   async function handleAutoTranslateTemplateStructure() {
     if (!form.lang) return;
+    
     setError(null);
     setTranslatingTemplateStructure(true);
     try {

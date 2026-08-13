@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { getBook, deleteBook, getCategories, ApiError, type Book, type CategorySummary } from "@/lib/api";
 import NewCategoryModal from "@/components/NewCategoryModal";
+import DeleteBookModal from "@/components/DeleteBookModal";
 
 export default function BookDetailPage() {
   const router = useRouter();
@@ -18,6 +19,7 @@ export default function BookDetailPage() {
   const [notFound, setNotFound] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showNewCategoryModal, setShowNewCategoryModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -118,13 +120,11 @@ export default function BookDetailPage() {
             Settings
           </Link>
           <button
-            onClick={handleDelete}
-            disabled={deleting || book.category_count > 0}
-            title={book.category_count > 0 ? "Move or delete its categories first" : undefined}
-            className="px-4 py-2 rounded-md text-sm font-medium disabled:opacity-40"
+            onClick={() => setShowDeleteModal(true)}
+            className="px-4 py-2 rounded-md text-sm font-medium"
             style={{ color: "var(--coral-dark)", border: "1.5px solid var(--coral)" }}
           >
-            {deleting ? "Deleting..." : "Delete book"}
+            Delete book
           </button>
         </div>
       </header>
@@ -197,6 +197,9 @@ export default function BookDetailPage() {
           bookName={book.name}
           onClose={() => setShowNewCategoryModal(false)}
         />
+      )}
+      {showDeleteModal && (
+        <DeleteBookModal bookId={bookId} onClose={() => setShowDeleteModal(false)} />
       )}
     </main>
   );
