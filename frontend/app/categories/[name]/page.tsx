@@ -8,25 +8,21 @@ import GeneratePanel from "@/components/GeneratePanel";
 import TranslationsPanel from "@/components/TranslationsPanel";
 import SeoPanel from "@/components/SeoPanel";
 import PublishPanel from "@/components/PublishPanel";
-import CollapsibleSection from "@/components/CollapsibleSection";
+import TabbedSection from "@/components/TabbedSection";
 import CategorySidebar from "@/components/CategorySidebar";
 import BulkPasteInput from "@/components/BulkPasteInput";
 import ReviewPanel from "@/components/ReviewPanel";
 import WordPressPushPanel from "@/components/WordPressPushPanel";
 import DeleteCategoryModal from "@/components/DeleteCategoryModal";
 
-const SECTION_ORDER = ["subjects", "variations", "generate", "review", "translations","seo", "publish", "wordpress"] as const;
+const SECTION_ORDER = ["setup", "language", "generate", "publish"] as const;
 type SectionId = (typeof SECTION_ORDER)[number];
 
 const SECTION_LABELS: Record<SectionId, string> = {
-  subjects: "Subjects",
-  variations: "Variations",
+  setup: "Setup",
+  language: "Language",
   generate: "Generate",
-  review: "Review",
-  translations: "Translations",
-  seo: "SEO",
   publish: "Publish",
-  wordpress: "WordPress", 
 };
 
 export default function CategoryDetailPage() {
@@ -45,43 +41,29 @@ export default function CategoryDetailPage() {
   const [savingSubjects, setSavingSubjects] = useState(false);
   const [savingVariations, setSavingVariations] = useState(false);
 
-
-  const [openSection, setOpenSection] = useState<SectionId | null>("subjects");
+  const [openSection, setOpenSection] = useState<SectionId | null>("setup");
   const [savingMessage, setSavingMessage] = useState<{ section: SectionId; text: string } | null>(null);
 
   const [subjectFilter, setSubjectFilter] = useState("");
   const [variationFilter, setVariationFilter] = useState("");
 
-  const subjectsRef = useRef<HTMLDivElement>(null);
-  const variationsRef = useRef<HTMLDivElement>(null);
+  const setupRef = useRef<HTMLDivElement>(null);
+  const languageRef = useRef<HTMLDivElement>(null);
   const generateRef = useRef<HTMLDivElement>(null);
-  const translationsRef = useRef<HTMLDivElement>(null);
   const publishRef = useRef<HTMLDivElement>(null);
-  const reviewRef = useRef<HTMLDivElement>(null);
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
-  const wordpressRef = useRef<HTMLDivElement>(null);
-  const seoRef = useRef<HTMLDivElement>(null);
-
   function getSectionRef(id: SectionId): React.RefObject<HTMLDivElement | null> {
     switch (id) {
-      case "subjects":
-        return subjectsRef;
-      case "variations":
-        return variationsRef;
+      case "setup":
+        return setupRef;
+      case "language":
+        return languageRef;
       case "generate":
         return generateRef;
-      case "translations":
-        return translationsRef;
-      case "seo":
-        return seoRef;  
       case "publish":
         return publishRef;
-      case "review":
-        return reviewRef;
-      case "wordpress":
-      return wordpressRef;
     }
   }
 
@@ -124,11 +106,8 @@ export default function CategoryDetailPage() {
 
   function advanceAfterSave(currentSection: SectionId, message: string) {
     setSavingMessage({ section: currentSection, text: message });
-    const currentIndex = SECTION_ORDER.indexOf(currentSection);
-    const nextSection = SECTION_ORDER[currentIndex + 1];
     setTimeout(() => {
       setSavingMessage(null);
-      if (nextSection) goToSection(nextSection);
     }, 1100);
   }
 
@@ -154,7 +133,7 @@ export default function CategoryDetailPage() {
       const updated = await updateCategory(categoryName, { subjects: clean });
       setCategory(updated);
       setSubjects(updated.subjects.map((s) => s.name));
-      advanceAfterSave("subjects", "Saved — moving to Variations");
+      advanceAfterSave("setup", "Saved");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to save subjects");
     } finally {
@@ -174,7 +153,7 @@ export default function CategoryDetailPage() {
       const updated = await updateCategory(categoryName, { variations: clean });
       setCategory(updated);
       setVariations(updated.variations.sort((a, b) => a.order - b.order).map((v) => v.text));
-      advanceAfterSave("variations", "Saved — moving to Generate");
+      advanceAfterSave("setup", "Saved");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to save variations");
     } finally {
@@ -210,18 +189,165 @@ export default function CategoryDetailPage() {
     );
   }
 
+  const subjectsComplete = subjects.filter(Boolean).length > 0;
+  const variationsComplete = variations.filter(Boolean).length > 0;
+
   const sidebarItems = SECTION_ORDER.map((id) => ({
     id,
     label: SECTION_LABELS[id],
     complete:
-      id === "subjects"
-        ? subjects.filter(Boolean).length > 0
-        : id === "variations"
-        ? variations.filter(Boolean).length > 0
+      id === "setup"
+        ? subjectsComplete && variationsComplete
         : id === "generate"
         ? (category?.subjects.length ?? 0) > 0
         : false,
   }));
+
+  const subjectsTabContent = (
+    <div>
+      <div className="flex items-center justify-between mb-1.5">
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={() => addListItem(subjects, setSubjects)}
+            className="text-sm font-medium"
+            style={{ color: "var(--teal)" }}
+          >
+            + Add subject
+          </button>
+          <BulkPasteInput
+            placeholder={"Car\nTruck\nAirplane\nBoat"}
+            onAdd={(lines) => setSubjects((prev) => [...prev.filter(Boolean), ...lines])}
+          />
+        </div>
+        <button
+          onClick={handleSaveSubjects}
+          disabled={savingSubjects}
+          className="text-sm font-medium disabled:opacity-60"
+          style={{ color: "var(--teal)" }}
+        >
+          {savingSubjects ? "Saving..." : "Save"}
+        </button>
+      </div>
+
+      {subjects.length > 8 && (
+        <input
+          type="text"
+          value={subjectFilter}
+          onChange={(e) => setSubjectFilter(e.target.value)}
+          placeholder={`Filter ${subjects.length} subjects...`}
+          className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm mb-2"
+          style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+        />
+      )}
+      <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+        {subjects.map((subject, i) => {
+          if (subjectFilter && !subject.toLowerCase().includes(subjectFilter.toLowerCase())) return null;
+          return (
+            <div key={i} className="flex gap-2">
+              <input
+                type="text"
+                value={subject}
+                onChange={(e) => updateListItem(subjects, setSubjects, i, e.target.value)}
+                className="flex-1 px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
+                style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+              />
+              <button
+                type="button"
+                onClick={() => removeListItem(subjects, setSubjects, i)}
+                className="px-3 rounded-md text-sm"
+                style={{ color: "var(--pencil)" }}
+              >
+                Remove
+              </button>
+            </div>
+          );
+        })}
+        {subjects.length === 0 && (
+          <p className="text-sm" style={{ color: "var(--pencil)" }}>
+            No subjects yet.
+          </p>
+        )}
+        {subjects.length > 0 &&
+          subjectFilter &&
+          subjects.every((s) => !s.toLowerCase().includes(subjectFilter.toLowerCase())) && (
+            <p className="text-sm" style={{ color: "var(--pencil)" }}>
+              No subjects match &quot;{subjectFilter}&quot;.
+            </p>
+          )}
+      </div>
+    </div>
+  );
+
+  const variationsTabContent = (
+    <div>
+      <div className="flex items-center justify-between mb-1.5">
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={() => addListItem(variations, setVariations)}
+            className="text-sm font-medium"
+            style={{ color: "var(--teal)" }}
+          >
+            + Add variation
+          </button>
+          <BulkPasteInput
+            placeholder={"side view on a road\nfront three-quarter view\naerial top-down view"}
+            onAdd={(lines) => setVariations((prev) => [...prev.filter(Boolean), ...lines])}
+          />
+        </div>
+        <button
+          onClick={handleSaveVariations}
+          disabled={savingVariations}
+          className="text-sm font-medium disabled:opacity-60"
+          style={{ color: "var(--teal)" }}
+        >
+          {savingVariations ? "Saving..." : "Save"}
+        </button>
+      </div>
+      {variations.length > 8 && (
+        <input
+          type="text"
+          value={variationFilter}
+          onChange={(e) => setVariationFilter(e.target.value)}
+          placeholder={`Filter ${variations.length} variations...`}
+          className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm mb-2"
+          style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+        />
+      )}
+      <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+        {variations.map((variation, i) => {
+          if (variationFilter && !variation.toLowerCase().includes(variationFilter.toLowerCase())) return null;
+          return (
+            <div key={i} className="flex gap-2">
+              <input
+                type="text"
+                value={variation}
+                onChange={(e) => updateListItem(variations, setVariations, i, e.target.value)}
+                className="flex-1 px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
+                style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+              />
+              <button
+                type="button"
+                onClick={() => removeListItem(variations, setVariations, i)}
+                className="px-3 rounded-md text-sm"
+                style={{ color: "var(--pencil)" }}
+              >
+                Remove
+              </button>
+            </div>
+          );
+        })}
+        {variations.length > 0 &&
+          variationFilter &&
+          variations.every((v) => !v.toLowerCase().includes(variationFilter.toLowerCase())) && (
+            <p className="text-sm" style={{ color: "var(--pencil)" }}>
+              No variations match &quot;{variationFilter}&quot;.
+            </p>
+          )}
+      </div>
+    </div>
+  );
 
   return (
     <main className="min-h-screen px-8 py-12 max-w-6xl mx-auto">
@@ -277,229 +403,89 @@ export default function CategoryDetailPage() {
         />
 
         <div className="flex-1 min-w-0 space-y-4">
-          <CollapsibleSection
-            id="subjects"
-            title="Subjects"
-            isOpen={openSection === "subjects"}
-            onToggle={() => setOpenSection(openSection === "subjects" ? null : "subjects")}
-            complete={subjects.filter(Boolean).length > 0}
-            savingMessage={savingMessage?.section === "subjects" ? savingMessage.text : null}
-            ref={subjectsRef}
-          >
-            <div className="flex items-center justify-between mb-1.5">
-              <div className="flex items-center gap-4">
-                <button
-                  type="button"
-                  onClick={() => addListItem(subjects, setSubjects)}
-                  className="text-sm font-medium"
-                  style={{ color: "var(--teal)" }}
-                >
-                  + Add subject
-                </button>
-                <BulkPasteInput
-                  placeholder={"Car\nTruck\nAirplane\nBoat"}
-                  onAdd={(lines) => setSubjects((prev) => [...prev.filter(Boolean), ...lines])}
-                />
-              </div>
-              <button
-                onClick={handleSaveSubjects}
-                disabled={savingSubjects}
-                className="text-sm font-medium disabled:opacity-60"
-                style={{ color: "var(--teal)" }}
-              >
-                {savingSubjects ? "Saving..." : "Save & continue"}
-              </button>
-            </div>
+          <TabbedSection
+            id="setup"
+            title="Setup"
+            isOpen={openSection === "setup"}
+            onToggle={() => setOpenSection(openSection === "setup" ? null : "setup")}
+            savingMessage={savingMessage?.section === "setup" ? savingMessage.text : null}
+            ref={setupRef}
+            tabs={[
+              { id: "subjects", label: "Subjects", complete: subjectsComplete, content: subjectsTabContent },
+              { id: "variations", label: "Variations", complete: variationsComplete, content: variationsTabContent },
+            ]}
+          />
 
-            {subjects.length > 8 && (
-              <input
-                type="text"
-                value={subjectFilter}
-                onChange={(e) => setSubjectFilter(e.target.value)}
-                placeholder={`Filter ${subjects.length} subjects...`}
-                className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm mb-2"
-                style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
-              />
-            )}
-            <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
-              {subjects.map((subject, i) => {
-                if (subjectFilter && !subject.toLowerCase().includes(subjectFilter.toLowerCase())) return null;
-                return (
-                  <div key={i} className="flex gap-2">
-                    <input
-                      type="text"
-                      value={subject}
-                      onChange={(e) => updateListItem(subjects, setSubjects, i, e.target.value)}
-                      className="flex-1 px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
-                      style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeListItem(subjects, setSubjects, i)}
-                      className="px-3 rounded-md text-sm"
-                      style={{ color: "var(--pencil)" }}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                );
-              })}
-              {subjects.length === 0 && (
-                <p className="text-sm" style={{ color: "var(--pencil)" }}>
-                  No subjects yet.
-                </p>
-              )}
-              {subjects.length > 0 && subjectFilter && subjects.every((s) => !s.toLowerCase().includes(subjectFilter.toLowerCase())) && (
-                <p className="text-sm" style={{ color: "var(--pencil)" }}>
-                  No subjects match &quot;{subjectFilter}&quot;.
-                </p>
-              )}
-            </div>
-          </CollapsibleSection>
+          <TabbedSection
+            id="language"
+            title="Language"
+            isOpen={openSection === "language"}
+            onToggle={() => setOpenSection(openSection === "language" ? null : "language")}
+            ref={languageRef}
+            tabs={[
+              {
+                id: "translations",
+                label: "Translations",
+                content: category ? (
+                  <TranslationsPanel
+                    categoryName={categoryName}
+                    bookId={category.book_id}
+                    subjects={category.subjects}
+                    variations={category.variations}
+                  />
+                ) : null,
+              },
+              {
+                id: "seo",
+                label: "SEO",
+                content: <SeoPanel categoryName={categoryName} />,
+              },
+            ]}
+          />
 
-          <CollapsibleSection
-            id="variations"
-            title="Variations"
-            isOpen={openSection === "variations"}
-            onToggle={() => setOpenSection(openSection === "variations" ? null : "variations")}
-            complete={variations.filter(Boolean).length > 0}
-            savingMessage={savingMessage?.section === "variations" ? savingMessage.text : null}
-            ref={variationsRef}
-          >
-            <div className="flex items-center justify-between mb-1.5">
-              <div className="flex items-center gap-4">
-                <button
-                  type="button"
-                  onClick={() => addListItem(variations, setVariations)}
-                  className="text-sm font-medium"
-                  style={{ color: "var(--teal)" }}
-                >
-                  + Add variation
-                </button>
-                <BulkPasteInput
-                  placeholder={"side view on a road\nfront three-quarter view\naerial top-down view"}
-                  onAdd={(lines) => setVariations((prev) => [...prev.filter(Boolean), ...lines])}
-                />
-              </div>
-              <button
-                onClick={handleSaveVariations}
-                disabled={savingVariations}
-                className="text-sm font-medium disabled:opacity-60"
-                style={{ color: "var(--teal)" }}
-              >
-                {savingVariations ? "Saving..." : "Save & continue"}
-              </button>
-            </div>
-            {variations.length > 8 && (
-              <input
-                type="text"
-                value={variationFilter}
-                onChange={(e) => setVariationFilter(e.target.value)}
-                placeholder={`Filter ${variations.length} variations...`}
-                className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm mb-2"
-                style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
-              />
-            )}
-            <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
-              {variations.map((variation, i) => {
-                if (variationFilter && !variation.toLowerCase().includes(variationFilter.toLowerCase())) return null;
-                return (
-                  <div key={i} className="flex gap-2">
-                    <input
-                      type="text"
-                      value={variation}
-                      onChange={(e) => updateListItem(variations, setVariations, i, e.target.value)}
-                      className="flex-1 px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
-                      style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeListItem(variations, setVariations, i)}
-                      className="px-3 rounded-md text-sm"
-                      style={{ color: "var(--pencil)" }}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                );
-              })}
-              {variations.length > 0 && variationFilter && variations.every((v) => !v.toLowerCase().includes(variationFilter.toLowerCase())) && (
-                <p className="text-sm" style={{ color: "var(--pencil)" }}>
-                  No variations match &quot;{variationFilter}&quot;.
-                </p>
-              )}
-            </div>
-          </CollapsibleSection>
-
-          <CollapsibleSection
+          <TabbedSection
             id="generate"
             title="Generate"
             isOpen={openSection === "generate"}
             onToggle={() => setOpenSection(openSection === "generate" ? null : "generate")}
             ref={generateRef}
-          >
-            {category && <GeneratePanel categoryName={categoryName} subjects={category.subjects} />}
-          </CollapsibleSection>
+            tabs={[
+              {
+                id: "generate-tab",
+                label: "Generate",
+                content: category ? (
+                  <GeneratePanel categoryName={categoryName} subjects={category.subjects} />
+                ) : null,
+              },
+              {
+                id: "review-tab",
+                label: "Review",
+                content: <ReviewPanel categoryName={categoryName} />,
+              },
+            ]}
+          />
 
-          <CollapsibleSection
-            id="review"
-            title="Review"
-            isOpen={openSection === "review"}
-            onToggle={() => setOpenSection(openSection === "review" ? null : "review")}
-            ref={reviewRef}
-          >
-            <ReviewPanel categoryName={categoryName} />
-          </CollapsibleSection>
-
-          <CollapsibleSection
-            id="translations"
-            title="Translations"
-            isOpen={openSection === "translations"}
-            onToggle={() => setOpenSection(openSection === "translations" ? null : "translations")}
-            ref={translationsRef}
-          >
-            {category && (
-              <TranslationsPanel
-                categoryName={categoryName}
-                bookId={category.book_id}
-                subjects={category.subjects}
-                variations={category.variations}
-              />
-            )}
-          </CollapsibleSection>
-
-          <CollapsibleSection
-            id="seo"
-            title="SEO"
-            isOpen={openSection === "seo"}
-            onToggle={() => setOpenSection(openSection === "seo" ? null : "seo")}
-            ref={seoRef}
-          >
-            <SeoPanel categoryName={categoryName} />
-          </CollapsibleSection>
-
-          <CollapsibleSection
+          <TabbedSection
             id="publish"
             title="Publish"
             isOpen={openSection === "publish"}
             onToggle={() => setOpenSection(openSection === "publish" ? null : "publish")}
             ref={publishRef}
-          >
-            {category && <PublishPanel categoryName={categoryName} />}
-          </CollapsibleSection>
-
-          <CollapsibleSection
-            id="wordpress"
-            title="WordPress"
-            isOpen={openSection === "wordpress"}
-            onToggle={() => setOpenSection(openSection === "wordpress" ? null : "wordpress")}
-            ref={wordpressRef}
-          >
-            <WordPressPushPanel categoryName={categoryName} />
-          </CollapsibleSection>
+            tabs={[
+              {
+                id: "local-publish",
+                label: "Local",
+                content: <PublishPanel categoryName={categoryName} />,
+              },
+              {
+                id: "wordpress-publish",
+                label: "WordPress",
+                content: <WordPressPushPanel categoryName={categoryName} />,
+              },
+            ]}
+          />
         </div>
       </div>
-
 
       {showDeleteModal && category && (
         <DeleteCategoryModal
