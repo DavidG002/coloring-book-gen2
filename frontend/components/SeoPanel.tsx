@@ -46,11 +46,7 @@ async function regenerateDescription(categoryName: string, lang: string): Promis
   return data.description;
 }
 
-async function saveContentVariant(
-  categoryName: string,
-  lang: string,
-  row: ContentVariantRow
-): Promise<void> {
+async function saveContentVariant(categoryName: string, lang: string, row: ContentVariantRow): Promise<void> {
   await fetch(`${API_BASE_URL}/categories/${encodeURIComponent(categoryName)}/seo/${lang}/content`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -98,14 +94,15 @@ export default function SeoPanel({ categoryName }: { categoryName: string }) {
   const [error, setError] = useState<string | null>(null);
 
   const [description, setDescription] = useState("");
+  const [savedDescriptionSnapshot, setSavedDescriptionSnapshot] = useState("");
   const [savingDescription, setSavingDescription] = useState(false);
-  const [descriptionSaved, setDescriptionSaved] = useState(false);
   const [regeneratingDescription, setRegeneratingDescription] = useState(false);
 
   const [filter, setFilter] = useState("");
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [savingRow, setSavingRow] = useState<string | null>(null);
   const [regeneratingRow, setRegeneratingRow] = useState<string | null>(null);
+  const [dirtyRows, setDirtyRows] = useState<Set<string>>(new Set());
   const [generatingMissing, setGeneratingMissing] = useState(false);
   const [missingResult, setMissingResult] = useState<string | null>(null);
 
@@ -132,6 +129,7 @@ export default function SeoPanel({ categoryName }: { categoryName: string }) {
   useEffect(() => {
     if (!selectedLang) return;
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoadingSeo(true);
     setError(null);
     getSeoData(categoryName, selectedLang)
@@ -139,6 +137,8 @@ export default function SeoPanel({ categoryName }: { categoryName: string }) {
         if (cancelled) return;
         setSeoData(data);
         setDescription(data.category_description);
+        setSavedDescriptionSnapshot(data.category_description);
+        setDirtyRows(new Set());
       })
       .catch((err) => {
         if (!cancelled) setError(err instanceof ApiError ? err.message : "Failed to load SEO data");
@@ -155,8 +155,7 @@ export default function SeoPanel({ categoryName }: { categoryName: string }) {
     setSavingDescription(true);
     try {
       await saveDescription(categoryName, selectedLang, description);
-      setDescriptionSaved(true);
-      setTimeout(() => setDescriptionSaved(false), 2000);
+      setSavedDescriptionSnapshot(description);
     } catch {
       setError("Failed to save description");
     } finally {
@@ -177,6 +176,8 @@ export default function SeoPanel({ categoryName }: { categoryName: string }) {
   }
 
   function updateRow(subjectName: string, variationText: string, field: keyof ContentVariantRow, value: string) {
+    const key = `${subjectName}::${variationText}`;
+    setDirtyRows((prev) => new Set(prev).add(key));
     setSeoData((prev) => {
       if (!prev) return prev;
       return {
@@ -193,6 +194,11 @@ export default function SeoPanel({ categoryName }: { categoryName: string }) {
     setSavingRow(key);
     try {
       await saveContentVariant(categoryName, selectedLang, row);
+      setDirtyRows((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
       setSeoData((prev) => {
         if (!prev) return prev;
         return {
@@ -214,6 +220,11 @@ export default function SeoPanel({ categoryName }: { categoryName: string }) {
     setRegeneratingRow(key);
     try {
       const result = await regenerateOne(categoryName, selectedLang, row.subject_name, row.variation_text);
+      setDirtyRows((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
       setSeoData((prev) => {
         if (!prev) return prev;
         return {
@@ -267,6 +278,7 @@ export default function SeoPanel({ categoryName }: { categoryName: string }) {
     );
   }
 
+  const descriptionDirty = description !== savedDescriptionSnapshot;
   const filteredVariants = seoData?.content_variants.filter(
     (r) =>
       !filter ||
@@ -305,15 +317,14 @@ export default function SeoPanel({ categoryName }: { categoryName: string }) {
           <div className="mb-6">
             <div className="flex items-center justify-between mb-1.5">
               <label className="block text-sm font-medium" style={{ color: "var(--ink)" }}>Category description</label>
-              <div className="flex items-center gap-3">
-                {descriptionSaved && <span className="text-xs font-medium" style={{ color: "var(--teal)" }}>Saved</span>}
-                <button onClick={handleRegenerateDescription} disabled={regeneratingDescription} className="text-xs font-medium disabled:opacity-60" style={{ color: "var(--teal)" }}>
-                  {regeneratingDescription ? "Regenerating..." : "Regenerate"}
-                </button>
-                <button onClick={handleSaveDescription} disabled={savingDescription} className="text-sm font-medium disabled:opacity-60" style={{ color: "var(--teal)" }}>
-                  {savingDescription ? "Saving..." : "Save"}
-                </button>
-              </div>
+              <button
+                onClick={handleRegenerateDescription}
+                disabled={regeneratingDescription}
+                className="px-3 py-1 rounded-full text-xs font-medium border-[1.5px] disabled:opacity-60"
+                style={{ borderColor: "var(--teal)", color: "var(--teal)" }}
+              >
+                {regeneratingDescription ? "Regenerating..." : "Regenerate"}
+              </button>
             </div>
             <textarea
               value={description}
@@ -322,9 +333,24 @@ export default function SeoPanel({ categoryName }: { categoryName: string }) {
               className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
               style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
             />
-            <p className="mt-1.5 text-xs" style={{ color: "var(--pencil)" }}>
+            <p className="mt-1.5 text-xs mb-2" style={{ color: "var(--pencil)" }}>
               Used as the WordPress taxonomy term&apos;s description.
             </p>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleSaveDescription}
+                disabled={savingDescription}
+                className="px-5 py-2 rounded-md text-sm font-medium text-white disabled:opacity-60"
+                style={{ background: "var(--teal)" }}
+              >
+                {savingDescription ? "Saving..." : "Save description"}
+              </button>
+              {descriptionDirty && (
+                <span className="text-xs font-medium" style={{ color: "var(--coral-dark)" }}>
+                  Unsaved changes
+                </span>
+              )}
+            </div>
           </div>
 
           <div className="flex items-center justify-between mb-2">
@@ -333,7 +359,12 @@ export default function SeoPanel({ categoryName }: { categoryName: string }) {
             </label>
             <div className="flex items-center gap-3">
               {missingResult && <span className="text-xs font-medium" style={{ color: "var(--teal)" }}>{missingResult}</span>}
-              <button onClick={handleGenerateMissing} disabled={generatingMissing} className="text-sm font-medium disabled:opacity-60" style={{ color: "var(--teal)" }}>
+              <button
+                onClick={handleGenerateMissing}
+                disabled={generatingMissing}
+                className="px-3 py-1 rounded-full text-xs font-medium border-[1.5px] disabled:opacity-60"
+                style={{ borderColor: "var(--teal)", color: "var(--teal)" }}
+              >
                 {generatingMissing ? "Generating..." : "Generate missing"}
               </button>
             </div>
@@ -354,6 +385,7 @@ export default function SeoPanel({ categoryName }: { categoryName: string }) {
             {filteredVariants.map((row) => {
               const key = `${row.subject_name}::${row.variation_text}`;
               const isExpanded = expandedRow === key;
+              const isDirty = dirtyRows.has(key);
               return (
                 <div key={key} className="rounded-md border-[1.5px]" style={{ borderColor: row.generated ? "var(--pencil-light)" : "var(--coral)" }}>
                   <button
@@ -363,8 +395,13 @@ export default function SeoPanel({ categoryName }: { categoryName: string }) {
                     <span className="font-medium" style={{ color: "var(--ink)" }}>
                       {row.subject_name} — {row.variation_text}
                     </span>
-                    <span style={{ color: row.generated ? "var(--teal)" : "var(--coral-dark)" }}>
-                      {row.generated ? "Generated" : "Not generated"}
+                    <span className="flex items-center gap-2">
+                      {isDirty && (
+                        <span className="font-medium" style={{ color: "var(--coral-dark)" }}>Unsaved</span>
+                      )}
+                      <span style={{ color: row.generated ? "var(--teal)" : "var(--coral-dark)" }}>
+                        {row.generated ? "Generated" : "Not generated"}
+                      </span>
                     </span>
                   </button>
                   {isExpanded && (
@@ -409,7 +446,7 @@ export default function SeoPanel({ categoryName }: { categoryName: string }) {
                           style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
                         />
                       </div>
-                      <div className="flex gap-3 pt-1">
+                      <div className="flex items-center gap-3 pt-1">
                         <button
                           onClick={() => handleSaveRow(row)}
                           disabled={savingRow === key}
@@ -426,6 +463,11 @@ export default function SeoPanel({ categoryName }: { categoryName: string }) {
                         >
                           {regeneratingRow === key ? "Regenerating..." : "Regenerate"}
                         </button>
+                        {isDirty && (
+                          <span className="text-xs font-medium" style={{ color: "var(--coral-dark)" }}>
+                            Unsaved
+                          </span>
+                        )}
                       </div>
                     </div>
                   )}

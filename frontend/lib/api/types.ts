@@ -137,6 +137,11 @@ export interface TranslationUpdateInput {
   variation_items?: VariationTranslationItemInput[];
 }
 
+export interface SupportedLanguage {
+  code: string;
+  name: string;
+}
+
 // ---------- Settings ----------
 
 export interface Settings {

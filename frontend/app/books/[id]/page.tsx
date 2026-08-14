@@ -117,7 +117,7 @@ export default function BookDetailPage() {
             className="px-4 py-2 rounded-md text-sm font-medium"
             style={{ color: "var(--pencil)", border: "1.5px solid var(--pencil-light)" }}
           >
-            Settings
+            Book Settings
           </Link>
           <button
             onClick={() => setShowDeleteModal(true)}

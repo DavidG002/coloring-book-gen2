@@ -6,3 +6,4 @@ export * from "./translations";
 export * from "./settings";
 export * from "./promptDefaults";
 export * from "./generation";
+export * from "./account";

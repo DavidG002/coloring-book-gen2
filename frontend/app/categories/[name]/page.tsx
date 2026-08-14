@@ -54,6 +54,11 @@ export default function CategoryDetailPage() {
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
+
+
+  const [savedSubjectsSnapshot, setSavedSubjectsSnapshot] = useState<string[]>([]);
+  const [savedVariationsSnapshot, setSavedVariationsSnapshot] = useState<string[]>([]);
+
   function getSectionRef(id: SectionId): React.RefObject<HTMLDivElement | null> {
     switch (id) {
       case "setup":
@@ -78,7 +83,9 @@ export default function CategoryDetailPage() {
         if (cancelled) return;
         setCategory(data);
         setSubjects(data.subjects.map((s) => s.name));
+        setSavedSubjectsSnapshot(data.subjects.map((s) => s.name));
         setVariations(data.variations.sort((a, b) => a.order - b.order).map((v) => v.text));
+        setSavedVariationsSnapshot(data.variations.sort((a, b) => a.order - b.order).map((v) => v.text));
       } catch (err) {
         if (cancelled) return;
         if (err instanceof ApiError && err.status === 404) {
@@ -133,6 +140,7 @@ export default function CategoryDetailPage() {
       const updated = await updateCategory(categoryName, { subjects: clean });
       setCategory(updated);
       setSubjects(updated.subjects.map((s) => s.name));
+      setSavedSubjectsSnapshot(updated.subjects.map((s) => s.name));
       advanceAfterSave("setup", "Saved");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to save subjects");
@@ -153,6 +161,7 @@ export default function CategoryDetailPage() {
       const updated = await updateCategory(categoryName, { variations: clean });
       setCategory(updated);
       setVariations(updated.variations.sort((a, b) => a.order - b.order).map((v) => v.text));
+      setSavedVariationsSnapshot(updated.variations.sort((a, b) => a.order - b.order).map((v) => v.text));
       advanceAfterSave("setup", "Saved");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to save variations");
@@ -203,31 +212,24 @@ export default function CategoryDetailPage() {
         : false,
   }));
 
+  const subjectsDirty = JSON.stringify(subjects) !== JSON.stringify(savedSubjectsSnapshot);
+  const variationsDirty = JSON.stringify(variations) !== JSON.stringify(savedVariationsSnapshot);
+
   const subjectsTabContent = (
     <div>
-      <div className="flex items-center justify-between mb-1.5">
-        <div className="flex items-center gap-4">
-          <button
-            type="button"
-            onClick={() => addListItem(subjects, setSubjects)}
-            className="text-sm font-medium"
-            style={{ color: "var(--teal)" }}
-          >
-            + Add subject
-          </button>
-          <BulkPasteInput
-            placeholder={"Car\nTruck\nAirplane\nBoat"}
-            onAdd={(lines) => setSubjects((prev) => [...prev.filter(Boolean), ...lines])}
-          />
-        </div>
+      <div className="flex items-center gap-4 mb-1.5">
         <button
-          onClick={handleSaveSubjects}
-          disabled={savingSubjects}
-          className="text-sm font-medium disabled:opacity-60"
-          style={{ color: "var(--teal)" }}
+          type="button"
+          onClick={() => addListItem(subjects, setSubjects)}
+          className="px-3 py-1.5 rounded-full text-sm font-medium border-[1.5px]"
+          style={{ borderColor: "var(--teal)", color: "var(--teal)" }}
         >
-          {savingSubjects ? "Saving..." : "Save"}
+          + Add subject
         </button>
+        <BulkPasteInput
+          placeholder={"Car\nTruck\nAirplane\nBoat"}
+          onAdd={(lines) => setSubjects((prev) => [...prev.filter(Boolean), ...lines])}
+        />
       </div>
 
       {subjects.length > 8 && (
@@ -276,34 +278,39 @@ export default function CategoryDetailPage() {
             </p>
           )}
       </div>
+      <div className="flex items-center gap-3 mt-4 pt-4 border-t-[1.5px]" style={{ borderColor: "var(--pencil-light)" }}>
+        <button
+          onClick={handleSaveSubjects}
+          disabled={savingSubjects}
+          className="px-5 py-2.5 rounded-md text-sm font-medium text-white disabled:opacity-60"
+          style={{ background: "var(--teal)" }}
+        >
+          {savingSubjects ? "Saving..." : "Save subjects"}
+        </button>
+        {subjectsDirty && (
+          <span className="text-xs font-medium" style={{ color: "var(--coral-dark)" }}>
+            Unsaved changes
+          </span>
+        )}
+      </div>
     </div>
   );
 
   const variationsTabContent = (
     <div>
-      <div className="flex items-center justify-between mb-1.5">
-        <div className="flex items-center gap-4">
-          <button
-            type="button"
-            onClick={() => addListItem(variations, setVariations)}
-            className="text-sm font-medium"
-            style={{ color: "var(--teal)" }}
-          >
-            + Add variation
-          </button>
-          <BulkPasteInput
-            placeholder={"side view on a road\nfront three-quarter view\naerial top-down view"}
-            onAdd={(lines) => setVariations((prev) => [...prev.filter(Boolean), ...lines])}
-          />
-        </div>
+      <div className="flex items-center gap-4 mb-1.5">
         <button
-          onClick={handleSaveVariations}
-          disabled={savingVariations}
-          className="text-sm font-medium disabled:opacity-60"
-          style={{ color: "var(--teal)" }}
+          type="button"
+          onClick={() => addListItem(variations, setVariations)}
+          className="px-3 py-1.5 rounded-full text-sm font-medium border-[1.5px]"
+          style={{ borderColor: "var(--teal)", color: "var(--teal)" }}
         >
-          {savingVariations ? "Saving..." : "Save"}
+          + Add variation
         </button>
+        <BulkPasteInput
+          placeholder={"side view on a road\nfront three-quarter view\naerial top-down view"}
+          onAdd={(lines) => setVariations((prev) => [...prev.filter(Boolean), ...lines])}
+        />
       </div>
       {variations.length > 8 && (
         <input
@@ -346,9 +353,25 @@ export default function CategoryDetailPage() {
             </p>
           )}
       </div>
+      <div className="flex items-center gap-3 mt-4 pt-4 border-t-[1.5px]" style={{ borderColor: "var(--pencil-light)" }}>
+        <button
+          onClick={handleSaveVariations}
+          disabled={savingVariations}
+          className="px-5 py-2.5 rounded-md text-sm font-medium text-white disabled:opacity-60"
+          style={{ background: "var(--teal)" }}
+        >
+          {savingVariations ? "Saving..." : "Save variations"}
+        </button>
+        {variationsDirty && (
+          <span className="text-xs font-medium" style={{ color: "var(--coral-dark)" }}>
+            Unsaved changes
+          </span>
+        )}
+      </div>
     </div>
   );
 
+  
   return (
     <main className="min-h-screen px-8 py-12 max-w-6xl mx-auto">
       <header className="mb-8 flex items-start justify-between">
@@ -366,16 +389,35 @@ export default function CategoryDetailPage() {
           <p className="mt-1 text-sm" style={{ color: "var(--pencil)" }}>
             {category?.subjects.length ?? 0} subjects, {category?.variations.length ?? 0} pose variations
           </p>
+          {category && (
+            <Link
+              href={`/books/${category.book_id}`}
+              className="inline-block mt-1.5 text-sm font-medium"
+              style={{ color: "var(--teal)" }}
+            >
+              Part of book: {category.book_name} {"\u2192"}
+            </Link>
+          )}
         </div>
-        <button
-          onClick={() => setShowDeleteModal(true)}
-          className="px-4 py-2 rounded-md text-sm font-medium"
-          style={{ color: "var(--coral-dark)", border: "1.5px solid var(--coral)" }}
-        >
-          Delete category
-        </button>
+        <div className="flex items-center gap-3">
+          {category && (
+            <Link
+              href={`/books/${category.book_id}/settings`}
+              className="px-4 py-2 rounded-md text-sm font-medium"
+              style={{ color: "var(--pencil)", border: "1.5px solid var(--pencil-light)" }}
+            >
+              Book Settings
+            </Link>
+          )}
+          <button
+            onClick={() => setShowDeleteModal(true)}
+            className="px-4 py-2 rounded-md text-sm font-medium"
+            style={{ color: "var(--coral-dark)", border: "1.5px solid var(--coral)" }}
+          >
+            Delete category
+          </button>
+        </div>
       </header>
-
       {error && (
         <div
           className="mb-6 px-4 py-3 rounded-md text-sm"
@@ -383,16 +425,6 @@ export default function CategoryDetailPage() {
         >
           {error}
         </div>
-      )}
-
-      {category && (
-        <Link
-          href={`/books/${category.book_id}`}
-          className="inline-block mb-3 text-sm font-medium"
-          style={{ color: "var(--teal)" }}
-        >
-          Part of book: {category.book_name} {"\u2192"}
-        </Link>
       )}
 
       <div className="flex gap-6 items-start">

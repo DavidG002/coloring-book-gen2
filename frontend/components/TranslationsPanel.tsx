@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import TemplateField, { type TemplateToken } from "@/components/TemplateField";
+import { getSupportedLanguages, addSupportedLanguage, type SupportedLanguage } from "@/lib/api";
 import {
   getTranslations,
   getTranslation,
@@ -76,6 +77,11 @@ export default function TranslationsPanel({
   const [hasLanguageDefault, setHasLanguageDefault] = useState(true);
   const [translatingTemplateStructure, setTranslatingTemplateStructure] = useState(false);
 
+  const [supportedLanguages, setSupportedLanguages] = useState<SupportedLanguage[]>([]);
+  const [showAddNewLangForm, setShowAddNewLangForm] = useState(false);
+  const [newLangName, setNewLangName] = useState("");
+  const [addingLang, setAddingLang] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
     console.log("TranslationsPanel effect running for", categoryName);
@@ -93,6 +99,13 @@ export default function TranslationsPanel({
       cancelled = true;
     };
   }, [categoryName]);
+
+  useEffect(() => {
+    getSupportedLanguages()
+      .then(setSupportedLanguages)
+      .catch(() => {});
+  }, []);
+
 
   function formFromTranslation(t: Translation): FormState {
     const itemsBySubject: Record<string, string> = {};
@@ -136,15 +149,45 @@ export default function TranslationsPanel({
     setIsNewLang(true);
     setSelectedLang(null);
     setNewLangCode("");
+    setShowAddNewLangForm(false);
+    setNewLangName("");
     setForm({ ...BLANK_FORM });
   }
 
   function collapseLanguage() {
-  setSelectedLang(null);
-  setIsNewLang(false);
-  setForm(BLANK_FORM);
-  setError(null);
-  setSaved(false);
+    setSelectedLang(null);
+    setIsNewLang(false);
+    setForm(BLANK_FORM);
+    setError(null);
+    setSaved(false);
+  }
+
+  async function handleAddNewSupportedLanguage() {
+    const code = newLangCode.trim().toLowerCase();
+    const name = newLangName.trim();
+    if (!code || !name) {
+      setError("Both a code and a name are required.");
+      return;
+    }
+    if (languages.includes(code)) {
+      setError(`A translation for '${code}' already exists — select it from the list instead.`);
+      return;
+    }
+    setAddingLang(true);
+    setError(null);
+    try {
+      const lang = await addSupportedLanguage(code, name);
+      setSupportedLanguages((prev) => [...prev, lang].sort((a, b) => a.name.localeCompare(b.name)));
+      setForm({ ...BLANK_FORM, lang: code });
+      setSelectedLang(code);
+      setShowAddNewLangForm(false);
+      setNewLangCode("");
+      setNewLangName("");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to add language");
+    } finally {
+      setAddingLang(false);
+    }
   }
 
   async function confirmNewLanguageCode() {
@@ -422,30 +465,93 @@ export default function TranslationsPanel({
         </div>
       )}
 
-      {isNewLang && selectedLang === null && (
-        <div className="flex gap-2 mb-6 items-end">
-          <div>
-            <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
-              New language code
-            </label>
-            <input
-              type="text"
-              value={newLangCode}
-              onChange={(e) => setNewLangCode(e.target.value)}
-              placeholder="e.g. he, es, fr"
-              className="w-40 px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
-              style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
-            />
-          </div>
-          <button
-            onClick={confirmNewLanguageCode}
-            className="px-4 py-2 rounded-md text-sm font-medium text-white"
-            style={{ background: "var(--teal)" }}
-          >
-            Continue
-          </button>
+     {isNewLang && selectedLang === null && !showAddNewLangForm && (
+  <div className="flex gap-2 mb-6 items-end">
+    <div>
+      <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
+        Language
+      </label>
+      <select
+        value={newLangCode}
+        onChange={(e) => setNewLangCode(e.target.value)}
+        className="w-56 px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
+        style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+      >
+        <option value="" disabled>
+          Choose a language...
+        </option>
+        {supportedLanguages
+          .filter((l) => !languages.includes(l.code))
+          .map((l) => (
+            <option key={l.code} value={l.code}>
+              {l.name} ({l.code})
+            </option>
+          ))}
+      </select>
+    </div>
+    <button
+      onClick={confirmNewLanguageCode}
+      disabled={!newLangCode}
+      className="px-4 py-2 rounded-md text-sm font-medium text-white disabled:opacity-60"
+      style={{ background: "var(--teal)" }}
+    >
+      Continue
+    </button>
+    <button
+      onClick={() => setShowAddNewLangForm(true)}
+      className="px-4 py-2 rounded-md text-sm font-medium"
+      style={{ color: "var(--pencil)", border: "1.5px solid var(--pencil-light)" }}
+    >
+      + New language
+    </button>
+  </div>
+)}
+
+    {isNewLang && selectedLang === null && showAddNewLangForm && (
+      <div className="flex gap-2 mb-6 items-end">
+        <div>
+          <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
+            Code
+          </label>
+          <input
+            type="text"
+            value={newLangCode}
+            onChange={(e) => setNewLangCode(e.target.value)}
+            placeholder="e.g. nl"
+            className="w-28 px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
+            style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+          />
         </div>
-      )}
+        <div>
+          <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
+            Name
+          </label>
+          <input
+            type="text"
+            value={newLangName}
+            onChange={(e) => setNewLangName(e.target.value)}
+            placeholder="e.g. Dutch"
+            className="w-40 px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
+            style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+          />
+        </div>
+        <button
+          onClick={handleAddNewSupportedLanguage}
+          disabled={addingLang}
+          className="px-4 py-2 rounded-md text-sm font-medium text-white disabled:opacity-60"
+          style={{ background: "var(--teal)" }}
+        >
+          {addingLang ? "Adding..." : "Add & continue"}
+        </button>
+        <button
+          onClick={() => setShowAddNewLangForm(false)}
+          className="px-4 py-2 rounded-md text-sm font-medium"
+          style={{ color: "var(--pencil)" }}
+        >
+          Cancel
+        </button>
+      </div>
+    )}
 
       {loadingForm && (
         <p className="text-sm" style={{ color: "var(--pencil)" }}>
