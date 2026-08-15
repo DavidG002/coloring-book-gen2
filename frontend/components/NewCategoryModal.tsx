@@ -63,7 +63,7 @@ export default function NewCategoryModal({
         {error && (
           <div
             className="mb-4 px-3 py-2 rounded-md text-sm"
-            style={{ background: "#fdf0ee", color: "var(--coral-dark)", border: "1px solid var(--coral)" }}
+            style={{ background: "var(--coral-light)", color: "var(--coral-dark)", border: "1px solid var(--coral)" }}
           >
             {error}
           </div>

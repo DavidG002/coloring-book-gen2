@@ -10,12 +10,27 @@
   --teal-dark: #435d70;
   --coral: #e8664f;
   --coral-dark: #c94f3a;
+  --coral-light: #fdf0ee;
+}
+
+.dark {
+  --paper: #000000;
+  --canvas: #0a0a0a;
+  --ink: #f0ede6;
+  --pencil: #9a958a;
+  --pencil-light: #2a2a2a;
+  --teal: #7a9cb3;
+  --teal-dark: #5b7c93;
+  --coral: #e8664f;
+  --coral-dark: #f08a76;
+  --coral-light: #2a1815;
 }
 
 body {
   background: var(--paper);
   color: var(--ink);
   font-family: var(--font-body), system-ui, sans-serif;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
 h1, h2, h3, .font-display {

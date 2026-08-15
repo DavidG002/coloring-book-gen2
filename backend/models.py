@@ -245,6 +245,7 @@ class WordPressIntegration(Base):
     last_test_status = Column(String, nullable=True)
     last_test_message = Column(Text, nullable=True)
     last_tested_at = Column(DateTime, nullable=True)
+    use_polylang_linking = Column(Boolean, nullable=False, default=False)
 
 
 class WordPressCategoryTerm(Base):

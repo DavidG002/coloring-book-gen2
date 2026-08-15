@@ -26,16 +26,11 @@ TAXONOMY_REST_BASE = {"category": "categories", "post_tag": "tags"}
 POST_TYPE_REST_BASE = {"post": "posts", "page": "pages"}
 
 
-def ensure_category_term(
-    db: Session,
-    config: WordPressIntegration,
-    category: str,
-    lang: str,
-    translated_name: str,
-    description: str | None = None,
-) -> int:
+def ensure_category_term(db: Session, config: WordPressIntegration, category: str, lang: str, translated_name: str, description: str | None = None) -> int:
     """Returns the WP term ID for this category+language, creating it on
-    WordPress only the first time it's ever needed."""
+    WordPress only the first time it's ever needed. If Polylang Pro linking
+    is enabled, links a newly-created term to any sibling terms that already
+    exist for this category in other languages."""
     existing = (
         db.query(WordPressCategoryTerm)
         .filter(WordPressCategoryTerm.category == category, WordPressCategoryTerm.lang == lang)
@@ -50,6 +45,12 @@ def ensure_category_term(
     payload = {"name": translated_name}
     if description:
         payload["description"] = description
+
+    if config.use_polylang_linking:
+        payload["lang"] = lang
+        siblings = get_sibling_term_translations(db, category, exclude_lang=lang)
+        if siblings:
+            payload["translations"] = siblings
 
     response = httpx.post(url, auth=_auth(config), json=payload, timeout=15.0)
 
@@ -351,6 +352,15 @@ def push_batch_to_wordpress(
                 alt_text=variant.seo_alt_text,
                 title=variant.seo_title,
             )
+            
+            post_lang = None
+            post_translations = None
+            if config.use_polylang_linking:
+                post_lang = lang
+                siblings = get_sibling_translations(db, f["source_path"], exclude_lang=lang)
+                if siblings:
+                    post_translations = siblings
+
             result = create_post(
                 config,
                 title=variant.seo_title,
@@ -360,7 +370,8 @@ def push_batch_to_wordpress(
                 content=variant.seo_content,
                 excerpt=variant.seo_excerpt,
                 slug=slugify(variant.seo_title),
-                lang=None,  # Polylang lang/translations linking deferred until Pro is confirmed
+                lang=post_lang,
+                translations_link=post_translations,
             )
             record_published_item(
                 db,
@@ -389,3 +400,24 @@ def push_batch_to_wordpress(
         "failed_items": failed_items,
         "skipped_subjects": plan["skipped_subjects"],
     }
+
+def get_sibling_translations(db: Session, source_path: str, exclude_lang: str) -> dict[str, int]:
+    """Finds every other language's WP post ID for this same image, so a
+    newly-created post can be linked to them via Polylang's translations
+    field. Returns {lang: wp_post_id} for every language already pushed."""
+    rows = (
+        db.query(WordPressPublishedItem.lang, WordPressPublishedItem.wp_post_id)
+        .filter(WordPressPublishedItem.source_path == source_path, WordPressPublishedItem.lang != exclude_lang)
+        .all()
+    )
+    return {lang: post_id for lang, post_id in rows}
+
+
+def get_sibling_term_translations(db: Session, category: str, exclude_lang: str) -> dict[str, int]:
+    """Same idea, for the category's taxonomy term across languages."""
+    rows = (
+        db.query(WordPressCategoryTerm.lang, WordPressCategoryTerm.wp_term_id)
+        .filter(WordPressCategoryTerm.category == category, WordPressCategoryTerm.lang != exclude_lang)
+        .all()
+    )
+    return {lang: term_id for lang, term_id in rows}

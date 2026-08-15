@@ -132,7 +132,7 @@ export default function DeleteBookModal({ bookId, onClose }: { bookId: number; o
             {info.has_wordpress_content && (
               <div
                 className="mb-4 px-3 py-2.5 rounded-md text-xs"
-                style={{ background: "#fdf0ee", color: "var(--coral-dark)", border: "1px solid var(--coral)" }}
+                style={{ background: "var(--coral-light)", color: "var(--coral-dark)", border: "1px solid var(--coral)" }}
               >
                 This book has content already pushed to WordPress. That content will <strong>not</strong> be
                 deleted — remove it manually in wp-admin if needed.
@@ -142,7 +142,7 @@ export default function DeleteBookModal({ bookId, onClose }: { bookId: number; o
             {error && (
               <div
                 className="mb-4 px-3 py-2 rounded-md text-xs"
-                style={{ background: "#fdf0ee", color: "var(--coral-dark)", border: "1px solid var(--coral)" }}
+                style={{ background: "var(--coral-light)", color: "var(--coral-dark)", border: "1px solid var(--coral)" }}
               >
                 {error}
               </div>

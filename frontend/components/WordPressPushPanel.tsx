@@ -252,7 +252,7 @@ const batches = useMemo(() => {
       {error && (
         <div
           className="mb-4 px-4 py-3 rounded-md text-sm"
-          style={{ background: "#fdf0ee", color: "var(--coral-dark)", border: "1px solid var(--coral)" }}
+          style={{ background: "var(--coral-light)", color: "var(--coral-dark)", border: "1px solid var(--coral)" }}
         >
           {error}
         </div>
@@ -525,7 +525,7 @@ const batches = useMemo(() => {
               </p>
 
               {result.failed_items.length > 0 && (
-                <div className="rounded-md border-[1.5px] p-3" style={{ borderColor: "var(--coral)", background: "#fdf0ee" }}>
+                <div className="rounded-md border-[1.5px] p-3" style={{ borderColor: "var(--coral)", background: "var(--coral-light)" }}>
                   <p className="text-xs font-medium mb-1" style={{ color: "var(--coral-dark)" }}>
                     Failed items:
                   </p>

@@ -421,7 +421,7 @@ export default function CategoryDetailPage() {
       {error && (
         <div
           className="mb-6 px-4 py-3 rounded-md text-sm"
-          style={{ background: "#fdf0ee", color: "var(--coral-dark)", border: "1px solid var(--coral)" }}
+          style={{ background: "var(--coral-light)", color: "var(--coral-dark)", border: "1px solid var(--coral)" }}
         >
           {error}
         </div>

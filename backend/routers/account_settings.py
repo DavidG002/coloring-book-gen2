@@ -62,6 +62,7 @@ def get_wordpress_integration(db: Session = Depends(get_db)):
         last_test_status=row.last_test_status,
         last_test_message=row.last_test_message,
         last_tested_at=row.last_tested_at,
+        use_polylang_linking=row.use_polylang_linking,
     )
 
 
@@ -78,6 +79,8 @@ def update_wordpress_integration(payload: WordPressIntegrationUpdate, db: Sessio
         row.post_type = payload.post_type.strip()
     if payload.taxonomy is not None:
         row.taxonomy = payload.taxonomy.strip()
+    if payload.use_polylang_linking is not None:
+        row.use_polylang_linking = payload.use_polylang_linking
     db.commit()
     return WordPressIntegrationRead(
         site_url=row.site_url,
@@ -88,6 +91,7 @@ def update_wordpress_integration(payload: WordPressIntegrationUpdate, db: Sessio
         last_test_status=row.last_test_status,
         last_test_message=row.last_test_message,
         last_tested_at=row.last_tested_at,
+        use_polylang_linking=row.use_polylang_linking,
     )
 
 

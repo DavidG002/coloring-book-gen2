@@ -409,6 +409,7 @@ class WordPressIntegrationRead(BaseModel):
     last_test_status: Optional[str] = None
     last_test_message: Optional[str] = None
     last_tested_at: Optional[datetime] = None
+    use_polylang_linking: bool = False
 
 
 class WordPressIntegrationUpdate(BaseModel):
@@ -417,6 +418,7 @@ class WordPressIntegrationUpdate(BaseModel):
     app_password: Optional[str] = None
     post_type: Optional[str] = None
     taxonomy: Optional[str] = None
+    use_polylang_linking: bool = False
 
 
 class WordPressTestResult(BaseModel):

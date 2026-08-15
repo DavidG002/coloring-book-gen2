@@ -291,7 +291,7 @@ export default function SeoPanel({ categoryName }: { categoryName: string }) {
       <h2 className="font-display text-xl font-semibold mb-4" style={{ color: "var(--ink)" }}>SEO</h2>
 
       {error && (
-        <div className="mb-4 px-4 py-3 rounded-md text-sm" style={{ background: "#fdf0ee", color: "var(--coral-dark)", border: "1px solid var(--coral)" }}>
+        <div className="mb-4 px-4 py-3 rounded-md text-sm" style={{ background: "var(--coral-light)", color: "var(--coral-dark)", border: "1px solid var(--coral)" }}>
           {error}
         </div>
       )}

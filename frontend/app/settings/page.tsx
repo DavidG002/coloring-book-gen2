@@ -26,6 +26,7 @@ interface WordPressIntegrationRead {
   last_test_status?: string;
   last_test_message?: string;
   last_tested_at?: string;
+  use_polylang_linking?: boolean;
 }
 
 interface SupportedLanguageItem {
@@ -158,6 +159,7 @@ export default function SettingsPage() {
   const [wpLastTest, setWpLastTest] = useState<{ status?: string; message?: string; at?: string } | null>(null);
   const [wpPostType, setWpPostType] = useState("post");
   const [wpTaxonomy, setWpTaxonomy] = useState("category");
+  const [wpUsePolylang, setWpUsePolylang] = useState(false);
 
   // Languages
   const [languages, setLanguages] = useState<SupportedLanguageItem[]>([]);
@@ -190,6 +192,7 @@ export default function SettingsPage() {
         setWpHasPassword(wpData.has_password);
         setWpPostType(wpData.post_type ?? "post");
         setWpTaxonomy(wpData.taxonomy ?? "category");
+        setWpUsePolylang(wpData.use_polylang_linking ?? false); 
         if (wpData.last_test_status) {
           setWpLastTest({
             status: wpData.last_test_status,
@@ -265,11 +268,12 @@ export default function SettingsPage() {
     setError(null);
     setSavingWp(true);
     try {
-      const payload: { site_url?: string; username?: string; app_password?: string; post_type?: string; taxonomy?: string } = {
+      const payload: { site_url?: string; username?: string; app_password?: string; post_type?: string; taxonomy?: string; use_polylang_linking?: boolean } = {
         site_url: wpSiteUrl,
         username: wpUsername,
         post_type: wpPostType,
         taxonomy: wpTaxonomy,
+        use_polylang_linking: wpUsePolylang,
       };
       if (wpPassword.trim()) {
         payload.app_password = wpPassword.trim();
@@ -349,7 +353,7 @@ export default function SettingsPage() {
       {error && (
         <div
           className="mb-6 px-4 py-3 rounded-md text-sm"
-          style={{ background: "#fdf0ee", color: "var(--coral-dark)", border: "1px solid var(--coral)" }}
+          style={{ background: "var(--coral-light)", color: "var(--coral-dark)", border: "1px solid var(--coral)" }}
         >
           {error}
         </div>
@@ -491,6 +495,18 @@ export default function SettingsPage() {
               />
             </div>
           </div>
+
+          <label className="flex items-center gap-2 text-sm mt-4" style={{ color: "var(--ink)" }}>
+            <input
+              type="checkbox"
+              checked={wpUsePolylang}
+              onChange={(e) => setWpUsePolylang(e.target.checked)}
+            />
+            Use Polylang Pro linking
+          </label>
+          <p className="mt-1 text-xs" style={{ color: "var(--pencil)" }}>
+            Only enable once Polylang Pro is active on this site — links posts and taxonomy terms across languages.
+          </p>
           </div>
 
           <div className="flex items-center gap-3 mb-2">
