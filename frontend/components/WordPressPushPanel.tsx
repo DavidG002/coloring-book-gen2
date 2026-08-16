@@ -14,6 +14,7 @@ interface WordPressPreviewFile {
   publish_run_id: number | null;
   published_at: string | null;
   seo_error?: string | null;
+  needs_update?: boolean;
 }
 
 interface WordPressPreviewResponse {
@@ -105,6 +106,9 @@ export default function WordPressPushPanel({ categoryName }: { categoryName: str
   const [expandedBatches, setExpandedBatches] = useState<Set<string | number>>(new Set());
   const [result, setResult] = useState<WordPressPushResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const [syncingPath, setSyncingPath] = useState<string | null>(null);
+  const [syncedPaths, setSyncedPaths] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -239,6 +243,48 @@ const batches = useMemo(() => {
       setPanelState("ready");
     }
   }
+
+  async function syncToWordPress(sourcePath: string, lang: string): Promise<{ wp_post_id: number; wp_post_url: string; title: string }> {
+    const res = await fetch(`${API_BASE_URL}/wordpress/sync`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source_path: sourcePath, lang }),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.detail || "Failed to sync");
+    }
+    return res.json();
+  }
+
+async function handleSync(sourcePath: string) {
+  setSyncingPath(sourcePath);
+  setError(null);
+  try {
+    await syncToWordPress(sourcePath, selectedLang);
+    setPreview((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        files: prev.files.map((f) =>
+          f.source_path === sourcePath ? { ...f, needs_update: false } : f
+        ),
+      };
+    });
+    setSyncedPaths((prev) => new Set(prev).add(sourcePath));
+    setTimeout(() => {
+      setSyncedPaths((prev) => {
+        const next = new Set(prev);
+        next.delete(sourcePath);
+        return next;
+      });
+    }, 3000);
+  } catch (err) {
+    setError(err instanceof Error ? err.message : "Failed to sync to WordPress");
+  } finally {
+    setSyncingPath(null);
+  }
+}
 
   return (
     <section
@@ -429,7 +475,7 @@ const batches = useMemo(() => {
                             <div
                               key={f.source_path}
                               className="flex items-start gap-2.5 px-1.5 py-1 rounded text-xs"
-                              style={{ opacity: f.already_pushed ? 0.6 : f.wp_excluded ? 0.7 : 1 }}
+                              style={{ opacity: f.wp_excluded ? 0.7 : (f.already_pushed && !f.needs_update) ? 0.6 : 1 }}
                             >
                               <input
                                 type="checkbox"
@@ -444,12 +490,40 @@ const batches = useMemo(() => {
                                     {f.title}
                                   </span>
                                   {f.already_pushed && (
-                                    <span
-                                      className="px-1.5 py-0.5 rounded text-[10px] font-medium"
-                                      style={{ background: "var(--teal)", color: "white" }}
-                                    >
-                                      Published
-                                    </span>
+                                    <>
+                                      <span
+                                        className="px-1.5 py-0.5 rounded text-[10px] font-medium"
+                                        style={{ background: "var(--teal)", color: "white" }}
+                                      >
+                                        Published
+                                      </span>
+                                      {f.needs_update && !syncedPaths.has(f.source_path) && (
+                                        <span
+                                          className="px-1.5 py-0.5 rounded text-[10px] font-medium"
+                                          style={{ background: "var(--coral)", color: "white" }}
+                                        >
+                                          Needs update
+                                        </span>
+                                      )}
+                                      {(f.needs_update || syncedPaths.has(f.source_path)) && (
+                                        <button
+                                          onClick={() => handleSync(f.source_path)}
+                                          disabled={syncingPath === f.source_path}
+                                          className="text-[10px] font-semibold disabled:opacity-60 px-1.5 py-0.5 rounded"
+                                          style={
+                                            syncedPaths.has(f.source_path)
+                                              ? { background: "var(--teal)", color: "white" }
+                                              : { color: "var(--coral-dark)", border: "1.5px solid var(--coral)" }
+                                          }
+                                        >
+                                          {syncingPath === f.source_path
+                                            ? "Updating..."
+                                            : syncedPaths.has(f.source_path)
+                                            ? "\u2713 Updated"
+                                            : "Update on WordPress"}
+                                        </button>
+                                      )}
+                                    </>
                                   )}
                                   {f.wp_excluded && (
                                     <span

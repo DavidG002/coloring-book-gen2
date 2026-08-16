@@ -464,6 +464,7 @@ class WordPressPreviewFile(BaseModel):
     publish_run_id: Optional[int] = None
     published_at: Optional[str] = None
     seo_error: Optional[str] = None
+    needs_update: bool = False
 
 
 class WordPressPreviewResponse(BaseModel):
@@ -479,6 +480,16 @@ class WordPressPreviewRequest(BaseModel):
     category: str
     lang: str
 
+
+class WordPressSyncRequest(BaseModel):
+    source_path: str
+    lang: str
+
+
+class WordPressSyncResponse(BaseModel):
+    wp_post_id: int
+    wp_post_url: str
+    title: str
     
 # ---------- Languages ----------
 

@@ -4,8 +4,8 @@ from pydantic import BaseModel
 
 from database import get_db
 from models import GenerationImage
-from services.wordpress_publish import push_batch_to_wordpress, preview_wordpress_push
-from schemas import WordPressPushRequest, WordPressPushResponse, WordPressPreviewRequest, WordPressPreviewResponse
+from services.wordpress_publish import push_batch_to_wordpress, preview_wordpress_push, sync_pushed_item_to_wordpress
+from schemas import WordPressPushRequest, WordPressPushResponse, WordPressPreviewRequest, WordPressPreviewResponse, WordPressSyncRequest, WordPressSyncResponse
 
 
 class ExcludeRequest(BaseModel):
@@ -47,3 +47,13 @@ def set_exclude(payload: ExcludeRequest, db: Session = Depends(get_db)):
     image.wp_excluded = payload.excluded
     db.commit()
     return {"source_path": payload.source_path, "excluded": image.wp_excluded}
+
+@router.post("/sync", response_model=WordPressSyncResponse)
+def sync_to_wordpress(payload: WordPressSyncRequest, db: Session = Depends(get_db)):
+    try:
+        result = sync_pushed_item_to_wordpress(db, payload.source_path, payload.lang)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return WordPressSyncResponse(**result)

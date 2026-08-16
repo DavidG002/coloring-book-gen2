@@ -278,6 +278,10 @@ class WordPressPublishedItem(Base):
     wp_post_url = Column(String, nullable=True)
     status = Column(String, nullable=False, default="publish")  # "publish" | "draft"
     created_at = Column(DateTime, default=datetime.utcnow)
+    pushed_title = Column(Text, nullable=True)
+    pushed_alt_text = Column(Text, nullable=True)
+    pushed_excerpt = Column(Text, nullable=True)
+    pushed_content = Column(Text, nullable=True)
 
     __table_args__ = (
         UniqueConstraint("source_path", "lang", name="uq_wp_item_per_source_lang"),

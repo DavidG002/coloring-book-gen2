@@ -143,6 +143,10 @@ def record_published_item(
     wp_post_id: int,
     wp_post_url: str,
     status: str,
+    title: str = "",
+    alt_text: str = "",
+    excerpt: str = "",
+    content: str = "",
 ) -> WordPressPublishedItem:
     record = WordPressPublishedItem(
         source_path=source_path,
@@ -152,6 +156,10 @@ def record_published_item(
         wp_post_id=wp_post_id,
         wp_post_url=wp_post_url,
         status=status,
+        pushed_title=title,
+        pushed_alt_text=alt_text,
+        pushed_excerpt=excerpt,
+        pushed_content=content,
     )
     db.add(record)
     db.commit()
@@ -186,9 +194,9 @@ def get_locally_published_paths(db: Session, category: str, lang: str) -> set[st
 
 def preview_wordpress_push(db: Session, category_name: str, lang: str) -> dict:
     """Shows every locally-published-and-eligible file for this category+
-    language — each tagged with push status, exclusion status, and which
-    local publish run it came from — so the user can see and choose
-    exactly what to push, not just a count."""
+    language — each tagged with push status, exclusion status, whether it
+    needs re-syncing to WordPress, and which local publish run it came
+    from — so the user can see and choose exactly what to push or update."""
     category = db.query(Category).filter(Category.name == category_name).first()
     if not category:
         raise ValueError(f"Category '{category_name}' not found")
@@ -216,6 +224,12 @@ def preview_wordpress_push(db: Session, category_name: str, lang: str) -> dict:
     for f in eligible_files:
         image_record = db.query(GenerationImage).filter(GenerationImage.file_path == f["source_path"]).first()
 
+        pushed_item = (
+            db.query(WordPressPublishedItem)
+            .filter(WordPressPublishedItem.source_path == f["source_path"], WordPressPublishedItem.lang == lang)
+            .first()
+        )
+
         publish_file_record = (
             db.query(PublishedFile)
             .join(PublishRun, PublishedFile.run_id == PublishRun.id)
@@ -229,8 +243,10 @@ def preview_wordpress_push(db: Session, category_name: str, lang: str) -> dict:
         )
 
         # Show the real content that would actually be pushed — cached if
-        # already generated, or a note that it's not ready yet.
+        # already generated, or a note that it's not ready yet. Also detect
+        # drift against what's currently live on WordPress, if pushed before.
         seo_error = None
+        needs_update = False
         display_title = f["title_text"]
         display_alt = f["alt_text"]
         if image_record and image_record.variation_text:
@@ -244,9 +260,16 @@ def preview_wordpress_push(db: Session, category_name: str, lang: str) -> dict:
                 )
                 display_title = variant.seo_title
                 display_alt = variant.seo_alt_text
+                if pushed_item:
+                    needs_update = (
+                        variant.seo_title != (pushed_item.pushed_title or "")
+                        or variant.seo_alt_text != (pushed_item.pushed_alt_text or "")
+                        or variant.seo_excerpt != (pushed_item.pushed_excerpt or "")
+                        or variant.seo_content != (pushed_item.pushed_content or "")
+                    )
             except Exception as e:
                 seo_error = str(e)
-        elif not (image_record and image_record.variation_text):
+        else:
             seo_error = "Missing subject/variation data — this image predates SEO content tracking and cannot be pushed."
 
         files_info.append({
@@ -258,6 +281,7 @@ def preview_wordpress_push(db: Session, category_name: str, lang: str) -> dict:
             "publish_run_id": publish_file_record.run_id if publish_file_record else None,
             "published_at": publish_file_record.run.created_at.isoformat() if publish_file_record else None,
             "seo_error": seo_error,
+            "needs_update": needs_update,
         })
 
     new_count = sum(1 for f in files_info if not f["already_pushed"])
@@ -270,7 +294,6 @@ def preview_wordpress_push(db: Session, category_name: str, lang: str) -> dict:
         "files": files_info,
         "skipped_subjects": plan["skipped_subjects"],
     }
-
 
 def push_batch_to_wordpress(
     db: Session,
@@ -352,7 +375,7 @@ def push_batch_to_wordpress(
                 alt_text=variant.seo_alt_text,
                 title=variant.seo_title,
             )
-            
+
             post_lang = None
             post_translations = None
             if config.use_polylang_linking:
@@ -382,6 +405,10 @@ def push_batch_to_wordpress(
                 wp_post_id=result["id"],
                 wp_post_url=result.get("link", ""),
                 status=status,
+                title=variant.seo_title,
+                alt_text=variant.seo_alt_text,
+                excerpt=variant.seo_excerpt,
+                content=variant.seo_content,
             )
             pushed_items.append({
                 "source_path": f["source_path"],
@@ -400,6 +427,78 @@ def push_batch_to_wordpress(
         "failed_items": failed_items,
         "skipped_subjects": plan["skipped_subjects"],
     }
+
+def update_post(config: WordPressIntegration, wp_post_id: int, title: str, content: str, excerpt: str) -> dict:
+    """Pushes fresh content to an already-existing WordPress post."""
+    post_rest_base = POST_TYPE_REST_BASE.get(config.post_type, config.post_type)
+    url = config.site_url.rstrip("/") + f"/wp-json/wp/v2/{post_rest_base}/{wp_post_id}"
+
+    payload = {"title": title, "content": content, "excerpt": excerpt}
+    response = httpx.post(url, auth=_auth(config), json=payload, timeout=20.0)
+
+    if response.status_code not in (200, 201):
+        raise RuntimeError(f"Failed to update post {wp_post_id}: {response.status_code} {response.text}")
+
+    return response.json()
+
+
+def update_media_alt_text(config: WordPressIntegration, wp_media_id: int, alt_text: str, title: str) -> dict:
+    """Pushes fresh alt text/title to an already-existing media item."""
+    url = config.site_url.rstrip("/") + f"/wp-json/wp/v2/media/{wp_media_id}"
+
+    response = httpx.post(url, auth=_auth(config), json={"alt_text": alt_text, "title": title}, timeout=15.0)
+
+    if response.status_code not in (200, 201):
+        raise RuntimeError(f"Failed to update media {wp_media_id}: {response.status_code} {response.text}")
+
+    return response.json()
+
+
+def sync_pushed_item_to_wordpress(db: Session, source_path: str, lang: str) -> dict:
+    """Re-syncs an already-pushed WordPress post + media with whatever
+    content currently exists locally (e.g. after a Regenerate). This is the
+    core of keeping WordPress in sync with local edits after the initial push."""
+    config = _get_wp_config(db)
+
+    item = (
+        db.query(WordPressPublishedItem)
+        .filter(WordPressPublishedItem.source_path == source_path, WordPressPublishedItem.lang == lang)
+        .first()
+    )
+    if not item:
+        raise ValueError("This image hasn't been pushed to WordPress yet — nothing to sync.")
+
+    image_record = db.query(GenerationImage).filter(GenerationImage.file_path == source_path).first()
+    if not image_record or not image_record.variation_text:
+        raise ValueError("Missing subject/variation data for this image.")
+
+    category = db.query(Category).filter(Category.name == item.category).first()
+    if not category:
+        raise ValueError(f"Category '{item.category}' not found")
+
+    variant = ensure_content_variant(
+        db,
+        category_name=item.category,
+        subject_name=image_record.subject,
+        variation_text=image_record.variation_text,
+        lang=lang,
+    )
+
+    update_post(config, item.wp_post_id, variant.seo_title, variant.seo_content, variant.seo_excerpt)
+    update_media_alt_text(config, item.wp_media_id, variant.seo_alt_text, variant.seo_title)
+
+    item.pushed_title = variant.seo_title
+    item.pushed_alt_text = variant.seo_alt_text
+    item.pushed_excerpt = variant.seo_excerpt
+    item.pushed_content = variant.seo_content
+    db.commit()
+
+    return {
+        "wp_post_id": item.wp_post_id,
+        "wp_post_url": item.wp_post_url,
+        "title": variant.seo_title,
+    }
+
 
 def get_sibling_translations(db: Session, source_path: str, exclude_lang: str) -> dict[str, int]:
     """Finds every other language's WP post ID for this same image, so a
