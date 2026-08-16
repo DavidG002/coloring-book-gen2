@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { getTranslations, ApiError, type Translation } from "@/lib/api";
+import LanguagePills from "@/components/LanguagePills";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -127,7 +128,11 @@ export default function SeoPanel({ categoryName }: { categoryName: string }) {
   }, [categoryName]);
 
   useEffect(() => {
-    if (!selectedLang) return;
+    if (!selectedLang) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSeoData(null);
+      return;
+    }
     let cancelled = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoadingSeo(true);
@@ -298,16 +303,7 @@ export default function SeoPanel({ categoryName }: { categoryName: string }) {
 
       <div className="mb-5">
         <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>Language</label>
-        <select
-          value={selectedLang}
-          onChange={(e) => setSelectedLang(e.target.value)}
-          className="w-40 px-3 py-2 rounded-md border-[1.5px] outline-none text-sm uppercase"
-          style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
-        >
-          {languages.map((lang) => (
-            <option key={lang} value={lang}>{lang}</option>
-          ))}
-        </select>
+          <LanguagePills languages={languages} selected={selectedLang} onSelect={setSelectedLang} />
       </div>
 
       {loadingSeo ? (
@@ -476,7 +472,11 @@ export default function SeoPanel({ categoryName }: { categoryName: string }) {
             })}
           </div>
         </>
-      ) : null}
+      ) : (
+        <p className="text-sm" style={{ color: "var(--pencil)" }}>
+          Select a language above to view its SEO content.
+        </p>
+      )}
     </section>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { getTranslations, ApiError, type Translation } from "@/lib/api";
+import LanguagePills from "@/components/LanguagePills";
 
 interface PublishedFileInfo {
   source_path: string;
@@ -248,21 +249,14 @@ export default function PublishPanel({ categoryName }: { categoryName: string })
               <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
                 Language
               </label>
-              <select
-                value={selectedLang}
-                onChange={(e) => {
-                  setSelectedLang(e.target.value);
-                  handleReset();
-                }}
-                className="w-40 px-3 py-2 rounded-md border-[1.5px] outline-none text-sm uppercase"
-                style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
-              >
-                {languages.map((lang) => (
-                  <option key={lang} value={lang}>
-                    {lang}
-                  </option>
-                ))}
-              </select>
+                <LanguagePills
+                  languages={languages}
+                  selected={selectedLang}
+                  onSelect={(lang) => {
+                    setSelectedLang(lang);
+                    handleReset();
+                  }}
+                />
             </div>
             <div>
               <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { getBook, updateBook, ApiError, type Book } from "@/lib/api";
+import { useSearchParams } from "next/navigation";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -170,6 +171,9 @@ export default function BookSettingsPage() {
 
   const [savingProductNoun, setSavingProductNoun] = useState(false);
   const [productNounSaved, setProductNounSaved] = useState(false);
+
+  const searchParams = useSearchParams();
+  const fromPath = searchParams.get("from");
 
   const loadPreviewHistory = useCallback(() => {
     setLoadingHistory(true);
@@ -400,11 +404,11 @@ export default function BookSettingsPage() {
     <main className="min-h-screen px-8 py-12 max-w-3xl mx-auto">
       <header className="mb-8">
         <button
-          onClick={() => router.push(`/books/${bookId}`)}
+          onClick={() => router.push(fromPath || `/books/${bookId}`)}
           className="text-sm mb-3 inline-block"
           style={{ color: "var(--pencil)" }}
         >
-          {"\u2190"} Back to {book.name}
+          {"\u2190"} Back
         </button>
         <h1 className="text-3xl font-display font-semibold" style={{ color: "var(--ink)" }}>
           Book settings

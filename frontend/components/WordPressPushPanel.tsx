@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { getTranslations, ApiError, type Translation } from "@/lib/api";
+import LanguagePills from "@/components/LanguagePills";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -319,21 +320,14 @@ async function handleSync(sourcePath: string) {
               <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
                 Language
               </label>
-              <select
-                value={selectedLang}
-                onChange={(e) => {
-                  setSelectedLang(e.target.value);
+              <LanguagePills
+                languages={languages}
+                selected={selectedLang}
+                onSelect={(lang) => {
+                  setSelectedLang(lang);
                   handleReset();
                 }}
-                className="w-40 px-3 py-2 rounded-md border-[1.5px] outline-none text-sm uppercase"
-                style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
-              >
-                {languages.map((lang) => (
-                  <option key={lang} value={lang}>
-                    {lang}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
 
             <div>

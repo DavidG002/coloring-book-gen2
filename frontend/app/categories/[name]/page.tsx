@@ -402,7 +402,7 @@ export default function CategoryDetailPage() {
         <div className="flex items-center gap-3">
           {category && (
             <Link
-              href={`/books/${category.book_id}/settings`}
+              href={`/books/${category.book_id}/settings?from=/categories/${encodeURIComponent(categoryName)}`}
               className="px-4 py-2 rounded-md text-sm font-medium"
               style={{ color: "var(--pencil)", border: "1.5px solid var(--pencil-light)" }}
             >
