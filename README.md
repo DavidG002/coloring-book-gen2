@@ -56,47 +56,6 @@ Built as a web app (Next.js frontend + FastAPI backend).
 - **Dark mode** — toggle in the top corner of every page, remembers your
   choice.
 
-## Project structure
-
-coloring-book-gen2/
-├── backend/ FastAPI app
-│ ├── main.py
-│ ├── models.py SQLAlchemy models
-│ ├── schemas.py Pydantic request/response schemas
-│ ├── database.py DB session setup
-│ ├── routers/ One file per resource
-│ │ ├── books.py
-│ │ ├── categories.py
-│ │ ├── translations.py
-│ │ ├── language_templates.py
-│ │ ├── seo.py
-│ │ ├── generation.py
-│ │ ├── review.py
-│ │ ├── publish.py
-│ │ ├── wordpress.py
-│ │ ├── account_settings.py
-│ │ └── settings.py operational settings only (pacing)
-│ ├── services/ Core logic
-│ │ ├── generation.py
-│ │ ├── publish.py
-│ │ ├── translate.py
-│ │ ├── content_variants.py SEO content generation
-│ │ ├── wordpress_publish.py WordPress REST integration
-│ │ ├── book_deletion.py
-│ │ ├── wordpress.py connection test
-│ │ └── openai_client.py builds a fresh client from the DB-stored key
-│ ├── output/ Generated working images (gitignored)
-│ ├── publish/ Published, renamed copies + manifests (gitignored)
-│ ├── preview_cache/ Settings-preview test images (gitignored)
-│ └── data.db SQLite database (gitignored)
-└── frontend/ Next.js app (App Router)
-├── app/
-│ ├── page.tsx Dashboard
-│ ├── books/ Books list, new, [id] detail + settings
-│ ├── categories/[name]/ Category detail (Setup / Language / Generate / Publish, tabbed)
-│ └── settings/ Account, AI provider, WordPress, Languages
-├── components/ Shared UI (panels, modals, TabbedSection, etc.)
-└── lib/api/ Typed API client
 
 ## Data model, briefly
 
@@ -120,6 +79,61 @@ reused taxonomy term).
 - Optional, for WordPress publishing: a WordPress site with an
   [Application Password](https://make.wordpress.org/core/2020/11/05/application-passwords-integration-guide/)
   generated for your user
+
+
+## Getting the code (for non-technical setup)
+
+If you're not familiar with Git, here's the simplest path to get this
+project onto your own computer, and to pull future updates as the app
+keeps improving.
+
+### First time — cloning the repo
+
+1. Install [Git](https://git-scm.com/downloads) if you don't already
+   have it.
+2. Open a terminal (Mac: Terminal app; Windows: Git Bash, installed
+   alongside Git) and run:
+
+```bash
+git clone https://github.com/DavidG002/coloring-book-gen2.git
+cd coloring-book-gen2
+```
+
+This downloads the whole project into a new `coloring-book-gen2` folder
+in your current location. You now have your own local copy — continue
+to **Setup** below.
+
+### Getting updates later
+
+We'll let you know when there's a new version worth pulling down, and
+what (if anything) to do afterward. When that happens, open a terminal
+inside the project folder and run:
+
+```bash
+git pull
+```
+
+This downloads and applies only what's changed since your last update —
+your own data (the `data.db` database, generated images, `.env` files)
+is never touched by this, since those are excluded from the repository
+(see `.gitignore`). If a `git pull` ever reports a conflict or fails, stop
+and reach out rather than trying to resolve it manually — it usually
+means local changes were made directly to a tracked file, which is easy
+to sort out but not something to guess at.
+
+**After pulling an update**, you may occasionally need to re-run a couple
+of setup steps if something changed — we'll tell you directly if so.
+Common ones:
+
+```bash
+# If backend dependencies changed:
+cd backend && source venv/bin/activate && pip install -r requirements.txt
+
+# If frontend dependencies changed:
+cd frontend && npm install
+```
+
+Then restart both servers as usual (see **Running the app** below).
 
 ## Setup
 
