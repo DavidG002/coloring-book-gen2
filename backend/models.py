@@ -258,9 +258,10 @@ class WordPressCategoryTerm(Base):
     lang = Column(String, nullable=False)
     wp_term_id = Column(Integer, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    site_url = Column(String, nullable=False, default="")
 
     __table_args__ = (
-        UniqueConstraint("category", "lang", name="uq_wp_term_per_category_lang"),
+        UniqueConstraint("category", "lang", "site_url", name="uq_wp_term_per_category_lang_site"),
     )
 
 
@@ -282,6 +283,7 @@ class WordPressPublishedItem(Base):
     pushed_alt_text = Column(Text, nullable=True)
     pushed_excerpt = Column(Text, nullable=True)
     pushed_content = Column(Text, nullable=True)
+    site_url = Column(String, nullable=False, default="")
 
     __table_args__ = (
         UniqueConstraint("source_path", "lang", name="uq_wp_item_per_source_lang"),
