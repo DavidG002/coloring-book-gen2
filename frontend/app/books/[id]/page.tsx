@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { getBook, deleteBook, getCategories, ApiError, type Book, type CategorySummary } from "@/lib/api";
+import { getBook, getCategories, ApiError, type Book, type CategorySummary } from "@/lib/api";
 import NewCategoryModal from "@/components/NewCategoryModal";
 import DeleteBookModal from "@/components/DeleteBookModal";
+import BookSettingsFields from "@/components/BookSettingsFields";
+import BookPreviewSection from "@/components/BookPreviewSection";
 
 export default function BookDetailPage() {
   const router = useRouter();
@@ -17,9 +19,9 @@ export default function BookDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [showNewCategoryModal, setShowNewCategoryModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -49,24 +51,6 @@ export default function BookDetailPage() {
       cancelled = true;
     };
   }, [bookId]);
-
-  async function handleDelete() {
-    if (!book) return;
-    const confirmed = window.confirm(
-      `Delete book "${book.name}"? This is only possible if it has no categories.`
-    );
-    if (!confirmed) return;
-
-    setDeleting(true);
-    setError(null);
-    try {
-      await deleteBook(bookId);
-      router.push("/books");
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to delete book");
-      setDeleting(false);
-    }
-  }
 
   if (loading) {
     return (
@@ -111,22 +95,13 @@ export default function BookDetailPage() {
             {book.category_count} {book.category_count === 1 ? "category" : "categories"}
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <Link
-            href={`/books/${bookId}/settings`}
-            className="px-4 py-2 rounded-md text-sm font-medium"
-            style={{ color: "var(--pencil)", border: "1.5px solid var(--pencil-light)" }}
-          >
-            Book Settings
-          </Link>
-          <button
-            onClick={() => setShowDeleteModal(true)}
-            className="px-4 py-2 rounded-md text-sm font-medium"
-            style={{ color: "var(--coral-dark)", border: "1.5px solid var(--coral)" }}
-          >
-            Delete book
-          </button>
-        </div>
+        <button
+          onClick={() => setShowDeleteModal(true)}
+          className="px-4 py-2 rounded-md text-sm font-medium"
+          style={{ color: "var(--coral-dark)", border: "1.5px solid var(--coral)" }}
+        >
+          Delete book
+        </button>
       </header>
 
       {error && (
@@ -137,6 +112,38 @@ export default function BookDetailPage() {
           {error}
         </div>
       )}
+
+      <div className="space-y-6 mb-8">
+        <div className="rounded-lg border-[1.5px] overflow-hidden" style={{ borderColor: "var(--pencil-light)" }}>
+          <button
+            onClick={() => setSettingsOpen((v) => !v)}
+            className="w-full flex items-center justify-between px-6 py-4 text-left"
+            style={{ background: "var(--canvas)" }}
+          >
+            <div className="flex items-center gap-2.5">
+              <h2 className="font-display text-lg font-semibold" style={{ color: "var(--ink)" }}>
+                Book settings
+              </h2>
+              <span className="text-xs" style={{ color: "var(--pencil)" }}>
+                name, type, prompt, watermark, image settings
+              </span>
+            </div>
+            <span
+              className="text-sm transition-transform"
+              style={{ color: "var(--pencil)", transform: settingsOpen ? "rotate(180deg)" : "rotate(0deg)" }}
+            >
+              {"\u25BE"}
+            </span>
+          </button>
+          {settingsOpen && (
+            <div className="p-6 border-t-[1.5px]" style={{ borderColor: "var(--pencil-light)", background: "var(--paper)" }}>
+              <BookSettingsFields bookId={bookId} onBookLoaded={setBook} />
+            </div>
+          )}
+        </div>
+
+        <BookPreviewSection bookId={bookId} />
+      </div>
 
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-display text-lg font-semibold" style={{ color: "var(--ink)" }}>
