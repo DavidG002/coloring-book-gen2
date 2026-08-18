@@ -39,3 +39,5 @@ Thumbs.db
 *.pem
 .vscode/
 .idea/
+backend/watermarks/*
+!backend/watermarks/.gitkeep

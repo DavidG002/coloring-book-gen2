@@ -83,6 +83,30 @@ function formatPreviewDate(iso: string): string {
   });
 }
 
+async function getWatermarkSettings(bookId: number) {
+  const res = await fetch(`${API_BASE_URL}/books/${bookId}/watermark`);
+  return res.json();
+}
+
+async function updateWatermarkSettings(bookId: number, payload: Record<string, unknown>) {
+  const res = await fetch(`${API_BASE_URL}/books/${bookId}/watermark`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
+async function uploadWatermarkFile(bookId: number, file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(`${API_BASE_URL}/books/${bookId}/watermark/upload`, {
+    method: "POST",
+    body: formData,
+  });
+  return res.json();
+}
+
 function Field({
   label,
   hint,
@@ -169,6 +193,15 @@ export default function BookSettingsPage() {
 
   const [productNoun, setProductNoun] = useState("coloring page");
 
+  const [watermarkEnabled, setWatermarkEnabled] = useState(false);
+  const [watermarkPosition, setWatermarkPosition] = useState("bottom-right");
+  const [watermarkOpacity, setWatermarkOpacity] = useState(0.6);
+  const [watermarkScale, setWatermarkScale] = useState(0.15);
+  const [hasWatermarkFile, setHasWatermarkFile] = useState(false);
+  const [savingWatermark, setSavingWatermark] = useState(false);
+  const [watermarkSaved, setWatermarkSaved] = useState(false);
+  const [uploadingWatermark, setUploadingWatermark] = useState(false);
+
   const [savingProductNoun, setSavingProductNoun] = useState(false);
   const [productNounSaved, setProductNounSaved] = useState(false);
 
@@ -212,6 +245,15 @@ export default function BookSettingsPage() {
         setWhiteThreshold(data.white_clean_threshold);
         setBlackThreshold(data.black_clean_threshold);
         setPaletteColors(data.palette_colors);
+
+        const watermark = await getWatermarkSettings(bookId);
+        if (!cancelled) {
+          setWatermarkEnabled(watermark.watermark_enabled);
+          setWatermarkPosition(watermark.watermark_position);
+          setWatermarkOpacity(watermark.watermark_opacity);
+          setWatermarkScale(watermark.watermark_scale);
+          setHasWatermarkFile(watermark.has_watermark_file);
+        }
 
         const availability = await checkPreviewAvailability(bookId);
         if (!cancelled) {
@@ -301,6 +343,38 @@ export default function BookSettingsPage() {
       setError(err instanceof ApiError ? err.message : "Failed to save product type");
     } finally {
       setSavingProductNoun(false);
+    }
+  }
+
+  async function handleSaveWatermark() {
+    setSavingWatermark(true);
+    try {
+      await updateWatermarkSettings(bookId, {
+        watermark_enabled: watermarkEnabled,
+        watermark_position: watermarkPosition,
+        watermark_opacity: watermarkOpacity,
+        watermark_scale: watermarkScale,
+      });
+      setWatermarkSaved(true);
+      setTimeout(() => setWatermarkSaved(false), 2000);
+    } catch {
+      setError("Failed to save watermark settings");
+    } finally {
+      setSavingWatermark(false);
+    }
+  }
+
+  async function handleWatermarkFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingWatermark(true);
+    try {
+      await uploadWatermarkFile(bookId, file);
+      setHasWatermarkFile(true);
+    } catch {
+      setError("Failed to upload watermark image");
+    } finally {
+      setUploadingWatermark(false);
     }
   }
 
@@ -486,6 +560,116 @@ export default function BookSettingsPage() {
             The word used consistently across generated titles, descriptions, and SEO content.
           </p>
         </section>
+
+        <section>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="block text-sm font-medium" style={{ color: "var(--ink)" }}>
+              Watermark / logo
+            </label>
+            <div className="flex items-center gap-3">
+              {watermarkSaved && (
+                <span className="text-xs font-medium" style={{ color: "var(--teal)" }}>
+                  Saved
+                </span>
+              )}
+              <button
+                onClick={handleSaveWatermark}
+                disabled={savingWatermark}
+                className="text-sm font-medium disabled:opacity-60"
+                style={{ color: "var(--teal)" }}
+              >
+                {savingWatermark ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 mb-4">
+            <label
+              className="px-4 py-2 rounded-md text-sm font-medium cursor-pointer border-[1.5px]"
+              style={{ borderColor: "var(--pencil-light)", color: "var(--pencil)" }}
+            >
+              {uploadingWatermark ? "Uploading..." : hasWatermarkFile ? "Replace logo" : "Upload logo"}
+              <input type="file" accept="image/*" onChange={handleWatermarkFileChange} className="hidden" />
+            </label>
+            {hasWatermarkFile && (
+              <span className="text-xs" style={{ color: "var(--teal)" }}>
+                Logo uploaded
+              </span>
+            )}
+          </div>
+
+          <label className="flex items-center gap-2 text-sm mb-4" style={{ color: "var(--ink)" }}>
+            <input
+              type="checkbox"
+              checked={watermarkEnabled}
+              onChange={(e) => setWatermarkEnabled(e.target.checked)}
+            />
+            Apply watermark to every generated image
+          </label>
+
+          {watermarkEnabled && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
+                  Position
+                </label>
+                <div className="flex gap-2 flex-wrap">
+                  {["bottom-right", "bottom-left", "top-right", "top-left"].map((pos) => (
+                    <button
+                      key={pos}
+                      type="button"
+                      onClick={() => setWatermarkPosition(pos)}
+                      className="px-3 py-1.5 rounded-full text-sm border-[1.5px]"
+                      style={
+                        watermarkPosition === pos
+                          ? { background: "var(--teal)", borderColor: "var(--teal)", color: "white" }
+                          : { borderColor: "var(--pencil-light)", color: "var(--pencil)" }
+                      }
+                    >
+                      {pos.replace("-", " ")}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
+                  Opacity: {Math.round(watermarkOpacity * 100)}%
+                </label>
+                <input
+                  type="range"
+                  min={0.1}
+                  max={1}
+                  step={0.05}
+                  value={watermarkOpacity}
+                  onChange={(e) => setWatermarkOpacity(parseFloat(e.target.value))}
+                  className="w-full"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
+                  Size: {Math.round(watermarkScale * 100)}% of page width
+                </label>
+                <input
+                  type="range"
+                  min={0.05}
+                  max={0.35}
+                  step={0.01}
+                  value={watermarkScale}
+                  onChange={(e) => setWatermarkScale(parseFloat(e.target.value))}
+                  className="w-full"
+                />
+              </div>
+            </div>
+          )}
+
+          <p className="mt-3 text-xs" style={{ color: "var(--pencil)" }}>
+            Applied to every generated image, including what gets published locally and pushed to WordPress. Use
+            Settings Preview below to check how it looks before generating a real batch.
+          </p>
+        </section>
+
         <section>
           <div className="flex items-center justify-between mb-1.5">
             <label className="block text-sm font-medium" style={{ color: "var(--ink)" }}>

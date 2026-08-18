@@ -43,6 +43,12 @@ class Book(Base):
 
     categories = relationship("Category", back_populates="book", cascade="all, delete-orphan")
 
+    watermark_enabled = Column(Boolean, nullable=False, default=False)
+    watermark_position = Column(String, nullable=False, default="bottom-right")
+    watermark_opacity = Column(Float, nullable=False, default=0.6)
+    watermark_scale = Column(Float, nullable=False, default=0.15)
+    watermark_filename = Column(String, nullable=True)
+
 
 class Category(Base):
     __tablename__ = "categories"

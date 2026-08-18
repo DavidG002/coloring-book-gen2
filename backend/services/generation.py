@@ -106,9 +106,51 @@ def get_eligible_preview_categories(db: Session, book_id: int) -> list[str]:
     return [c.name for c in book.categories if c.subjects and c.variations]
 
 
+WATERMARK_DIR = "watermarks"
+WATERMARK_MARGIN_RATIO = 0.03  # margin from canvas edge, as a fraction of canvas width
+
+
+def _apply_watermark(base_image, book_id: int, position: str, opacity: float, scale: float):
+    """Composites a Book's logo onto an already-finished image, in full
+    color — applied AFTER palette quantization so the logo's own colors
+    are never crushed into the line art's small shared palette."""
+    watermark_path = os.path.join(WATERMARK_DIR, f"{book_id}.png")
+    canvas_rgba = base_image.convert("RGBA")
+
+    if not os.path.exists(watermark_path):
+        return canvas_rgba
+
+    logo = Image.open(watermark_path).convert("RGBA")
+
+    canvas_width, canvas_height = canvas_rgba.size
+    target_width = max(1, int(canvas_width * scale))
+    logo_ratio = logo.height / logo.width
+    target_height = max(1, int(target_width * logo_ratio))
+    logo = logo.resize((target_width, target_height), Image.LANCZOS)
+
+    if opacity < 1.0:
+        alpha = logo.getchannel("A").point(lambda a: int(a * opacity))
+        logo.putalpha(alpha)
+
+    margin = int(canvas_width * WATERMARK_MARGIN_RATIO)
+    positions = {
+        "bottom-right": (canvas_width - target_width - margin, canvas_height - target_height - margin),
+        "bottom-left": (margin, canvas_height - target_height - margin),
+        "top-right": (canvas_width - target_width - margin, margin),
+        "top-left": (margin, margin),
+    }
+    paste_xy = positions.get(position, positions["bottom-right"])
+
+    canvas_rgba.paste(logo, paste_xy, mask=logo)
+    return canvas_rgba
+
+
 def _process_raw_image(image_bytes: bytes, settings: dict):
     """Shared resize/cleanup/palette pipeline — used by both real generation
-    and settings preview, so they can never silently drift apart."""
+    and settings preview, so they can never silently drift apart. The
+    watermark, if configured, is applied AFTER palette quantization so its
+    own colors stay clean rather than being crushed into the line art's
+    small shared palette."""
     image = Image.open(io.BytesIO(image_bytes))
 
     canvas_width = settings["canvas_width"]
@@ -127,8 +169,18 @@ def _process_raw_image(image_bytes: bytes, settings: dict):
     y = (canvas_height - cleaned.height) // 2
     canvas.paste(cleaned, (x, y))
 
-    return canvas.convert("P", palette=Image.ADAPTIVE, colors=settings["palette_colors"], dither=Image.NONE)
+    final = canvas.convert("P", palette=Image.ADAPTIVE, colors=settings["palette_colors"], dither=Image.NONE)
 
+    if settings.get("watermark_enabled") and settings.get("watermark_book_id"):
+        final = _apply_watermark(
+            final,
+            book_id=settings["watermark_book_id"],
+            position=settings.get("watermark_position", "bottom-right"),
+            opacity=settings.get("watermark_opacity", 0.6),
+            scale=settings.get("watermark_scale", 0.15),
+        )
+
+    return final
 
 def generate_image_file(task: dict, settings: dict, output_path: str) -> bool:
     prompt = task["base_prompt"] + f" Cute {task['subject']}. {task['variation_text']}."

@@ -538,3 +538,21 @@ class CategoryDescriptionUpdate(BaseModel):
 class SeoDataResponse(BaseModel):
     category_description: str
     content_variants: list[SeoContentVariantRow]
+
+
+#--------- watermark settings -----------
+
+class WatermarkSettings(BaseModel):
+    watermark_enabled: bool
+    watermark_position: str
+    watermark_opacity: float
+    watermark_scale: float
+    has_watermark_file: bool
+
+
+class WatermarkSettingsUpdate(BaseModel):
+    watermark_enabled: Optional[bool] = None
+    watermark_position: Optional[str] = None
+    watermark_opacity: Optional[float] = None
+    watermark_scale: Optional[float] = None
+

@@ -1,7 +1,7 @@
 import os
 from fastapi.responses import Response, FileResponse
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -10,7 +10,7 @@ from services.generation import (
     generate_preview_image, get_sample_task_for_book, 
     get_eligible_preview_categories, save_preview_to_history,
 )
-from schemas import BookCreate, BookUpdate, BookRead, BookSummary, BookPreviewRequest, BookPreviewAvailability, BookPreviewRead, BookDeletionInfo, BookDeletionResult
+from schemas import BookCreate, BookUpdate, BookRead, BookSummary, BookPreviewRequest, BookPreviewAvailability, BookPreviewRead, BookDeletionInfo, BookDeletionResult, WatermarkSettings, WatermarkSettingsUpdate
 from services.book_deletion import get_book_deletion_info, delete_book_cascade
 
 
@@ -69,6 +69,11 @@ def preview_book_settings(book_id: int, payload: BookPreviewRequest, db: Session
         "white_clean_threshold": payload.white_clean_threshold,
         "black_clean_threshold": payload.black_clean_threshold,
         "palette_colors": payload.palette_colors,
+        "watermark_enabled": book.watermark_enabled,
+        "watermark_book_id": book.id,
+        "watermark_position": book.watermark_position,
+        "watermark_opacity": book.watermark_opacity,
+        "watermark_scale": book.watermark_scale,
     }
 
     image_bytes = generate_preview_image(book.base_prompt, task["subject"], task["variation_text"], settings)
@@ -187,3 +192,87 @@ def delete_book(book_id: int, delete_files: bool = False, db: Session = Depends(
         return delete_book_cascade(db, book_id, delete_files)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+WATERMARK_DIR = "watermarks"
+
+
+@router.get("/{book_id}/watermark", response_model=WatermarkSettings)
+def get_watermark_settings(book_id: int, db: Session = Depends(get_db)):
+    book = db.query(Book).filter(Book.id == book_id).first()
+    if not book:
+        raise HTTPException(status_code=404, detail=f"Book {book_id} not found")
+    watermark_path = os.path.join(WATERMARK_DIR, f"{book_id}.png")
+    return WatermarkSettings(
+        watermark_enabled=book.watermark_enabled,
+        watermark_position=book.watermark_position,
+        watermark_opacity=book.watermark_opacity,
+        watermark_scale=book.watermark_scale,
+        has_watermark_file=os.path.exists(watermark_path),
+    )
+
+
+@router.put("/{book_id}/watermark", response_model=WatermarkSettings)
+def update_watermark_settings(book_id: int, payload: WatermarkSettingsUpdate, db: Session = Depends(get_db)):
+    book = db.query(Book).filter(Book.id == book_id).first()
+    if not book:
+        raise HTTPException(status_code=404, detail=f"Book {book_id} not found")
+
+    if payload.watermark_enabled is not None:
+        book.watermark_enabled = payload.watermark_enabled
+    if payload.watermark_position is not None:
+        book.watermark_position = payload.watermark_position
+    if payload.watermark_opacity is not None:
+        book.watermark_opacity = payload.watermark_opacity
+    if payload.watermark_scale is not None:
+        book.watermark_scale = payload.watermark_scale
+
+    db.commit()
+
+    watermark_path = os.path.join(WATERMARK_DIR, f"{book_id}.png")
+    return WatermarkSettings(
+        watermark_enabled=book.watermark_enabled,
+        watermark_position=book.watermark_position,
+        watermark_opacity=book.watermark_opacity,
+        watermark_scale=book.watermark_scale,
+        has_watermark_file=os.path.exists(watermark_path),
+    )
+
+
+@router.post("/{book_id}/watermark/upload", response_model=WatermarkSettings)
+async def upload_watermark(book_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
+    book = db.query(Book).filter(Book.id == book_id).first()
+    if not book:
+        raise HTTPException(status_code=404, detail=f"Book {book_id} not found")
+
+    os.makedirs(WATERMARK_DIR, exist_ok=True)
+    watermark_path = os.path.join(WATERMARK_DIR, f"{book_id}.png")
+
+    from PIL import Image
+    import io
+
+    contents = await file.read()
+    try:
+        img = Image.open(io.BytesIO(contents)).convert("RGBA")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Could not read uploaded file as an image.")
+
+    img.save(watermark_path, "PNG")
+
+    return WatermarkSettings(
+        watermark_enabled=book.watermark_enabled,
+        watermark_position=book.watermark_position,
+        watermark_opacity=book.watermark_opacity,
+        watermark_scale=book.watermark_scale,
+        has_watermark_file=True,
+    )
+
+
+@router.delete("/{book_id}/watermark", status_code=204)
+def delete_watermark(book_id: int, db: Session = Depends(get_db)):
+    book = db.query(Book).filter(Book.id == book_id).first()
+    if not book:
+        raise HTTPException(status_code=404, detail=f"Book {book_id} not found")
+    watermark_path = os.path.join(WATERMARK_DIR, f"{book_id}.png")
+    if os.path.exists(watermark_path):
+        os.remove(watermark_path)

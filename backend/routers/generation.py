@@ -29,6 +29,11 @@ def _load_settings_dict(db: Session, category_name: str) -> dict:
         "palette_colors": book.palette_colors,
         "sleep_between_calls": get_settings_route(db).sleep_between_calls,
         "sleep_on_failure": get_settings_route(db).sleep_on_failure,
+        "watermark_enabled": book.watermark_enabled,
+        "watermark_book_id": book.id,
+        "watermark_position": book.watermark_position,
+        "watermark_opacity": book.watermark_opacity,
+        "watermark_scale": book.watermark_scale,
     }
 
 
