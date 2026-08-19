@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getSettings, updateSettings, ApiError, type Settings } from "@/lib/api";
 import BackupSettingsPanel from "@/components/BackupSettingsPanel";
+import { Card, SubCard, SaveRow, Field } from "@/components/SettingsUI";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -58,6 +59,9 @@ async function updateWordPressIntegration(data: {
   site_url?: string;
   username?: string;
   app_password?: string;
+  post_type?: string;
+  taxonomy?: string;
+  use_polylang_linking?: boolean;
 }): Promise<WordPressIntegrationRead> {
   const res = await fetch(`${API_BASE_URL}/account/wordpress`, {
     method: "PUT",
@@ -94,61 +98,19 @@ async function deleteLanguage(code: string): Promise<void> {
   await fetch(`${API_BASE_URL}/account/languages/${code}`, { method: "DELETE" });
 }
 
-function Field({
-  label,
-  hint,
-  value,
-  onChange,
-  step,
-  min,
-  max,
-}: {
-  label: string;
-  hint: string;
-  value: number;
-  onChange: (v: number) => void;
-  step?: number;
-  min?: number;
-  max?: number;
-}) {
-  return (
-    <div>
-      <label className="block text-sm font-medium mb-1" style={{ color: "var(--ink)" }}>
-        {label}
-      </label>
-      <p className="text-xs mb-1.5" style={{ color: "var(--pencil)" }}>
-        {hint}
-      </p>
-      <input
-        type="number"
-        value={value}
-        step={step ?? 1}
-        min={min}
-        max={max}
-        onChange={(e) => onChange(parseFloat(e.target.value))}
-        className="w-40 px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
-        style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
-      />
-    </div>
-  );
-}
-
 export default function SettingsPage() {
   const router = useRouter();
 
-  // Generation behavior (existing)
   const [settings, setSettings] = useState<Settings | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [resetApplied, setResetApplied] = useState(false);
 
-  // AI Provider
   const [openaiKey, setOpenaiKey] = useState<OpenAIKeyRead | null>(null);
   const [openaiKeyInput, setOpenaiKeyInput] = useState("");
   const [savingKey, setSavingKey] = useState(false);
   const [keySaved, setKeySaved] = useState(false);
 
-  // WordPress integration
   const [wpSiteUrl, setWpSiteUrl] = useState("");
   const [wpUsername, setWpUsername] = useState("");
   const [wpPassword, setWpPassword] = useState("");
@@ -162,7 +124,6 @@ export default function SettingsPage() {
   const [wpTaxonomy, setWpTaxonomy] = useState("category");
   const [wpUsePolylang, setWpUsePolylang] = useState(false);
 
-  // Languages
   const [languages, setLanguages] = useState<SupportedLanguageItem[]>([]);
   const [newLangCode, setNewLangCode] = useState("");
   const [newLangName, setNewLangName] = useState("");
@@ -193,7 +154,7 @@ export default function SettingsPage() {
         setWpHasPassword(wpData.has_password);
         setWpPostType(wpData.post_type ?? "post");
         setWpTaxonomy(wpData.taxonomy ?? "category");
-        setWpUsePolylang(wpData.use_polylang_linking ?? false); 
+        setWpUsePolylang(wpData.use_polylang_linking ?? false);
         if (wpData.last_test_status) {
           setWpLastTest({
             status: wpData.last_test_status,
@@ -269,7 +230,14 @@ export default function SettingsPage() {
     setError(null);
     setSavingWp(true);
     try {
-      const payload: { site_url?: string; username?: string; app_password?: string; post_type?: string; taxonomy?: string; use_polylang_linking?: boolean } = {
+      const payload: {
+        site_url?: string;
+        username?: string;
+        app_password?: string;
+        post_type?: string;
+        taxonomy?: string;
+        use_polylang_linking?: boolean;
+      } = {
         site_url: wpSiteUrl,
         username: wpUsername,
         post_type: wpPostType,
@@ -360,204 +328,164 @@ export default function SettingsPage() {
         </div>
       )}
 
-      <div className="space-y-10">
-        {/* Account */}
-        <section>
-          <h2 className="font-display text-lg font-semibold mb-1" style={{ color: "var(--ink)" }}>
-            Account
-          </h2>
-          <p className="text-sm mb-4" style={{ color: "var(--pencil)" }}>
-            Single-user local setup — no login required yet.
-          </p>
+      <div className="space-y-6">
+        <Card title="Account" description="Single-user local setup — no login required yet." collapsible defaultOpen={false}>
           <div
             className="rounded-md border-[1.5px] border-dashed p-4 text-sm"
             style={{ borderColor: "var(--pencil-light)", color: "var(--pencil)" }}
           >
             Account management (name, email, sign-in) will live here in a future multi-user version.
           </div>
-        </section>
+        </Card>
 
-        {/* AI Provider */}
-        <section>
-          <h2 className="font-display text-lg font-semibold mb-1" style={{ color: "var(--ink)" }}>
-            AI Provider
-          </h2>
-          <p className="text-sm mb-4" style={{ color: "var(--pencil)" }}>
-            Used for image generation (gpt-image-2) and translation (gpt-4o-mini).
-          </p>
-
+        <Card title="AI Provider" description="Used for image generation (gpt-image-2) and translation (gpt-4o-mini)." collapsible defaultOpen={false}>
           {openaiKey?.has_key && (
             <p className="text-sm mb-2" style={{ color: "var(--ink)" }}>
               Current key: <span className="font-mono">{openaiKey.masked_key}</span>
             </p>
           )}
-
-          <div className="flex gap-3 items-end">
-            <div className="flex-1">
-              <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
-                {openaiKey?.has_key ? "Replace API key" : "OpenAI API key"}
-              </label>
-              <input
-                type="password"
-                value={openaiKeyInput}
-                onChange={(e) => setOpenaiKeyInput(e.target.value)}
-                placeholder="sk-..."
-                className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
-                style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
-              />
-            </div>
-            <button
-              onClick={handleSaveKey}
-              disabled={savingKey}
-              className="px-4 py-2 rounded-md text-sm font-medium text-white disabled:opacity-60"
-              style={{ background: "var(--teal)" }}
-            >
-              {savingKey ? "Saving..." : "Save"}
-            </button>
-          </div>
-          {keySaved && (
-            <p className="mt-2 text-xs font-medium" style={{ color: "var(--teal)" }}>
-              Saved — takes effect immediately, no restart needed.
-            </p>
-          )}
-        </section>
-
-        {/* Integrations */}
-        <section>
-          <h2 className="font-display text-lg font-semibold mb-1" style={{ color: "var(--ink)" }}>
-            Integrations
-          </h2>
-          <p className="text-sm mb-4" style={{ color: "var(--pencil)" }}>
-            Connect a WordPress site to publish directly from this app.
-          </p>
-
-          <div className="space-y-3 mb-3">
-            <div>
-              <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
-                Site URL
-              </label>
-              <input
-                type="text"
-                value={wpSiteUrl}
-                onChange={(e) => setWpSiteUrl(e.target.value)}
-                placeholder="https://yoursite.com"
-                className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
-                style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
-                Username
-              </label>
-              <input
-                type="text"
-                value={wpUsername}
-                onChange={(e) => setWpUsername(e.target.value)}
-                className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
-                style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
-                {wpHasPassword ? "Replace Application Password" : "Application Password"}
-              </label>
-              <input
-                type="password"
-                value={wpPassword}
-                onChange={(e) => setWpPassword(e.target.value)}
-                placeholder={wpHasPassword ? "•••• •••• •••• ••••" : "xxxx xxxx xxxx xxxx"}
-                className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
-                style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
-                Post type
-              </label>
-              <input
-                type="text"
-                value={wpPostType}
-                onChange={(e) => setWpPostType(e.target.value)}
-                className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
-                style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
-                Taxonomy
-              </label>
-              <input
-                type="text"
-                value={wpTaxonomy}
-                onChange={(e) => setWpTaxonomy(e.target.value)}
-                className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
-                style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
-              />
-            </div>
-          </div>
-
-          <label className="flex items-center gap-2 text-sm mt-4" style={{ color: "var(--ink)" }}>
-            <input
-              type="checkbox"
-              checked={wpUsePolylang}
-              onChange={(e) => setWpUsePolylang(e.target.checked)}
-            />
-            Use Polylang Pro linking
+          <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
+            {openaiKey?.has_key ? "Replace API key" : "OpenAI API key"}
           </label>
-          <p className="mt-1 text-xs" style={{ color: "var(--pencil)" }}>
-            Only enable once Polylang Pro is active on this site — links posts and taxonomy terms across languages.
-          </p>
-          </div>
+          <input
+            type="password"
+            value={openaiKeyInput}
+            onChange={(e) => setOpenaiKeyInput(e.target.value)}
+            placeholder="sk-..."
+            className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
+            style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+          />
+          <SaveRow onClick={handleSaveKey} saving={savingKey} saved={keySaved} label="Save key" />
+          {keySaved && (
+            <p className="mt-2 text-xs" style={{ color: "var(--pencil)" }}>
+              Takes effect immediately, no restart needed.
+            </p>
+          )}
+        </Card>
 
-          <div className="flex items-center gap-3 mb-2">
-            <button
-              onClick={handleSaveWp}
-              disabled={savingWp}
-              className="px-4 py-2 rounded-md text-sm font-medium text-white disabled:opacity-60"
-              style={{ background: "var(--teal)" }}
-            >
-              {savingWp ? "Saving..." : "Save"}
-            </button>
-            <button
-              onClick={handleTestWp}
-              disabled={testingWp}
-              className="px-4 py-2 rounded-md text-sm font-medium disabled:opacity-60"
-              style={{ color: "var(--pencil)", border: "1.5px solid var(--pencil-light)" }}
-            >
-              {testingWp ? "Testing..." : "Test connection"}
-            </button>
-            {wpSaved && (
-              <span className="text-xs font-medium" style={{ color: "var(--teal)" }}>
-                Saved
-              </span>
+        <Card title="Integrations" description="Connect external services to publish directly from this app." collapsible defaultOpen={false}>
+          <SubCard title="WordPress" description="Connect a WordPress site to publish directly from this app.">
+            <div className="space-y-3 mb-3">
+              <div>
+                <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
+                  Site URL
+                </label>
+                <input
+                  type="text"
+                  value={wpSiteUrl}
+                  onChange={(e) => setWpSiteUrl(e.target.value)}
+                  placeholder="https://yoursite.com"
+                  className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
+                  style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
+                  Username
+                </label>
+                <input
+                  type="text"
+                  value={wpUsername}
+                  onChange={(e) => setWpUsername(e.target.value)}
+                  className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
+                  style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
+                  {wpHasPassword ? "Replace Application Password" : "Application Password"}
+                </label>
+                <input
+                  type="password"
+                  value={wpPassword}
+                  onChange={(e) => setWpPassword(e.target.value)}
+                  placeholder={wpHasPassword ? "•••• •••• •••• ••••" : "xxxx xxxx xxxx xxxx"}
+                  className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
+                  style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
+                    Post type
+                  </label>
+                  <input
+                    type="text"
+                    value={wpPostType}
+                    onChange={(e) => setWpPostType(e.target.value)}
+                    className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
+                    style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
+                    Taxonomy
+                  </label>
+                  <input
+                    type="text"
+                    value={wpTaxonomy}
+                    onChange={(e) => setWpTaxonomy(e.target.value)}
+                    className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
+                    style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 mt-5 pt-4 border-t-[1.5px]" style={{ borderColor: "var(--pencil-light)" }}>
+              <button
+                onClick={handleSaveWp}
+                disabled={savingWp}
+                className="px-5 py-2 rounded-md text-sm font-medium text-white disabled:opacity-60"
+                style={{ background: "var(--teal)" }}
+              >
+                {savingWp ? "Saving..." : "Save"}
+              </button>
+              {wpSaved && <span className="text-xs font-medium" style={{ color: "var(--teal)" }}>Saved</span>}
+              <button
+                onClick={handleTestWp}
+                disabled={testingWp}
+                className="px-4 py-2 rounded-md text-sm font-medium border-[1.5px] disabled:opacity-60"
+                style={{ color: "var(--pencil)", borderColor: "var(--pencil-light)" }}
+              >
+                {testingWp ? "Testing..." : "Test connection"}
+              </button>
+            </div>
+
+            {wpTestResult && (
+              <p className="mt-3 text-sm" style={{ color: wpTestResult.success ? "var(--teal)" : "var(--coral-dark)" }}>
+                {wpTestResult.message}
+              </p>
             )}
-          </div>
+            {!wpTestResult && wpLastTest && (
+              <p className="mt-3 text-xs" style={{ color: "var(--pencil)" }}>
+                Last test: {wpLastTest.status} — {wpLastTest.message}
+              </p>
+            )}
 
-          {wpTestResult && (
-            <p
-              className="text-sm"
-              style={{ color: wpTestResult.success ? "var(--teal)" : "var(--coral-dark)" }}
-            >
-              {wpTestResult.message}
-            </p>
-          )}
-          {!wpTestResult && wpLastTest && (
-            <p className="text-xs" style={{ color: "var(--pencil)" }}>
-              Last test: {wpLastTest.status} — {wpLastTest.message}
-            </p>
-          )}
-        </section>
+            <div className="mt-5 pt-4 border-t-[1.5px]" style={{ borderColor: "var(--pencil-light)" }}>
+              <h3 className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: "var(--pencil)" }}>
+                Plugins
+              </h3>
+              <SubCard title="Polylang Pro">
+                <label className="flex items-center gap-2 text-sm mb-1.5" style={{ color: "var(--ink)" }}>
+                  <input
+                    type="checkbox"
+                    checked={wpUsePolylang}
+                    onChange={(e) => setWpUsePolylang(e.target.checked)}
+                  />
+                  Use Polylang Pro linking
+                </label>
+                <p className="text-xs" style={{ color: "var(--pencil)" }}>
+                  Only enable once Polylang Pro is active on this site — links posts and taxonomy terms across
+                  languages.
+                </p>
+              </SubCard>
+            </div>
+          </SubCard>
+        </Card>
 
-        {/* Languages */}
-        <section>
-          <h2 className="font-display text-lg font-semibold mb-1" style={{ color: "var(--ink)" }}>
-            Languages
-          </h2>
-          <p className="text-sm mb-4" style={{ color: "var(--pencil)" }}>
-            Available languages for translations across the app.
-          </p>
-
+        <Card title="Languages" description="Available languages for translations across the app." collapsible defaultOpen={false}>
           {languageError && (
             <p className="text-sm mb-2" style={{ color: "var(--coral-dark)" }}>
               {languageError}
@@ -610,17 +538,10 @@ export default function SettingsPage() {
               Add
             </button>
           </div>
-        </section>
+        </Card>
 
-        {/* Generation behavior (existing) */}
         {settings && (
-          <section>
-            <h2 className="font-display text-lg font-semibold mb-1" style={{ color: "var(--ink)" }}>
-              Generation behavior
-            </h2>
-            <p className="text-sm mb-4" style={{ color: "var(--pencil)" }}>
-              Pacing between API calls and safety confirmation.
-            </p>
+          <Card title="Generation behavior" description="Pacing between API calls and safety confirmation." collapsible defaultOpen={false}>
             <div className="grid grid-cols-2 gap-5 mb-4">
               <Field
                 label="Sleep between calls (sec)"
@@ -647,34 +568,30 @@ export default function SettingsPage() {
               />
             </div>
 
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 mt-5 pt-4 border-t-[1.5px]" style={{ borderColor: "var(--pencil-light)" }}>
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="px-6 py-2.5 rounded-md text-sm font-medium text-white disabled:opacity-60"
+                className="px-5 py-2 rounded-md text-sm font-medium text-white disabled:opacity-60"
                 style={{ background: "var(--teal)" }}
               >
                 {saving ? "Saving..." : "Save settings"}
               </button>
               <button
                 onClick={handleResetDefaults}
-                className="px-4 py-2.5 rounded-md text-sm font-medium"
+                className="px-4 py-2 rounded-md text-sm font-medium"
                 style={{ color: "var(--pencil)" }}
               >
                 Reset to defaults
               </button>
-              {saved && (
-                <span className="text-sm font-medium" style={{ color: "var(--teal)" }}>
-                  Saved
-                </span>
-              )}
+              {saved && <span className="text-sm font-medium" style={{ color: "var(--teal)" }}>Saved</span>}
               {resetApplied && (
                 <span className="text-sm font-medium" style={{ color: "var(--pencil)" }}>
                   Defaults applied — click Save to persist
                 </span>
               )}
             </div>
-          </section>
+          </Card>
         )}
 
         <BackupSettingsPanel />

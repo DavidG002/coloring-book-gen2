@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { getBook, ApiError } from "@/lib/api";
-import { Card } from "./BookSettingsUI";
+import { Card } from "./SettingsUI";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 

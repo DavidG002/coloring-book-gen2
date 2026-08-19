@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { getBook, updateBook, ApiError, type Book } from "@/lib/api";
-import { Card, SaveRow, Field, PAPER_PRESETS, PRODUCT_NOUN_PRESETS } from "./BookSettingsUI";
+import { Card, SaveRow, Field, PAPER_PRESETS, PRODUCT_NOUN_PRESETS } from "./SettingsUI";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 

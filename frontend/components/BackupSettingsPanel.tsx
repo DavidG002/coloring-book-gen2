@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { Card, SaveRow } from "./SettingsUI";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -183,17 +184,12 @@ export default function BackupSettingsPanel() {
   }
 
   return (
-    <section
-      className="rounded-lg border-[1.5px] p-6"
-      style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+    <Card
+      title="Backups"
+      description="Automatically snapshots the database and generated content when the app starts, if the last backup is older than the interval below."
+      collapsible
+      defaultOpen={false}
     >
-      <h2 className="font-display text-lg font-semibold mb-1" style={{ color: "var(--ink)" }}>
-        Backups
-      </h2>
-      <p className="text-sm mb-4" style={{ color: "var(--pencil)" }}>
-        Automatically snapshots the database and generated content when the app starts, if the last backup
-        is older than the interval below.
-      </p>
 
       {error && (
         <div
@@ -270,16 +266,7 @@ export default function BackupSettingsPanel() {
       </div>
 
       <div className="flex items-center gap-3 mb-6 pb-6 border-b-[1.5px]" style={{ borderColor: "var(--pencil-light)" }}>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="px-5 py-2 rounded-md text-sm font-medium text-white disabled:opacity-60"
-          style={{ background: "var(--teal)" }}
-        >
-          {saving ? "Saving..." : "Save"}
-        </button>
-        {saved && <span className="text-xs font-medium" style={{ color: "var(--teal)" }}>Saved</span>}
-
+        <SaveRow onClick={handleSave} saving={saving} saved={saved} />
         <button
           onClick={handleRunNow}
           disabled={runningBackup}
@@ -366,6 +353,6 @@ export default function BackupSettingsPanel() {
           ))}
         </div>
       )}
-    </section>
+    </Card>
   );
 }
