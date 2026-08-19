@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { getSettings, updateSettings, ApiError, type Settings } from "@/lib/api";
 import BackupSettingsPanel from "@/components/BackupSettingsPanel";
 import { Card, SubCard, SaveRow, Field } from "@/components/SettingsUI";
+import type { components } from "@/lib/api/generated-types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -14,27 +15,9 @@ const DEFAULTS: Settings = {
   sleep_on_failure: 5.0,
 };
 
-interface OpenAIKeyRead {
-  has_key: boolean;
-  masked_key?: string;
-}
-
-interface WordPressIntegrationRead {
-  site_url?: string;
-  username?: string;
-  has_password: boolean;
-  post_type?: string;
-  taxonomy?: string;
-  last_test_status?: string;
-  last_test_message?: string;
-  last_tested_at?: string;
-  use_polylang_linking?: boolean;
-}
-
-interface SupportedLanguageItem {
-  code: string;
-  name: string;
-}
+type OpenAIKeyRead = components["schemas"]["OpenAIKeyRead"];
+type WordPressIntegrationRead = components["schemas"]["WordPressIntegrationRead"];
+type SupportedLanguageItem = components["schemas"]["SupportedLanguageRead"];
 
 async function getOpenAIKey(): Promise<OpenAIKeyRead> {
   const res = await fetch(`${API_BASE_URL}/account/openai-key`);
@@ -119,7 +102,7 @@ export default function SettingsPage() {
   const [wpSaved, setWpSaved] = useState(false);
   const [testingWp, setTestingWp] = useState(false);
   const [wpTestResult, setWpTestResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [wpLastTest, setWpLastTest] = useState<{ status?: string; message?: string; at?: string } | null>(null);
+  const [wpLastTest, setWpLastTest] = useState<{ status?: string; message?: string | null; at?: string | null } | null>(null);
   const [wpPostType, setWpPostType] = useState("post");
   const [wpTaxonomy, setWpTaxonomy] = useState("category");
   const [wpUsePolylang, setWpUsePolylang] = useState(false);

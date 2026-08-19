@@ -3,22 +3,11 @@
 import { useState, useEffect, useRef } from "react";
 import { getBook, ApiError } from "@/lib/api";
 import { Card } from "./SettingsUI";
+import type { components } from "@/lib/api/generated-types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-interface BookPreviewHistoryItem {
-  id: number;
-  category: string;
-  subject: string;
-  variation_text: string;
-  canvas_width: number;
-  canvas_height: number;
-  subject_size_ratio: number;
-  white_clean_threshold: number;
-  black_clean_threshold: number;
-  palette_colors: number;
-  created_at: string;
-}
+type BookPreviewHistoryItem = components["schemas"]["BookPreviewRead"];
 
 async function checkPreviewAvailability(bookId: number) {
   const res = await fetch(`${API_BASE_URL}/books/${bookId}/preview-availability`);

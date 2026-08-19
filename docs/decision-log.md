@@ -103,3 +103,13 @@ useful document for picking this project back up after time away.
 - **`batch_confirmation_threshold` setting exists but is not enforced**
   anywhere in the UI — it's stored and editable in Settings but no code
   currently reads it to trigger an actual confirmation prompt.
+
+## Known, deferred security items
+
+- **Next.js/PostCSS/sharp dependency vulnerabilities** — `npm audit`
+  flags several high-severity issues in the Next.js dependency chain,
+  fixable only via `npm audit fix --force`, which would push Next.js to
+  16.3.1 (outside the current stated range). Deferred: this app runs
+  locally, not on a publicly exposed server, so real-world exploitability
+  is low right now. Revisit as a dedicated task (with a full app
+  re-test) before any real deployment to a public-facing environment.

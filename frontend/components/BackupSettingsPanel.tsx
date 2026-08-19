@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Card, SaveRow } from "./SettingsUI";
+import type { components } from "@/lib/api/generated-types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -17,21 +18,8 @@ const RETENTION_OPTIONS = [
   { label: "Keep last 5", count: 5 },
 ];
 
-interface BackupSettings {
-  auto_backup_enabled: boolean;
-  backup_interval_hours: number;
-  local_retention_count: number;
-  last_backup_at: string | null;
-}
-
-interface BackupRecord {
-  timestamp: string;
-  db_size_bytes: number;
-  content_size_bytes: number;
-  triggered_by: string;
-  success: boolean;
-  error_message: string | null;
-}
+type BackupSettings = components["schemas"]["BackupSettingsRead"];
+type BackupRecord = components["schemas"]["BackupRecordRead"];
 
 async function getBackupSettings(): Promise<BackupSettings> {
   const res = await fetch(`${API_BASE_URL}/backup/settings`);

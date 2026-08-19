@@ -3,17 +3,11 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ApiError } from "@/lib/api";
+import type { components } from "@/lib/api/generated-types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-interface CategoryDeletionInfo {
-  category_name: string;
-  image_count: number;
-  locally_published_count: number;
-  wordpress_draft_count: number;
-  wordpress_live_count: number;
-  has_wordpress_content: boolean;
-}
+type CategoryDeletionInfo = components["schemas"]["CategoryDeletionInfo"];
 
 async function getDeletionInfo(categoryName: string): Promise<CategoryDeletionInfo> {
   const res = await fetch(`${API_BASE_URL}/categories/${encodeURIComponent(categoryName)}/deletion-info`);

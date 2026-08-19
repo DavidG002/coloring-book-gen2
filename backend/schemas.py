@@ -583,3 +583,22 @@ class BackupRestoreResponse(BaseModel):
     restored_from_timestamp: str
     safety_backup_timestamp: str
     message: str
+
+class OutputPathResponse(BaseModel):
+    output_path: str
+    publish_root: str
+
+class ReviewJob(BaseModel):
+    job_id: int
+    created_at: datetime
+    total_images: int
+    completed_images: int
+
+
+class ReviewImage(BaseModel):
+    id: int
+    subject: str
+    variation_number: int
+    variation_text: Optional[str] = None
+    status: str
+    filename: str

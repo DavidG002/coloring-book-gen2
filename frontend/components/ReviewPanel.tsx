@@ -2,22 +2,10 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { ApiError } from "@/lib/api";
+import { components } from "@/lib/api/generated-types";
 
-interface ReviewJob {
-  job_id: number;
-  created_at: string;
-  total_images: number;
-  completed_images: number;
-}
-
-interface ReviewImage {
-  id: number;
-  subject: string;
-  variation_number: number;
-  variation_text: string | null;
-  status: "approved" | "rejected";
-  filename: string;
-}
+type ReviewJob = components["schemas"]["ReviewJob"];
+type ReviewImage = components["schemas"]["ReviewImage"];
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 

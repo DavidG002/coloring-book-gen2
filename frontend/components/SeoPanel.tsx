@@ -3,23 +3,12 @@
 import { useState, useEffect } from "react";
 import { getTranslations, ApiError, type Translation } from "@/lib/api";
 import LanguagePills from "@/components/LanguagePills";
+import type { components } from "@/lib/api/generated-types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-interface ContentVariantRow {
-  subject_name: string;
-  variation_text: string;
-  seo_title: string;
-  seo_alt_text: string;
-  seo_excerpt: string;
-  seo_content: string;
-  generated: boolean;
-}
-
-interface SeoData {
-  category_description: string;
-  content_variants: ContentVariantRow[];
-}
+type ContentVariantRow = components["schemas"]["SeoContentVariantRow"];
+type SeoData = components["schemas"]["SeoDataResponse"];
 
 async function getSeoData(categoryName: string, lang: string): Promise<SeoData> {
   const res = await fetch(`${API_BASE_URL}/categories/${encodeURIComponent(categoryName)}/seo/${lang}`);
@@ -134,7 +123,6 @@ export default function SeoPanel({ categoryName }: { categoryName: string }) {
       return;
     }
     let cancelled = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoadingSeo(true);
     setError(null);
     getSeoData(categoryName, selectedLang)

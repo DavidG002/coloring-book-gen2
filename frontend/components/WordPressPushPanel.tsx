@@ -3,50 +3,13 @@
 import { useState, useEffect, useMemo } from "react";
 import { getTranslations, ApiError, type Translation } from "@/lib/api";
 import LanguagePills from "@/components/LanguagePills";
+import type { components } from "@/lib/api/generated-types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-interface WordPressPreviewFile {
-  source_path: string;
-  title: string;
-  alt_text: string;
-  already_pushed: boolean;
-  wp_excluded: boolean;
-  publish_run_id: number | null;
-  published_at: string | null;
-  seo_error?: string | null;
-  needs_update?: boolean;
-}
-
-interface WordPressPreviewResponse {
-  new_count: number;
-  already_pushed_count: number;
-  term_already_exists: boolean;
-  category_translated: string;
-  files: WordPressPreviewFile[];
-  skipped_subjects: string[];
-}
-
-interface WordPressPushedItem {
-  source_path: string;
-  wp_post_id: number;
-  wp_post_url: string;
-  title: string;
-}
-
-interface WordPressPushFailedItem {
-  source_path: string;
-  error: string;
-}
-
-interface WordPressPushResponse {
-  pushed_count: number;
-  skipped_count: number;
-  failed_count: number;
-  pushed_items: WordPressPushedItem[];
-  failed_items: WordPressPushFailedItem[];
-  skipped_subjects: string[];
-}
+type WordPressPreviewFile = components["schemas"]["WordPressPreviewFile"];
+type WordPressPreviewResponse = components["schemas"]["WordPressPreviewResponse"];
+type WordPressPushResponse = components["schemas"]["WordPressPushResponse"];
 
 async function previewPush(category: string, lang: string): Promise<WordPressPreviewResponse> {
   const res = await fetch(`${API_BASE_URL}/wordpress/preview`, {

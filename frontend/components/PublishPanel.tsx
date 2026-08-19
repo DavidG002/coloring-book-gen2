@@ -3,60 +3,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { getTranslations, ApiError, type Translation } from "@/lib/api";
 import LanguagePills from "@/components/LanguagePills";
+import type { components } from "@/lib/api/generated-types";
 
-interface PublishedFileInfo {
-  source_path: string;
-  target_filename: string;
-  alt_text: string;
-  title_text: string;
-  subject_en: string;
-  subject_translated: string;
-  variation_text_en: string;
-  variation_translated: string | null;
-  variation_number: number;
-  is_new: boolean;
-}
-
-interface PublishPlanResponse {
-  files: PublishedFileInfo[];
-  total_files: number;
-  new_count: number;
-  already_published_count: number;
-  skipped_subjects: string[];
-}
-
-interface PublishRunResponse {
-  published_count: number;
-  new_count: number;
-  already_published_count: number;
-  manifest_path: string;
-  skipped_subjects: string[];
-  run_id: number;
-}
-
-interface PublishHistoryFile {
-  target_filename: string;
-  alt_text: string;
-  title_text: string;
-  was_new: boolean;
-}
-
-interface PublishHistoryRun {
-  id: number;
-  category: string;
-  lang: string;
-  published_count: number;
-  new_count: number;
-  already_published_count: number;
-  manifest_path: string;
-  created_at: string;
-  files: PublishHistoryFile[];
-}
-
-interface OutputPathResponse {
-  output_path: string;
-  publish_root: string;
-}
+type PublishPlanResponse = components["schemas"]["PublishPlanResponse"];
+type PublishRunResponse = components["schemas"]["PublishRunResponse"];
+type PublishHistoryRun = components["schemas"]["PublishHistoryRunRead"];
+type OutputPathResponse = components["schemas"]["OutputPathResponse"];
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 

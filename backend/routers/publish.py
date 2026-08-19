@@ -10,7 +10,7 @@ from database import get_db
 from services.publish import build_publish_plan, execute_publish, get_publish_history
 from schemas import (
     PublishRequest, PublishPlanResponse, PublishedFileInfo, PublishRunResponse,
-    PublishHistoryRunRead, PublishHistoryFileRead,
+    PublishHistoryRunRead, PublishHistoryFileRead, OutputPathResponse,
 )
 
 router = APIRouter(prefix="/publish", tags=["publish"])
@@ -90,9 +90,10 @@ def download_latest_manifest(category_name: str, lang: str, db: Session = Depend
         headers={"Content-Disposition": f"attachment; filename={category_name}-{lang}-manifest.csv"},
     )
 
-@router.get("/output-path/{category_name}")
+@router.get("/output-path/{category_name}", response_model=OutputPathResponse)
 def get_output_path(category_name: str):
     import os
     output_path = os.path.abspath(os.path.join("output", category_name))
     publish_path = os.path.abspath(os.path.join("publish"))
     return {"output_path": output_path, "publish_root": publish_path}
+

@@ -4,37 +4,38 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from database import get_db
+from schemas import ReviewJob, ReviewImage
 from services.review import get_images_for_job, get_jobs_for_category, reject_image, restore_image, get_current_file_path
 
 router = APIRouter(prefix="/review", tags=["review"])
 
 
-@router.get("/jobs/{category_name}")
+@router.get("/jobs/{category_name}", response_model=list[ReviewJob])
 def list_jobs(category_name: str, db: Session = Depends(get_db)):
     jobs = get_jobs_for_category(db, category_name)
     return [
-        {
-            "job_id": j.id,
-            "created_at": j.created_at,
-            "total_images": j.total_images,
-            "completed_images": j.completed_images,
-        }
+        ReviewJob(
+            job_id=j.id,
+            created_at=j.created_at,
+            total_images=j.total_images,
+            completed_images=j.completed_images,
+        )
         for j in jobs
     ]
 
 
-@router.get("/jobs/{category_name}/{job_id}/images")
+@router.get("/jobs/{category_name}/{job_id}/images", response_model=list[ReviewImage])
 def list_job_images(category_name: str, job_id: int, db: Session = Depends(get_db)):
     images = get_images_for_job(db, job_id)
     return [
-        {
-            "id": img.id,
-            "subject": img.subject,
-            "variation_number": img.variation_number,
-            "variation_text": img.variation_text,
-            "status": img.status,
-            "filename": os.path.basename(img.file_path),
-        }
+        ReviewImage(
+            id=img.id,
+            subject=img.subject,
+            variation_number=img.variation_number,
+            variation_text=img.variation_text,
+            status=img.status,
+            filename=os.path.basename(img.file_path),
+        )
         for img in images
     ]
 
