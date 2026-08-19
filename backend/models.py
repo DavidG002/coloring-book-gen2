@@ -342,3 +342,27 @@ class CategoryDescription(Base):
     __table_args__ = (
         UniqueConstraint("category", "lang", name="uq_category_description"),
     )
+
+class BackupSettings(Base):
+    """Single-row settings for the in-app backup feature."""
+    __tablename__ = "backup_settings"
+
+    id = Column(Integer, primary_key=True, default=1)
+    auto_backup_enabled = Column(Boolean, nullable=False, default=True)
+    backup_interval_hours = Column(Integer, nullable=False, default=24)
+    local_retention_count = Column(Integer, nullable=False, default=5)
+    last_backup_at = Column(DateTime, nullable=True)
+
+
+class BackupRecord(Base):
+    """History of backup runs."""
+    __tablename__ = "backup_records"
+
+    id = Column(Integer, primary_key=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    folder_path = Column(String, nullable=False)
+    db_size_bytes = Column(Integer, nullable=False, default=0)
+    content_size_bytes = Column(Integer, nullable=False, default=0)
+    triggered_by = Column(String, nullable=False, default="manual")  # "manual" | "auto"
+    success = Column(Boolean, nullable=False, default=True)
+    error_message = Column(Text, nullable=True)

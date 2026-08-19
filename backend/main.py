@@ -5,7 +5,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from models import init_db
-from routers import categories, translations, settings, generation, prompt_defaults, publish, language_templates, review, books, account_settings, wordpress, seo
+from routers import categories, translations, settings, generation, prompt_defaults, publish, language_templates, review, books, account_settings, wordpress, seo, backup
+from services.backup import maybe_run_auto_backup
+from database import SessionLocal
 
 app = FastAPI(title="Coloring Book Generator API")
 
@@ -30,8 +32,17 @@ app.include_router(books.router)
 app.include_router(account_settings.router)
 app.include_router(wordpress.router)
 app.include_router(seo.router)
+app.include_router(backup.router)
 
 
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+@app.on_event("startup")
+def startup_backup_check():
+    db = SessionLocal()
+    try:
+        maybe_run_auto_backup(db)
+    finally:
+        db.close()

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getSettings, updateSettings, ApiError, type Settings } from "@/lib/api";
+import BackupSettingsPanel from "@/components/BackupSettingsPanel";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -675,6 +676,8 @@ export default function SettingsPage() {
             </div>
           </section>
         )}
+
+        <BackupSettingsPanel />
       </div>
     </main>
   );

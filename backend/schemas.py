@@ -555,4 +555,31 @@ class WatermarkSettingsUpdate(BaseModel):
     watermark_position: Optional[str] = None
     watermark_opacity: Optional[float] = None
     watermark_scale: Optional[float] = None
+    
 
+class BackupSettingsRead(BaseModel):
+    auto_backup_enabled: bool
+    backup_interval_hours: int
+    local_retention_count: int
+    last_backup_at: Optional[datetime] = None
+
+
+class BackupSettingsUpdate(BaseModel):
+    auto_backup_enabled: Optional[bool] = None
+    backup_interval_hours: Optional[int] = None
+    local_retention_count: Optional[int] = None
+
+
+class BackupRecordRead(BaseModel):
+    timestamp: str
+    db_size_bytes: int
+    content_size_bytes: int
+    triggered_by: str
+    success: bool
+    error_message: Optional[str] = None
+
+
+class BackupRestoreResponse(BaseModel):
+    restored_from_timestamp: str
+    safety_backup_timestamp: str
+    message: str

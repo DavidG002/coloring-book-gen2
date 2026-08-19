@@ -41,3 +41,4 @@ Thumbs.db
 .idea/
 backend/watermarks/*
 !backend/watermarks/.gitkeep
+backend/backups/*
