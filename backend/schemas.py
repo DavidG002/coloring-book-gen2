@@ -111,6 +111,10 @@ class CategorySummary(BaseModel):
     subject_count: int
     variation_count: int
 
+class CategoryPreviewOptions(BaseModel):
+    subjects: list[str]
+    variations: list[str]
+
 
     # ---------- Translation ----------
 
@@ -218,6 +222,8 @@ class BookPreviewRequest(BaseModel):
     black_clean_threshold: int
     palette_colors: int
     category_name: Optional[str] = None
+    subject_name: Optional[str] = None
+    variation_text: Optional[str] = None
 
 class BookPreviewAvailability(BaseModel):
     available: bool
@@ -239,6 +245,7 @@ class BookPreviewRead(BaseModel):
     white_clean_threshold: int
     black_clean_threshold: int
     palette_colors: int
+    prompt_used: Optional[str] = None
     created_at: datetime
 
 # ---------- Generation ----------

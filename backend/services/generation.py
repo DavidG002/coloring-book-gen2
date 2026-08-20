@@ -72,11 +72,19 @@ def _get_existing_max_variation(category_name: str, subject_name: str) -> int:
     return max(numbers) if numbers else 0
 
 
-def get_sample_task_for_book(db: Session, book_id: int, category_name: str | None = None) -> dict | None:
-    """Finds a real subject+variation combination from this book's categories,
-    to use as a realistic settings preview. If category_name is given, uses
-    that specific category; otherwise picks the first eligible one found.
-    Returns None if no eligible category exists."""
+def get_sample_task_for_book(
+    db: Session,
+    book_id: int,
+    category_name: str | None = None,
+    subject_name: str | None = None,
+    variation_text: str | None = None,
+) -> dict | None:
+    """Finds a subject+variation combination from this book's categories, to
+    use for a settings preview. If subject_name/variation_text are given,
+    uses those exact values (letting the user deliberately test a specific
+    combination rather than always getting the auto-picked first one). If
+    category_name is given without an explicit subject/variation, uses that
+    category's first eligible pair. Returns None if nothing eligible."""
     book = db.query(Book).filter(Book.id == book_id).first()
     if not book:
         return None
@@ -86,16 +94,43 @@ def get_sample_task_for_book(db: Session, book_id: int, category_name: str | Non
         candidates = [c for c in candidates if c.name == category_name]
 
     for category in candidates:
-        if category.subjects and category.variations:
-            subject = category.subjects[0]
-            variation = sorted(category.variations, key=lambda v: v.order)[0]
-            return {
-                "category": category.name,
-                "subject": subject.name,
-                "variation_text": variation.text,
-            }
+        if not (category.subjects and category.variations):
+            continue
+
+        if subject_name and variation_text:
+            subject_match = next((s for s in category.subjects if s.name == subject_name), None)
+            variation_match = next((v for v in category.variations if v.text == variation_text), None)
+            if subject_match and variation_match:
+                return {
+                    "category": category.name,
+                    "subject": subject_match.name,
+                    "variation_text": variation_match.text,
+                }
+            continue
+
+        subject = category.subjects[0]
+        variation = sorted(category.variations, key=lambda v: v.order)[0]
+        return {
+            "category": category.name,
+            "subject": subject.name,
+            "variation_text": variation.text,
+        }
     return None
 
+
+def get_category_preview_options(db: Session, book_id: int, category_name: str) -> dict:
+    """Every subject and variation available in this category, for the
+    preview UI's dropdowns."""
+    book = db.query(Book).filter(Book.id == book_id).first()
+    if not book:
+        return {"subjects": [], "variations": []}
+    category = next((c for c in book.categories if c.name == category_name), None)
+    if not category:
+        return {"subjects": [], "variations": []}
+    return {
+        "subjects": [s.name for s in category.subjects],
+        "variations": [v.text for v in sorted(category.variations, key=lambda v: v.order)],
+    }
 
 def get_eligible_preview_categories(db: Session, book_id: int) -> list[str]:
     """Categories in this book that have at least one subject and one
@@ -246,6 +281,7 @@ def save_preview_to_history(
     variation_text: str,
     settings: dict,
     image_bytes: bytes,
+    prompt_used: str | None = None,
 ) -> "BookPreview":
     """Writes a generated preview image to disk and records it in history,
     so paid-for previews are never silently discarded."""
@@ -271,7 +307,9 @@ def save_preview_to_history(
         white_clean_threshold=settings["white_clean_threshold"],
         black_clean_threshold=settings["black_clean_threshold"],
         palette_colors=settings["palette_colors"],
+        prompt_used=prompt_used,
         file_path=file_path,
+
     )
     db.add(record)
     db.commit()

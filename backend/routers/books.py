@@ -9,8 +9,9 @@ from models import Book, BookPreview
 from services.generation import (
     generate_preview_image, get_sample_task_for_book, 
     get_eligible_preview_categories, save_preview_to_history,
+    get_category_preview_options,
 )
-from schemas import BookCreate, BookUpdate, BookRead, BookSummary, BookPreviewRequest, BookPreviewAvailability, BookPreviewRead, BookDeletionInfo, BookDeletionResult, WatermarkSettings, WatermarkSettingsUpdate
+from schemas import BookCreate, BookUpdate, BookRead, BookSummary, BookPreviewRequest, BookPreviewAvailability, BookPreviewRead, BookDeletionInfo, BookDeletionResult, WatermarkSettings, WatermarkSettingsUpdate, CategoryPreviewOptions
 from services.book_deletion import get_book_deletion_info, delete_book_cascade
 
 
@@ -55,7 +56,13 @@ def preview_book_settings(book_id: int, payload: BookPreviewRequest, db: Session
     if not book:
         raise HTTPException(status_code=404, detail=f"Book {book_id} not found")
 
-    task = get_sample_task_for_book(db, book_id, category_name=payload.category_name)
+    task = get_sample_task_for_book(
+        db,
+        book_id,
+        category_name=payload.category_name,
+        subject_name=payload.subject_name,
+        variation_text=payload.variation_text,
+    )
     if not task:
         raise HTTPException(
             status_code=400,
@@ -76,11 +83,16 @@ def preview_book_settings(book_id: int, payload: BookPreviewRequest, db: Session
         "watermark_scale": book.watermark_scale,
     }
 
+    prompt_used = book.base_prompt + f" Cute {task['subject']}. {task['variation_text']}."
+
     image_bytes = generate_preview_image(book.base_prompt, task["subject"], task["variation_text"], settings)
     if image_bytes is None:
         raise HTTPException(status_code=500, detail="Failed to generate preview image")
 
-    save_preview_to_history(db, book_id, task["category"], task["subject"], task["variation_text"], settings, image_bytes)
+    save_preview_to_history(
+        db, book_id, task["category"], task["subject"], task["variation_text"], settings, image_bytes,
+        prompt_used=prompt_used,
+    )
 
     return Response(content=image_bytes, media_type="image/png")
 
@@ -104,6 +116,11 @@ def get_preview_file(preview_id: int, db: Session = Depends(get_db)):
     if not os.path.exists(preview.file_path):
         raise HTTPException(status_code=404, detail="Preview file missing on disk")
     return FileResponse(preview.file_path, media_type="image/png")
+
+@router.get("/{book_id}/preview-options/{category_name}", response_model=CategoryPreviewOptions)
+def get_category_preview_options_route(book_id: int, category_name: str, db: Session = Depends(get_db)):
+    return get_category_preview_options(db, book_id, category_name)
+
 
 
 @router.get("/{book_id}", response_model=BookRead)

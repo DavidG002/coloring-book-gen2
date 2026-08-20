@@ -21,6 +21,7 @@ class BookPreview(Base):
     white_clean_threshold = Column(Integer, nullable=False)
     black_clean_threshold = Column(Integer, nullable=False)
     palette_colors = Column(Integer, nullable=False)
+    prompt_used = Column(Text, nullable=True)
     file_path = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 

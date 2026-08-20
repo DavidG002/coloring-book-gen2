@@ -558,6 +558,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/books/{book_id}/preview-options/{category_name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Category Preview Options Route */
+        get: operations["get_category_preview_options_route_books__book_id__preview_options__category_name__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/books/{book_id}": {
         parameters: {
             query?: never;
@@ -1145,6 +1162,8 @@ export interface components {
             black_clean_threshold: number;
             /** Palette Colors */
             palette_colors: number;
+            /** Prompt Used */
+            prompt_used?: string | null;
             /**
              * Created At
              * Format: date-time
@@ -1167,6 +1186,10 @@ export interface components {
             palette_colors: number;
             /** Category Name */
             category_name?: string | null;
+            /** Subject Name */
+            subject_name?: string | null;
+            /** Variation Text */
+            variation_text?: string | null;
         };
         /** BookRead */
         BookRead: {
@@ -1290,6 +1313,13 @@ export interface components {
         CategoryDescriptionUpdate: {
             /** Description */
             description: string;
+        };
+        /** CategoryPreviewOptions */
+        CategoryPreviewOptions: {
+            /** Subjects */
+            subjects: string[];
+            /** Variations */
+            variations: string[];
         };
         /** CategoryRead */
         CategoryRead: {
@@ -3323,6 +3353,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_category_preview_options_route_books__book_id__preview_options__category_name__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                book_id: number;
+                category_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryPreviewOptions"];
                 };
             };
             /** @description Validation Error */
