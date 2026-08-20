@@ -1,0 +1,88 @@
+Date : 2026-08-20 14:39:38
+Directory : /home/davidg/Developer/projects/coloring-book-gen2
+Total : 42 files,  5920 codes, 853 comments, 385 blanks, all 7158 lines
+
+Languages
++----------------+------------+------------+------------+------------+------------+
+| language       | files      | code       | comment    | blank      | total      |
++----------------+------------+------------+------------+------------+------------+
+| TypeScript     |          2 |      3,573 |        791 |          2 |      4,366 |
+| Markdown       |         10 |        767 |          0 |        165 |        932 |
+| Python         |         13 |        659 |         56 |        152 |        867 |
+| TypeScript JSX |         14 |        652 |          0 |         59 |        711 |
+| JSON           |          2 |        259 |          0 |          0 |        259 |
+| Shell Script   |          1 |         10 |          6 |          7 |         23 |
++----------------+------------+------------+------------+------------+------------+
+
+Directories
++------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| path                                                                                           | files      | code       | comment    | blank      | total      |
++------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| .                                                                                              |         42 |      5,920 |        853 |        385 |      7,158 |
+| . (Files)                                                                                      |          1 |        125 |          0 |         17 |        142 |
+| backend                                                                                        |         14 |        669 |         62 |        159 |        890 |
+| backend (Files)                                                                                |          4 |        121 |          9 |         36 |        166 |
+| backend/routers                                                                                |          6 |        171 |          0 |         37 |        208 |
+| backend/services                                                                               |          4 |        377 |         53 |         86 |        516 |
+| docs                                                                                           |          9 |        642 |          0 |        148 |        790 |
+| frontend                                                                                       |         18 |      4,484 |        791 |         61 |      5,336 |
+| frontend (Files)                                                                               |          2 |        259 |          0 |          0 |        259 |
+| frontend/app                                                                                   |          3 |       -835 |         -9 |        -53 |       -897 |
+| frontend/app/books                                                                             |          2 |       -753 |          0 |        -47 |       -800 |
+| frontend/app/books/[id]                                                                        |          2 |       -753 |          0 |        -47 |       -800 |
+| frontend/app/books/[id] (Files)                                                                |          1 |          7 |          0 |          0 |          7 |
+| frontend/app/books/[id]/settings                                                               |          1 |       -760 |          0 |        -47 |       -807 |
+| frontend/app/settings                                                                          |          1 |        -82 |         -9 |         -6 |        -97 |
+| frontend/components                                                                            |         11 |      1,487 |          9 |        112 |      1,608 |
+| frontend/lib                                                                                   |          2 |      3,573 |        791 |          2 |      4,366 |
+| frontend/lib/api                                                                               |          2 |      3,573 |        791 |          2 |      4,366 |
++------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++------------------------------------------------------------------------------------------------+----------------+------------+------------+------------+------------+
+| filename                                                                                       | language       | code       | comment    | blank      | total      |
++------------------------------------------------------------------------------------------------+----------------+------------+------------+------------+------------+
+| /home/davidg/Developer/projects/coloring-book-gen2/README.md                                   | Markdown       |        125 |          0 |         17 |        142 |
+| /home/davidg/Developer/projects/coloring-book-gen2/backend/backup.sh                           | Shell Script   |         10 |          6 |          7 |         23 |
+| /home/davidg/Developer/projects/coloring-book-gen2/backend/main.py                             | Python         |         10 |          0 |          1 |         11 |
+| /home/davidg/Developer/projects/coloring-book-gen2/backend/models.py                           | Python         |         32 |          2 |          7 |         41 |
+| /home/davidg/Developer/projects/coloring-book-gen2/backend/routers/backup.py                   | Python         |         55 |          0 |         14 |         69 |
+| /home/davidg/Developer/projects/coloring-book-gen2/backend/routers/books.py                    | Python         |        101 |          0 |         20 |        121 |
+| /home/davidg/Developer/projects/coloring-book-gen2/backend/routers/generation.py               | Python         |          5 |          0 |          0 |          5 |
+| /home/davidg/Developer/projects/coloring-book-gen2/backend/routers/publish.py                  | Python         |          0 |          0 |          2 |          2 |
+| /home/davidg/Developer/projects/coloring-book-gen2/backend/routers/review.py                   | Python         |          1 |          0 |          0 |          1 |
+| /home/davidg/Developer/projects/coloring-book-gen2/backend/routers/wordpress.py                | Python         |          9 |          0 |          1 |         10 |
+| /home/davidg/Developer/projects/coloring-book-gen2/backend/schemas.py                          | Python         |         69 |          1 |         21 |         91 |
+| /home/davidg/Developer/projects/coloring-book-gen2/backend/services/backup.py                  | Python         |        134 |         18 |         35 |        187 |
+| /home/davidg/Developer/projects/coloring-book-gen2/backend/services/generation.py              | Python         |         85 |         11 |         15 |        111 |
+| /home/davidg/Developer/projects/coloring-book-gen2/backend/services/prompt_knobs.py            | Python         |         25 |         13 |          8 |         46 |
+| /home/davidg/Developer/projects/coloring-book-gen2/backend/services/wordpress_publish.py       | Python         |        133 |         11 |         28 |        172 |
+| /home/davidg/Developer/projects/coloring-book-gen2/docs/README.md                              | Markdown       |         12 |          0 |          3 |         15 |
+| /home/davidg/Developer/projects/coloring-book-gen2/docs/architecture.md                        | Markdown       |         82 |          0 |         18 |        100 |
+| /home/davidg/Developer/projects/coloring-book-gen2/docs/data-model.md                          | Markdown       |         89 |          0 |         29 |        118 |
+| /home/davidg/Developer/projects/coloring-book-gen2/docs/decision-log.md                        | Markdown       |        106 |          0 |         10 |        116 |
+| /home/davidg/Developer/projects/coloring-book-gen2/docs/environment-deployment.md              | Markdown       |         72 |          0 |         14 |         86 |
+| /home/davidg/Developer/projects/coloring-book-gen2/docs/generation-publishing.md               | Markdown       |         78 |          0 |         20 |         98 |
+| /home/davidg/Developer/projects/coloring-book-gen2/docs/ideas-backlog.md                       | Markdown       |         12 |          0 |          6 |         18 |
+| /home/davidg/Developer/projects/coloring-book-gen2/docs/seo-pipeline.md                        | Markdown       |         76 |          0 |         21 |         97 |
+| /home/davidg/Developer/projects/coloring-book-gen2/docs/wordpress-integration.md               | Markdown       |        115 |          0 |         27 |        142 |
+| /home/davidg/Developer/projects/coloring-book-gen2/frontend/app/books/[id]/page.tsx            | TypeScript JSX |          7 |          0 |          0 |          7 |
+| /home/davidg/Developer/projects/coloring-book-gen2/frontend/app/books/[id]/settings/page.tsx   | TypeScript JSX |       -760 |          0 |        -47 |       -807 |
+| /home/davidg/Developer/projects/coloring-book-gen2/frontend/app/settings/page.tsx              | TypeScript JSX |        -82 |         -9 |         -6 |        -97 |
+| /home/davidg/Developer/projects/coloring-book-gen2/frontend/components/BackupSettingsPanel.tsx | TypeScript JSX |        314 |          2 |         31 |        347 |
+| /home/davidg/Developer/projects/coloring-book-gen2/frontend/components/BookPreviewSection.tsx  | TypeScript JSX |        512 |          6 |         38 |        556 |
+| /home/davidg/Developer/projects/coloring-book-gen2/frontend/components/BookSettingsFields.tsx  | TypeScript JSX |        506 |          1 |         39 |        546 |
+| /home/davidg/Developer/projects/coloring-book-gen2/frontend/components/DeleteBookModal.tsx     | TypeScript JSX |        -11 |          0 |         -1 |        -12 |
+| /home/davidg/Developer/projects/coloring-book-gen2/frontend/components/DeleteCategoryModal.tsx | TypeScript JSX |         -6 |          0 |          0 |         -6 |
+| /home/davidg/Developer/projects/coloring-book-gen2/frontend/components/LanguagePills.tsx       | TypeScript JSX |         30 |          0 |          2 |         32 |
+| /home/davidg/Developer/projects/coloring-book-gen2/frontend/components/PublishPanel.tsx        | TypeScript JSX |        -49 |          0 |         -5 |        -54 |
+| /home/davidg/Developer/projects/coloring-book-gen2/frontend/components/ReviewPanel.tsx         | TypeScript JSX |        -11 |          0 |         -1 |        -12 |
+| /home/davidg/Developer/projects/coloring-book-gen2/frontend/components/SeoPanel.tsx            | TypeScript JSX |        -11 |          0 |         -1 |        -12 |
+| /home/davidg/Developer/projects/coloring-book-gen2/frontend/components/SettingsUI.tsx          | TypeScript JSX |        181 |          0 |         11 |        192 |
+| /home/davidg/Developer/projects/coloring-book-gen2/frontend/components/WordPressPushPanel.tsx  | TypeScript JSX |         32 |          0 |         -1 |         31 |
+| /home/davidg/Developer/projects/coloring-book-gen2/frontend/lib/api/generated-types.ts         | TypeScript     |      3,593 |        791 |          2 |      4,386 |
+| /home/davidg/Developer/projects/coloring-book-gen2/frontend/lib/api/types.ts                   | TypeScript     |        -20 |          0 |          0 |        -20 |
+| /home/davidg/Developer/projects/coloring-book-gen2/frontend/package-lock.json                  | JSON           |        257 |          0 |          0 |        257 |
+| /home/davidg/Developer/projects/coloring-book-gen2/frontend/package.json                       | JSON           |          2 |          0 |          0 |          2 |
+| Total                                                                                          |                |      5,920 |        853 |        385 |      7,158 |
++------------------------------------------------------------------------------------------------+----------------+------------+------------+------------+------------+

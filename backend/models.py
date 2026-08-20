@@ -42,6 +42,22 @@ class Book(Base):
     black_clean_threshold = Column(Integer, nullable=False, default=10)
     palette_colors = Column(Integer, nullable=False, default=8)
 
+    line_weight = Column(String, nullable=False, default="medium")
+    detail_density = Column(String, nullable=False, default="moderate")
+    style_tone = Column(String, nullable=False, default="balanced")
+    subject_treatment = Column(String, nullable=False, default="personified")
+    character_mood = Column(String, nullable=False, default="cute")
+    background_richness = Column(String, nullable=False, default="light_props")
+    border_style = Column(String, nullable=False, default="none")
+
+    line_weight_enabled = Column(Boolean, nullable=False, default=True)
+    detail_density_enabled = Column(Boolean, nullable=False, default=True)
+    style_tone_enabled = Column(Boolean, nullable=False, default=True)
+    subject_treatment_enabled = Column(Boolean, nullable=False, default=True)
+    character_mood_enabled = Column(Boolean, nullable=False, default=True)
+    background_richness_enabled = Column(Boolean, nullable=False, default=True)
+    border_style_enabled = Column(Boolean, nullable=False, default=True)
+
     categories = relationship("Category", back_populates="book", cascade="all, delete-orphan")
 
     watermark_enabled = Column(Boolean, nullable=False, default=False)
@@ -49,10 +65,7 @@ class Book(Base):
     watermark_opacity = Column(Float, nullable=False, default=0.6)
     watermark_scale = Column(Float, nullable=False, default=0.15)
     watermark_filename = Column(String, nullable=True)
-
-    line_weight = Column(String, nullable=False, default="medium")
-    detail_density = Column(String, nullable=False, default="moderate")
-    style_tone = Column(String, nullable=False, default="balanced")     
+    
 
 
 class Category(Base):

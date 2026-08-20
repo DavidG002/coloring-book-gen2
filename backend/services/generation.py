@@ -2,9 +2,11 @@ import os
 import base64
 import io
 from PIL import Image
+from services.prompt_knobs import get_book_knobs
 from sqlalchemy.orm import Session
 
 from services.openai_client import get_openai_client
+
 
 from models import Category, Subject, Variation, Book, BookPreview
 
@@ -46,9 +48,7 @@ def build_task_list(
                 "variation_number": variation_num,
                 "variation_text": modifier.text,
                 "base_prompt": category.book.base_prompt,
-                "line_weight": category.book.line_weight,
-                "detail_density": category.book.detail_density,
-                "style_tone": category.book.style_tone,
+                "knobs": get_book_knobs(category.book),
             })
 
     if max_images:
@@ -226,9 +226,7 @@ def generate_image_file(task: dict, settings: dict, output_path: str) -> bool:
         task["base_prompt"],
         task["subject"],
         task["variation_text"],
-        task.get("line_weight", "medium"),
-        task.get("detail_density", "moderate"),
-        task.get("style_tone", "balanced"),
+        task["knobs"],
     )
 
     try:
@@ -259,9 +257,7 @@ def generate_preview_image(
     subject: str,
     variation_text: str,
     settings: dict,
-    line_weight: str = "medium",
-    detail_density: str = "moderate",
-    style_tone: str = "balanced",
+    knobs: dict,
 ) -> tuple[bytes, str] | tuple[None, None]:
     """Runs a real, billed generation call using an actual subject + variation
     from the book's categories, so the preview matches genuine output exactly.
@@ -270,7 +266,7 @@ def generate_preview_image(
     that knows the real, final resolved string. Saving to disk + history is
     handled separately by the caller (save_preview_to_history)."""
     from services.prompt_knobs import build_full_prompt
-    prompt = build_full_prompt(base_prompt, subject, variation_text, line_weight, detail_density, style_tone)
+    prompt = build_full_prompt(base_prompt, subject, variation_text, knobs)
 
     try:
         client = get_openai_client()

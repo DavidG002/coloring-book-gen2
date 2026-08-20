@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { getBook, updateBook, ApiError, type Book } from "@/lib/api";
-import { Card, SaveRow, Field, PAPER_PRESETS, PRODUCT_NOUN_PRESETS } from "./SettingsUI";
+import { Card, SaveRow, Field, PAPER_PRESETS } from "./SettingsUI";
+import KnobsPanel from "./KnobsPanel";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -40,6 +41,8 @@ export default function BookSettingsFields({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [book, setBook] = useState<Book | null>(null);
+
   const [name, setName] = useState("");
   const [basePrompt, setBasePrompt] = useState("");
   const [productNoun, setProductNoun] = useState("coloring page");
@@ -68,6 +71,8 @@ export default function BookSettingsFields({
   const [watermarkSaved, setWatermarkSaved] = useState(false);
   const [uploadingWatermark, setUploadingWatermark] = useState(false);
 
+
+
   useEffect(() => {
     let cancelled = false;
 
@@ -77,7 +82,9 @@ export default function BookSettingsFields({
       try {
         const data = await getBook(bookId);
         if (cancelled) return;
+        setBook(data);
         setName(data.name);
+        setBasePrompt(data.base_prompt);
         setBasePrompt(data.base_prompt);
         setProductNoun(data.product_noun);
         setCanvasWidth(data.canvas_width);
@@ -127,6 +134,7 @@ export default function BookSettingsFields({
     setSavingName(true);
     try {
       const updated = await updateBook(bookId, { name: trimmed });
+      setBook(updated);
       onBookLoaded?.(updated);
       setNameSaved(true);
       setTimeout(() => setNameSaved(false), 2000);
@@ -147,6 +155,7 @@ export default function BookSettingsFields({
     setSavingProductNoun(true);
     try {
       const updated = await updateBook(bookId, { product_noun: trimmed });
+      setBook(updated);
       onBookLoaded?.(updated);
       setProductNounSaved(true);
       setTimeout(() => setProductNounSaved(false), 2000);
@@ -157,25 +166,27 @@ export default function BookSettingsFields({
     }
   }
 
-  async function handleSavePrompt() {
-    setError(null);
-    const trimmed = basePrompt.trim();
-    if (!trimmed) {
-      setError("Base prompt cannot be empty.");
-      return;
-    }
-    setSavingPrompt(true);
-    try {
-      const updated = await updateBook(bookId, { base_prompt: trimmed });
-      onBookLoaded?.(updated);
-      setPromptSaved(true);
-      setTimeout(() => setPromptSaved(false), 2000);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to save prompt");
-    } finally {
-      setSavingPrompt(false);
-    }
+ async function handleSavePrompt() {
+  setError(null);
+  const trimmed = basePrompt.trim();
+  if (!trimmed) {
+    setError("Base prompt cannot be empty.");
+    return;
   }
+  setSavingPrompt(true);
+  try {
+    const updated = await updateBook(bookId, { base_prompt: trimmed });
+    setBook(updated);
+    onBookLoaded?.(updated);
+    setPromptSaved(true);
+    setTimeout(() => setPromptSaved(false), 2000);
+  } catch (err) {
+    setError(err instanceof ApiError ? err.message : "Failed to save prompt");
+  } finally {
+    setSavingPrompt(false);
+  }
+}
+
 
   async function handleSaveSettings() {
     setError(null);
@@ -189,6 +200,7 @@ export default function BookSettingsFields({
         black_clean_threshold: blackThreshold,
         palette_colors: paletteColors,
       });
+      setBook(updated);
       onBookLoaded?.(updated);
       setSettingsSaved(true);
       setTimeout(() => setSettingsSaved(false), 2000);
@@ -292,7 +304,9 @@ export default function BookSettingsFields({
         />
         <SaveRow onClick={handleSavePrompt} saving={savingPrompt} saved={promptSaved} label="Save prompt" />
       </Card>
-
+       <Card title="Style knobs" description="Structured style controls, applied on top of the base prompt for every generated image. Each can be turned off if it doesn't apply to this book's product type.">
+        {book && <KnobsPanel bookId={bookId} book={book} onBookLoaded={(updated) => { setBook(updated); onBookLoaded?.(updated); }} />}
+      </Card>
       <Card
         title="Watermark / logo"
         description="Applied to every generated image — local publish and WordPress pushes included."

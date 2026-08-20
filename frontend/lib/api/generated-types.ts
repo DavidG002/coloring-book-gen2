@@ -1100,6 +1100,61 @@ export interface components {
              * @default balanced
              */
             style_tone: string;
+            /**
+             * Subject Treatment
+             * @default personified
+             */
+            subject_treatment: string;
+            /**
+             * Character Mood
+             * @default cute
+             */
+            character_mood: string;
+            /**
+             * Background Richness
+             * @default light_props
+             */
+            background_richness: string;
+            /**
+             * Border Style
+             * @default none
+             */
+            border_style: string;
+            /**
+             * Line Weight Enabled
+             * @default true
+             */
+            line_weight_enabled: boolean;
+            /**
+             * Detail Density Enabled
+             * @default true
+             */
+            detail_density_enabled: boolean;
+            /**
+             * Style Tone Enabled
+             * @default true
+             */
+            style_tone_enabled: boolean;
+            /**
+             * Subject Treatment Enabled
+             * @default true
+             */
+            subject_treatment_enabled: boolean;
+            /**
+             * Character Mood Enabled
+             * @default true
+             */
+            character_mood_enabled: boolean;
+            /**
+             * Background Richness Enabled
+             * @default true
+             */
+            background_richness_enabled: boolean;
+            /**
+             * Border Style Enabled
+             * @default true
+             */
+            border_style_enabled: boolean;
         };
         /** BookDeletionCategoryInfo */
         BookDeletionCategoryInfo: {
@@ -1262,6 +1317,61 @@ export interface components {
              * @default balanced
              */
             style_tone: string;
+            /**
+             * Subject Treatment
+             * @default personified
+             */
+            subject_treatment: string;
+            /**
+             * Character Mood
+             * @default cute
+             */
+            character_mood: string;
+            /**
+             * Background Richness
+             * @default light_props
+             */
+            background_richness: string;
+            /**
+             * Border Style
+             * @default none
+             */
+            border_style: string;
+            /**
+             * Line Weight Enabled
+             * @default true
+             */
+            line_weight_enabled: boolean;
+            /**
+             * Detail Density Enabled
+             * @default true
+             */
+            detail_density_enabled: boolean;
+            /**
+             * Style Tone Enabled
+             * @default true
+             */
+            style_tone_enabled: boolean;
+            /**
+             * Subject Treatment Enabled
+             * @default true
+             */
+            subject_treatment_enabled: boolean;
+            /**
+             * Character Mood Enabled
+             * @default true
+             */
+            character_mood_enabled: boolean;
+            /**
+             * Background Richness Enabled
+             * @default true
+             */
+            background_richness_enabled: boolean;
+            /**
+             * Border Style Enabled
+             * @default true
+             */
+            border_style_enabled: boolean;
             /** Id */
             id: number;
             /**
@@ -1305,6 +1415,28 @@ export interface components {
             detail_density?: string | null;
             /** Style Tone */
             style_tone?: string | null;
+            /** Subject Treatment */
+            subject_treatment?: string | null;
+            /** Character Mood */
+            character_mood?: string | null;
+            /** Background Richness */
+            background_richness?: string | null;
+            /** Border Style */
+            border_style?: string | null;
+            /** Line Weight Enabled */
+            line_weight_enabled?: boolean | null;
+            /** Detail Density Enabled */
+            detail_density_enabled?: boolean | null;
+            /** Style Tone Enabled */
+            style_tone_enabled?: boolean | null;
+            /** Subject Treatment Enabled */
+            subject_treatment_enabled?: boolean | null;
+            /** Character Mood Enabled */
+            character_mood_enabled?: boolean | null;
+            /** Background Richness Enabled */
+            background_richness_enabled?: boolean | null;
+            /** Border Style Enabled */
+            border_style_enabled?: boolean | null;
         };
         /** CategoryCreate */
         CategoryCreate: {

@@ -83,14 +83,13 @@ def preview_book_settings(book_id: int, payload: BookPreviewRequest, db: Session
         "watermark_scale": book.watermark_scale,
     }
 
+    from services.prompt_knobs import get_book_knobs
     image_bytes, prompt_used = generate_preview_image(
         book.base_prompt,
         task["subject"],
         task["variation_text"],
         settings,
-        line_weight=book.line_weight,
-        detail_density=book.detail_density,
-        style_tone=book.style_tone,
+        get_book_knobs(book),
     )
     if image_bytes is None:
         raise HTTPException(status_code=500, detail="Failed to generate preview image")
@@ -149,6 +148,17 @@ def get_book(book_id: int, db: Session = Depends(get_db)):
         line_weight=book.line_weight,
         detail_density=book.detail_density,
         style_tone=book.style_tone,
+        subject_treatment=book.subject_treatment,
+        character_mood=book.character_mood,
+        background_richness=book.background_richness,
+        border_style=book.border_style,
+        line_weight_enabled=book.line_weight_enabled,
+        detail_density_enabled=book.detail_density_enabled,
+        style_tone_enabled=book.style_tone_enabled,
+        subject_treatment_enabled=book.subject_treatment_enabled,
+        character_mood_enabled=book.character_mood_enabled,
+        background_richness_enabled=book.background_richness_enabled,
+        border_style_enabled=book.border_style_enabled,
     )
 
 
@@ -177,6 +187,17 @@ def create_book(payload: BookCreate, db: Session = Depends(get_db)):
         line_weight=book.line_weight,
         detail_density=book.detail_density,
         style_tone=book.style_tone,
+        subject_treatment=book.subject_treatment,
+        character_mood=book.character_mood,
+        background_richness=book.background_richness,
+        border_style=book.border_style,
+        line_weight_enabled=book.line_weight_enabled,
+        detail_density_enabled=book.detail_density_enabled,
+        style_tone_enabled=book.style_tone_enabled,
+        subject_treatment_enabled=book.subject_treatment_enabled,
+        character_mood_enabled=book.character_mood_enabled,
+        background_richness_enabled=book.background_richness_enabled,
+        border_style_enabled=book.border_style_enabled,
     )
 
 
@@ -207,6 +228,17 @@ def update_book(book_id: int, payload: BookUpdate, db: Session = Depends(get_db)
         line_weight=book.line_weight,
         detail_density=book.detail_density,
         style_tone=book.style_tone,
+        subject_treatment=book.subject_treatment,
+        character_mood=book.character_mood,
+        background_richness=book.background_richness,
+        border_style=book.border_style,
+        line_weight_enabled=book.line_weight_enabled,
+        detail_density_enabled=book.detail_density_enabled,
+        style_tone_enabled=book.style_tone_enabled,
+        subject_treatment_enabled=book.subject_treatment_enabled,
+        character_mood_enabled=book.character_mood_enabled,
+        background_richness_enabled=book.background_richness_enabled,
+        border_style_enabled=book.border_style_enabled,
     )
 
 

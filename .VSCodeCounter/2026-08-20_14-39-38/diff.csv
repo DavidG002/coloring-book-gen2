@@ -1,0 +1,44 @@
+"filename", "language", "Python", "Markdown", "Shell Script", "JSON", "TypeScript", "TypeScript JSX", "comment", "blank", "total"
+"/home/davidg/Developer/projects/coloring-book-gen2/README.md", "Markdown", 0, 125, 0, 0, 0, 0, 0, 17, 142
+"/home/davidg/Developer/projects/coloring-book-gen2/backend/backup.sh", "Shell Script", 0, 0, 10, 0, 0, 0, 6, 7, 23
+"/home/davidg/Developer/projects/coloring-book-gen2/backend/main.py", "Python", 10, 0, 0, 0, 0, 0, 0, 1, 11
+"/home/davidg/Developer/projects/coloring-book-gen2/backend/models.py", "Python", 32, 0, 0, 0, 0, 0, 2, 7, 41
+"/home/davidg/Developer/projects/coloring-book-gen2/backend/routers/backup.py", "Python", 55, 0, 0, 0, 0, 0, 0, 14, 69
+"/home/davidg/Developer/projects/coloring-book-gen2/backend/routers/books.py", "Python", 101, 0, 0, 0, 0, 0, 0, 20, 121
+"/home/davidg/Developer/projects/coloring-book-gen2/backend/routers/generation.py", "Python", 5, 0, 0, 0, 0, 0, 0, 0, 5
+"/home/davidg/Developer/projects/coloring-book-gen2/backend/routers/publish.py", "Python", 0, 0, 0, 0, 0, 0, 0, 2, 2
+"/home/davidg/Developer/projects/coloring-book-gen2/backend/routers/review.py", "Python", 1, 0, 0, 0, 0, 0, 0, 0, 1
+"/home/davidg/Developer/projects/coloring-book-gen2/backend/routers/wordpress.py", "Python", 9, 0, 0, 0, 0, 0, 0, 1, 10
+"/home/davidg/Developer/projects/coloring-book-gen2/backend/schemas.py", "Python", 69, 0, 0, 0, 0, 0, 1, 21, 91
+"/home/davidg/Developer/projects/coloring-book-gen2/backend/services/backup.py", "Python", 134, 0, 0, 0, 0, 0, 18, 35, 187
+"/home/davidg/Developer/projects/coloring-book-gen2/backend/services/generation.py", "Python", 85, 0, 0, 0, 0, 0, 11, 15, 111
+"/home/davidg/Developer/projects/coloring-book-gen2/backend/services/prompt_knobs.py", "Python", 25, 0, 0, 0, 0, 0, 13, 8, 46
+"/home/davidg/Developer/projects/coloring-book-gen2/backend/services/wordpress_publish.py", "Python", 133, 0, 0, 0, 0, 0, 11, 28, 172
+"/home/davidg/Developer/projects/coloring-book-gen2/docs/README.md", "Markdown", 0, 12, 0, 0, 0, 0, 0, 3, 15
+"/home/davidg/Developer/projects/coloring-book-gen2/docs/architecture.md", "Markdown", 0, 82, 0, 0, 0, 0, 0, 18, 100
+"/home/davidg/Developer/projects/coloring-book-gen2/docs/data-model.md", "Markdown", 0, 89, 0, 0, 0, 0, 0, 29, 118
+"/home/davidg/Developer/projects/coloring-book-gen2/docs/decision-log.md", "Markdown", 0, 106, 0, 0, 0, 0, 0, 10, 116
+"/home/davidg/Developer/projects/coloring-book-gen2/docs/environment-deployment.md", "Markdown", 0, 72, 0, 0, 0, 0, 0, 14, 86
+"/home/davidg/Developer/projects/coloring-book-gen2/docs/generation-publishing.md", "Markdown", 0, 78, 0, 0, 0, 0, 0, 20, 98
+"/home/davidg/Developer/projects/coloring-book-gen2/docs/ideas-backlog.md", "Markdown", 0, 12, 0, 0, 0, 0, 0, 6, 18
+"/home/davidg/Developer/projects/coloring-book-gen2/docs/seo-pipeline.md", "Markdown", 0, 76, 0, 0, 0, 0, 0, 21, 97
+"/home/davidg/Developer/projects/coloring-book-gen2/docs/wordpress-integration.md", "Markdown", 0, 115, 0, 0, 0, 0, 0, 27, 142
+"/home/davidg/Developer/projects/coloring-book-gen2/frontend/app/books/[id]/page.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 7, 0, 0, 7
+"/home/davidg/Developer/projects/coloring-book-gen2/frontend/app/books/[id]/settings/page.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, -760, 0, -47, -807
+"/home/davidg/Developer/projects/coloring-book-gen2/frontend/app/settings/page.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, -82, -9, -6, -97
+"/home/davidg/Developer/projects/coloring-book-gen2/frontend/components/BackupSettingsPanel.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 314, 2, 31, 347
+"/home/davidg/Developer/projects/coloring-book-gen2/frontend/components/BookPreviewSection.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 512, 6, 38, 556
+"/home/davidg/Developer/projects/coloring-book-gen2/frontend/components/BookSettingsFields.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 506, 1, 39, 546
+"/home/davidg/Developer/projects/coloring-book-gen2/frontend/components/DeleteBookModal.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, -11, 0, -1, -12
+"/home/davidg/Developer/projects/coloring-book-gen2/frontend/components/DeleteCategoryModal.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, -6, 0, 0, -6
+"/home/davidg/Developer/projects/coloring-book-gen2/frontend/components/LanguagePills.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 30, 0, 2, 32
+"/home/davidg/Developer/projects/coloring-book-gen2/frontend/components/PublishPanel.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, -49, 0, -5, -54
+"/home/davidg/Developer/projects/coloring-book-gen2/frontend/components/ReviewPanel.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, -11, 0, -1, -12
+"/home/davidg/Developer/projects/coloring-book-gen2/frontend/components/SeoPanel.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, -11, 0, -1, -12
+"/home/davidg/Developer/projects/coloring-book-gen2/frontend/components/SettingsUI.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 181, 0, 11, 192
+"/home/davidg/Developer/projects/coloring-book-gen2/frontend/components/WordPressPushPanel.tsx", "TypeScript JSX", 0, 0, 0, 0, 0, 32, 0, -1, 31
+"/home/davidg/Developer/projects/coloring-book-gen2/frontend/lib/api/generated-types.ts", "TypeScript", 0, 0, 0, 0, 3593, 0, 791, 2, 4386
+"/home/davidg/Developer/projects/coloring-book-gen2/frontend/lib/api/types.ts", "TypeScript", 0, 0, 0, 0, -20, 0, 0, 0, -20
+"/home/davidg/Developer/projects/coloring-book-gen2/frontend/package-lock.json", "JSON", 0, 0, 0, 257, 0, 0, 0, 0, 257
+"/home/davidg/Developer/projects/coloring-book-gen2/frontend/package.json", "JSON", 0, 0, 0, 2, 0, 0, 0, 0, 2
+"Total", "-", 659, 767, 10, 259, 3573, 652, 853, 385, 7158

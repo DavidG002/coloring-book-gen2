@@ -49,6 +49,17 @@ class BookBase(BaseModel):
     line_weight: str = "medium"
     detail_density: str = "moderate"
     style_tone: str = "balanced"
+    subject_treatment: str = "personified"
+    character_mood: str = "cute"
+    background_richness: str = "light_props"
+    border_style: str = "none"
+    line_weight_enabled: bool = True
+    detail_density_enabled: bool = True
+    style_tone_enabled: bool = True
+    subject_treatment_enabled: bool = True
+    character_mood_enabled: bool = True
+    background_richness_enabled: bool = True
+    border_style_enabled: bool = True
 
 
 class BookCreate(BookBase):
@@ -68,6 +79,17 @@ class BookUpdate(BaseModel):
     line_weight: Optional[str] = None
     detail_density: Optional[str] = None
     style_tone: Optional[str] = None
+    subject_treatment: Optional[str] = None
+    character_mood: Optional[str] = None
+    background_richness: Optional[str] = None
+    border_style: Optional[str] = None
+    line_weight_enabled: Optional[bool] = None
+    detail_density_enabled: Optional[bool] = None
+    style_tone_enabled: Optional[bool] = None
+    subject_treatment_enabled: Optional[bool] = None
+    character_mood_enabled: Optional[bool] = None
+    background_richness_enabled: Optional[bool] = None
+    border_style_enabled: Optional[bool] = None
 
 
 class BookRead(BookBase):
