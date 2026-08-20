@@ -46,6 +46,9 @@ class BookBase(BaseModel):
     white_clean_threshold: int = 245
     black_clean_threshold: int = 10
     palette_colors: int = 8
+    line_weight: str = "medium"
+    detail_density: str = "moderate"
+    style_tone: str = "balanced"
 
 
 class BookCreate(BookBase):
@@ -62,12 +65,18 @@ class BookUpdate(BaseModel):
     white_clean_threshold: Optional[int] = None
     black_clean_threshold: Optional[int] = None
     palette_colors: Optional[int] = None
+    line_weight: Optional[str] = None
+    detail_density: Optional[str] = None
+    style_tone: Optional[str] = None
 
 
 class BookRead(BookBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     category_count: int = 0
+    line_weight: str = "medium"
+    detail_density: str = "moderate"
+    style_tone: str = "balanced"
 
 
 class BookSummary(BaseModel):

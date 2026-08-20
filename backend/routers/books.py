@@ -83,9 +83,15 @@ def preview_book_settings(book_id: int, payload: BookPreviewRequest, db: Session
         "watermark_scale": book.watermark_scale,
     }
 
-    prompt_used = book.base_prompt + f" Cute {task['subject']}. {task['variation_text']}."
-
-    image_bytes = generate_preview_image(book.base_prompt, task["subject"], task["variation_text"], settings)
+    image_bytes, prompt_used = generate_preview_image(
+        book.base_prompt,
+        task["subject"],
+        task["variation_text"],
+        settings,
+        line_weight=book.line_weight,
+        detail_density=book.detail_density,
+        style_tone=book.style_tone,
+    )
     if image_bytes is None:
         raise HTTPException(status_code=500, detail="Failed to generate preview image")
 
@@ -140,6 +146,9 @@ def get_book(book_id: int, db: Session = Depends(get_db)):
         black_clean_threshold=book.black_clean_threshold,
         palette_colors=book.palette_colors,
         category_count=len(book.categories),
+        line_weight=book.line_weight,
+        detail_density=book.detail_density,
+        style_tone=book.style_tone,
     )
 
 
@@ -165,6 +174,9 @@ def create_book(payload: BookCreate, db: Session = Depends(get_db)):
         black_clean_threshold=book.black_clean_threshold,
         palette_colors=book.palette_colors,
         category_count=0,
+        line_weight=book.line_weight,
+        detail_density=book.detail_density,
+        style_tone=book.style_tone,
     )
 
 
@@ -192,6 +204,9 @@ def update_book(book_id: int, payload: BookUpdate, db: Session = Depends(get_db)
         black_clean_threshold=book.black_clean_threshold,
         palette_colors=book.palette_colors,
         category_count=len(book.categories),
+        line_weight=book.line_weight,
+        detail_density=book.detail_density,
+        style_tone=book.style_tone,
     )
 
 

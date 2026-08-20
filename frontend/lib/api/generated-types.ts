@@ -1085,6 +1085,21 @@ export interface components {
              * @default 8
              */
             palette_colors: number;
+            /**
+             * Line Weight
+             * @default medium
+             */
+            line_weight: string;
+            /**
+             * Detail Density
+             * @default moderate
+             */
+            detail_density: string;
+            /**
+             * Style Tone
+             * @default balanced
+             */
+            style_tone: string;
         };
         /** BookDeletionCategoryInfo */
         BookDeletionCategoryInfo: {
@@ -1232,6 +1247,21 @@ export interface components {
              * @default 8
              */
             palette_colors: number;
+            /**
+             * Line Weight
+             * @default medium
+             */
+            line_weight: string;
+            /**
+             * Detail Density
+             * @default moderate
+             */
+            detail_density: string;
+            /**
+             * Style Tone
+             * @default balanced
+             */
+            style_tone: string;
             /** Id */
             id: number;
             /**
@@ -1269,6 +1299,12 @@ export interface components {
             black_clean_threshold?: number | null;
             /** Palette Colors */
             palette_colors?: number | null;
+            /** Line Weight */
+            line_weight?: string | null;
+            /** Detail Density */
+            detail_density?: string | null;
+            /** Style Tone */
+            style_tone?: string | null;
         };
         /** CategoryCreate */
         CategoryCreate: {

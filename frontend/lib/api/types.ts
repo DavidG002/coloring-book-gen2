@@ -1,19 +1,8 @@
+import type { components } from "./generated-types";
 
 //  ---------- Books ----------
 
-export interface Book {
-  id: number;
-  name: string;
-  base_prompt: string;
-  product_noun: string;
-  canvas_width: number;
-  canvas_height: number;
-  subject_size_ratio: number;
-  white_clean_threshold: number;
-  black_clean_threshold: number;
-  palette_colors: number;
-  category_count: number;
-}
+export type Book = components["schemas"]["BookRead"];
 
 export interface BookSummary {
   id: number;
@@ -21,19 +10,10 @@ export interface BookSummary {
   category_count: number;
 }
 
-export interface BookCreateInput {
-  name: string;
-  base_prompt: string;
-  product_noun?: string;
-  canvas_width?: number;
-  canvas_height?: number;
-  subject_size_ratio?: number;
-  white_clean_threshold?: number;
-  black_clean_threshold?: number;
-  palette_colors?: number;
-}
+export type BookCreateInput = Pick<components["schemas"]["BookCreate"], "name" | "base_prompt"> &
+  Partial<Omit<components["schemas"]["BookCreate"], "name" | "base_prompt">>;
 
-export type BookUpdateInput = Partial<BookCreateInput>;
+export type BookUpdateInput = components["schemas"]["BookUpdate"];
 
 
 

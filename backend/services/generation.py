@@ -46,6 +46,9 @@ def build_task_list(
                 "variation_number": variation_num,
                 "variation_text": modifier.text,
                 "base_prompt": category.book.base_prompt,
+                "line_weight": category.book.line_weight,
+                "detail_density": category.book.detail_density,
+                "style_tone": category.book.style_tone,
             })
 
     if max_images:
@@ -218,7 +221,15 @@ def _process_raw_image(image_bytes: bytes, settings: dict):
     return final
 
 def generate_image_file(task: dict, settings: dict, output_path: str) -> bool:
-    prompt = task["base_prompt"] + f" Cute {task['subject']}. {task['variation_text']}."
+    from services.prompt_knobs import build_full_prompt
+    prompt = build_full_prompt(
+        task["base_prompt"],
+        task["subject"],
+        task["variation_text"],
+        task.get("line_weight", "medium"),
+        task.get("detail_density", "moderate"),
+        task.get("style_tone", "balanced"),
+    )
 
     try:
         client = get_openai_client()
@@ -243,13 +254,23 @@ def generate_image_file(task: dict, settings: dict, output_path: str) -> bool:
 PREVIEW_DIR = "preview_cache"
 
 
-def generate_preview_image(base_prompt: str, subject: str, variation_text: str, settings: dict) -> bytes | None:
+def generate_preview_image(
+    base_prompt: str,
+    subject: str,
+    variation_text: str,
+    settings: dict,
+    line_weight: str = "medium",
+    detail_density: str = "moderate",
+    style_tone: str = "balanced",
+) -> tuple[bytes, str] | tuple[None, None]:
     """Runs a real, billed generation call using an actual subject + variation
     from the book's categories, so the preview matches genuine output exactly.
-    Returns raw PNG bytes. Saving to disk + history is handled separately by
-    the caller (save_preview_to_history), since this function stays focused
-    on just producing the image."""
-    prompt = base_prompt + f" Cute {subject}. {variation_text}."
+    Returns (raw PNG bytes, the exact prompt used) — the caller needs the
+    prompt too, for accurate history tracking, and this is the one place
+    that knows the real, final resolved string. Saving to disk + history is
+    handled separately by the caller (save_preview_to_history)."""
+    from services.prompt_knobs import build_full_prompt
+    prompt = build_full_prompt(base_prompt, subject, variation_text, line_weight, detail_density, style_tone)
 
     try:
         client = get_openai_client()
@@ -264,13 +285,13 @@ def generate_preview_image(base_prompt: str, subject: str, variation_text: str, 
 
         buf = io.BytesIO()
         final.save(buf, "PNG")
-        return buf.getvalue()
+        return buf.getvalue(), prompt
 
     except Exception as e:
         import traceback
         print(f"Error generating preview: {e}")
         traceback.print_exc()
-        return None
+        return None, None
 
 
 def save_preview_to_history(

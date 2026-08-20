@@ -50,6 +50,10 @@ class Book(Base):
     watermark_scale = Column(Float, nullable=False, default=0.15)
     watermark_filename = Column(String, nullable=True)
 
+    line_weight = Column(String, nullable=False, default="medium")
+    detail_density = Column(String, nullable=False, default="moderate")
+    style_tone = Column(String, nullable=False, default="balanced")     
+
 
 class Category(Base):
     __tablename__ = "categories"
