@@ -3,11 +3,22 @@
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
+import { ArrowLeft, Trash2, Plus, Image as ImageIcon, MoreHorizontal, ArrowUpRight, BookOpen } from "lucide-react";
 import { getBook, getCategories, ApiError, type Book, type CategorySummary } from "@/lib/api";
 import NewCategoryModal from "@/components/NewCategoryModal";
 import DeleteBookModal from "@/components/DeleteBookModal";
 import BookSettingsFields from "@/components/BookSettingsFields";
 import BookPreviewSection from "@/components/BookPreviewSection";
+import PrepareCategoryPanel from "@/components/PrepareCategoryPanel";
+import { Panel, PanelSection } from "@/components/SettingsUI";
+
+const TONES = [
+  { bg: "var(--tone-sage-bg)", fg: "var(--tone-sage)" },
+  { bg: "var(--tone-blue-bg)", fg: "var(--tone-blue)" },
+  { bg: "var(--tone-peach-bg)", fg: "var(--tone-peach)" },
+  { bg: "var(--tone-yellow-bg)", fg: "var(--tone-yellow)" },
+  { bg: "var(--tone-lavender-bg)", fg: "var(--tone-lavender)" },
+];
 
 export default function BookDetailPage() {
   const router = useRouter();
@@ -21,7 +32,7 @@ export default function BookDetailPage() {
   const [notFound, setNotFound] = useState(false);
   const [showNewCategoryModal, setShowNewCategoryModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [lastCreatedCategory, setLastCreatedCategory] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,9 +63,24 @@ export default function BookDetailPage() {
     };
   }, [bookId]);
 
+  async function handleCloseNewCategoryModal() {
+    setShowNewCategoryModal(false);
+    try {
+      const allCategories = await getCategories();
+      const mine = allCategories.filter((c) => c.book_id === bookId);
+      setCategories(mine);
+      if (mine.length > 0) {
+        const newest = mine.reduce((a, b) => (b.id > a.id ? b : a));
+        setLastCreatedCategory(newest.name);
+      }
+    } catch {
+      // silent
+    }
+  }
+
   if (loading) {
     return (
-      <main className="min-h-screen px-8 py-12 max-w-5xl mx-auto">
+      <main className="min-h-screen px-8 py-12 max-w-6xl mx-auto">
         <p style={{ color: "var(--pencil)" }}>Loading...</p>
       </main>
     );
@@ -77,137 +103,163 @@ export default function BookDetailPage() {
     );
   }
 
+  const totalSubjects = categories.reduce((sum, c) => sum + c.subject_count, 0);
+
   return (
-    <main className="min-h-screen px-8 py-12 max-w-5xl mx-auto">
-      <header className="mb-8 flex items-start justify-between">
-        <div>
-          <button
-            onClick={() => router.push("/books")}
-            className="text-sm mb-3 inline-block"
-            style={{ color: "var(--pencil)" }}
-          >
-            {"\u2190"} All books
-          </button>
-          <h1 className="text-3xl font-display font-semibold" style={{ color: "var(--ink)" }}>
-            {book.name}
-          </h1>
-          <p className="mt-1 text-sm" style={{ color: "var(--pencil)" }}>
-            {book.category_count} {book.category_count === 1 ? "category" : "categories"}
-          </p>
-        </div>
+    <div style={{ background: "var(--paper)" }}>
+      <div
+        className="flex items-center justify-between px-11"
+        style={{ height: 62, borderBottom: "1px solid var(--pencil-light)" }}
+      >
+        <button
+          onClick={() => router.push("/books")}
+          className="inline-flex items-center gap-2 text-xs"
+          style={{ color: "var(--pencil)" }}
+        >
+          <ArrowLeft size={15} /> Back to books
+        </button>
         <button
           onClick={() => setShowDeleteModal(true)}
-          className="px-4 py-2 rounded-md text-sm font-medium"
-          style={{ color: "var(--coral-dark)", border: "1.5px solid var(--coral)" }}
+          className="inline-flex items-center gap-1.5 text-xs font-bold"
+          style={{ color: "var(--coral-dark)" }}
         >
-          Delete book
-        </button>
-      </header>
-
-      {error && (
-        <div
-          className="mb-6 px-4 py-3 rounded-md text-sm"
-          style={{ background: "var(--coral-light)", color: "var(--coral-dark)", border: "1px solid var(--coral)" }}
-        >
-          {error}
-        </div>
-      )}
-
-      <div className="space-y-6 mb-8">
-        <div className="rounded-lg border-[1.5px] overflow-hidden" style={{ borderColor: "var(--pencil-light)" }}>
-          <button
-            onClick={() => setSettingsOpen((v) => !v)}
-            className="w-full flex items-center justify-between px-6 py-4 text-left"
-            style={{ background: "var(--canvas)" }}
-          >
-            <div className="flex items-center gap-2.5">
-              <h2 className="font-display text-lg font-semibold" style={{ color: "var(--ink)" }}>
-                Book settings
-              </h2>
-              <span className="text-xs" style={{ color: "var(--pencil)" }}>
-                name, type, prompt, watermark, image settings
-              </span>
-            </div>
-            <span
-              className="text-sm transition-transform"
-              style={{ color: "var(--pencil)", transform: settingsOpen ? "rotate(180deg)" : "rotate(0deg)" }}
-            >
-              {"\u25BE"}
-            </span>
-          </button>
-          {settingsOpen && (
-            <div className="p-6 border-t-[1.5px]" style={{ borderColor: "var(--pencil-light)", background: "var(--paper)" }}>
-              <BookSettingsFields bookId={bookId} onBookLoaded={setBook} />
-            </div>
-          )}
-        </div>
-
-        <BookPreviewSection bookId={bookId} />
-      </div>
-
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="font-display text-lg font-semibold" style={{ color: "var(--ink)" }}>
-          Categories
-        </h2>
-        <button
-          onClick={() => setShowNewCategoryModal(true)}
-          className="text-sm font-medium"
-          style={{ color: "var(--teal)" }}
-        >
-          + New category
+          <Trash2 size={14} /> Delete book
         </button>
       </div>
 
-      {categories.length === 0 ? (
-        <div
-          className="rounded-lg border-2 border-dashed p-12 text-center"
-          style={{ borderColor: "var(--pencil-light)", color: "var(--pencil)" }}
-        >
-          <p className="mb-4">No categories yet in this book.</p>
-          <button
-            onClick={() => setShowNewCategoryModal(true)}
-            className="px-5 py-2.5 rounded-md text-sm font-medium text-white"
-            style={{ background: "var(--teal)" }}
-          >
-            + New category
-          </button>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {categories.map((cat) => (
-            <Link
-              key={cat.id}
-              href={`/categories/${encodeURIComponent(cat.name)}`}
-              className="group relative block rounded-lg border-[1.5px] p-5 transition-shadow hover:shadow-md"
-              style={{ background: "var(--canvas)", borderColor: "var(--pencil-light)" }}
+      <main className="max-w-6xl mx-auto px-8 py-10">
+        <div className="flex items-end justify-between gap-5 mb-9">
+          <div>
+            <p className="text-[10px] uppercase font-bold m-0 mb-2" style={{ color: "var(--pencil)", letterSpacing: "0.12em" }}>
+              Book studio / {book.name}
+            </p>
+            <h1
+              className="font-display font-normal m-0"
+              style={{ fontSize: "clamp(36px, 5vw, 52px)", letterSpacing: "-0.05em", color: "var(--ink)" }}
             >
-              <span
-                className="absolute -top-2.5 left-5 px-2 text-xs font-medium rounded"
-                style={{ background: "var(--teal)", color: "white" }}
-              >
-                {cat.subject_count} {cat.subject_count === 1 ? "subject" : "subjects"}
-              </span>
-              <h2 className="font-display text-xl font-semibold mt-2 capitalize" style={{ color: "var(--ink)" }}>
-                {cat.name}
-              </h2>
-              <p className="mt-2 text-sm" style={{ color: "var(--pencil)" }}>
-                {cat.variation_count} pose {cat.variation_count === 1 ? "variation" : "variations"}
+              {book.name}
+              <span style={{ color: "var(--teal)" }}>.</span>
+            </h1>
+            {book.base_prompt && (
+              <p className="text-[13px] m-0 mt-2.5 max-w-lg" style={{ color: "var(--pencil)" }}>
+                {book.base_prompt}
               </p>
-            </Link>
-          ))}
+            )}
+          </div>
+          <div
+            className="inline-flex items-center gap-2 shrink-0 rounded-lg"
+            style={{ padding: "12px 14px", border: "1px solid var(--pencil-light)", background: "var(--canvas)" }}
+          >
+            <BookOpen size={16} style={{ color: "var(--teal)" }} />
+            <span className="font-display" style={{ fontSize: 19, color: "var(--ink)" }}>
+              {totalSubjects}
+            </span>
+            <span className="text-[11px]" style={{ color: "var(--pencil)" }}>
+              subjects
+            </span>
+          </div>
         </div>
-      )}
+
+        {error && (
+          <div
+            className="mb-6 px-4 py-3 rounded-md text-sm"
+            style={{ background: "var(--coral-light)", color: "var(--coral-dark)", border: "1px solid var(--coral)" }}
+          >
+            {error}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6 items-start">
+          <div className="space-y-6 min-w-0">
+            <BookPreviewSection bookId={bookId} />
+
+            <Panel
+              kicker="YOUR COLLECTIONS"
+              title={
+                <>
+                  Categories{" "}
+                  <span style={{ fontSize: 14, color: "var(--teal)", fontFamily: "inherit" }}>{categories.length}</span>
+                </>
+              }
+              right={
+                <button
+                  onClick={() => setShowNewCategoryModal(true)}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold"
+                  style={{ color: "var(--teal)" }}
+                >
+                  <Plus size={15} /> Add category
+                </button>
+              }
+            >
+              {categories.length === 0 ? (
+                <p className="text-sm" style={{ color: "var(--pencil)" }}>
+                  No categories yet in this book.
+                </p>
+              ) : (
+                <div className="grid gap-2">
+                  {categories.map((cat, i) => {
+                    const tone = TONES[i % TONES.length];
+                    return (
+                      <Link
+                        key={cat.id}
+                        href={`/categories/${encodeURIComponent(cat.name)}`}
+                        className="lift-hover flex items-center gap-3"
+                        style={{ padding: "11px 10px", border: "1px solid var(--pencil-light)", borderRadius: 9 }}
+                      >
+                        <div
+                          className="w-[34px] h-[34px] rounded-lg flex items-center justify-center shrink-0"
+                          style={{ background: tone.bg, color: tone.fg }}
+                        >
+                          <ImageIcon size={16} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold m-0 capitalize" style={{ color: "var(--ink)" }}>
+                            {cat.name}
+                          </p>
+                          <p className="text-[10px] m-0 mt-1" style={{ color: "var(--pencil)" }}>
+                            {cat.subject_count} subjects, {cat.variation_count} variations
+                          </p>
+                        </div>
+                        <MoreHorizontal size={16} style={{ color: "var(--pencil)" }} />
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+
+              <button
+                onClick={() => setShowNewCategoryModal(true)}
+                className="w-full flex items-center justify-between mt-2 text-xs font-bold"
+                style={{ color: "var(--teal)", padding: "10px 2px" }}
+              >
+                <span className="inline-flex items-center gap-1.5">
+                  <Plus size={14} /> Add another category
+                </span>
+                <ArrowUpRight size={14} />
+              </button>
+
+              <PanelSection label="Prepare a category">
+                <PrepareCategoryPanel categories={categories} defaultCategoryName={lastCreatedCategory} />
+              </PanelSection>
+            </Panel>
+          </div>
+
+          <div className="space-y-6">
+            <BookSettingsFields bookId={bookId} onBookLoaded={setBook} />
+          </div>
+        </div>
+      </main>
 
       {showNewCategoryModal && book && (
         <NewCategoryModal
           bookId={book.id}
           bookName={book.name}
-          onClose={() => setShowNewCategoryModal(false)}
+          onClose={handleCloseNewCategoryModal}
         />
       )}
       {showDeleteModal && (
         <DeleteBookModal bookId={bookId} onClose={() => setShowDeleteModal(false)} />
       )}
-    </main>
+    </div>
   );
 }

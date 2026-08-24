@@ -13,12 +13,14 @@ interface KnobDef {
   key: string;
   label: string;
   presets: KnobPreset[];
+  color: { bg: string; fg: string };
 }
 
 const KNOB_DEFS: KnobDef[] = [
   {
     key: "line_weight",
     label: "Line weight",
+    color: { bg: "var(--tone-sage-bg)", fg: "var(--tone-sage)" },
     presets: [
       { value: "thin", label: "Thin" },
       { value: "medium", label: "Medium" },
@@ -28,6 +30,7 @@ const KNOB_DEFS: KnobDef[] = [
   {
     key: "detail_density",
     label: "Detail density",
+    color: { bg: "var(--tone-blue-bg)", fg: "var(--tone-blue)" },
     presets: [
       { value: "minimal", label: "Minimal" },
       { value: "moderate", label: "Moderate" },
@@ -37,6 +40,7 @@ const KNOB_DEFS: KnobDef[] = [
   {
     key: "style_tone",
     label: "Style tone",
+    color: { bg: "var(--tone-peach-bg)", fg: "var(--tone-peach)" },
     presets: [
       { value: "playful", label: "Playful" },
       { value: "balanced", label: "Balanced" },
@@ -46,6 +50,7 @@ const KNOB_DEFS: KnobDef[] = [
   {
     key: "subject_treatment",
     label: "Subject treatment",
+    color: { bg: "var(--tone-yellow-bg)", fg: "var(--tone-yellow)" },
     presets: [
       { value: "personified", label: "Personified" },
       { value: "realistic", label: "Realistic" },
@@ -55,6 +60,7 @@ const KNOB_DEFS: KnobDef[] = [
   {
     key: "character_mood",
     label: "Character mood",
+    color: { bg: "var(--tone-lavender-bg)", fg: "var(--tone-lavender)" },
     presets: [
       { value: "cute", label: "Cute" },
       { value: "aggressive", label: "Aggressive" },
@@ -67,6 +73,7 @@ const KNOB_DEFS: KnobDef[] = [
   {
     key: "background_richness",
     label: "Background richness",
+    color: { bg: "var(--tone-sage-bg)", fg: "var(--tone-sage)" },
     presets: [
       { value: "bare", label: "Bare" },
       { value: "light_props", label: "Light props" },
@@ -76,6 +83,7 @@ const KNOB_DEFS: KnobDef[] = [
   {
     key: "border_style",
     label: "Border style",
+    color: { bg: "var(--tone-blue-bg)", fg: "var(--tone-blue)" },
     presets: [
       { value: "none", label: "None" },
       { value: "simple_frame", label: "Simple frame" },
@@ -174,7 +182,7 @@ export default function KnobsPanel({
               <label className="text-sm font-medium" style={{ color: "var(--ink)" }}>
                 {def.label}
               </label>
-              <label className="flex items-center gap-1.5 text-xs" style={{ color: "var(--pencil)" }}>
+              <label className="flex items-center gap-1.5 text-[10px]" style={{ color: "var(--pencil)" }}>
                 <input
                   type="checkbox"
                   checked={knobEnabled}
@@ -188,30 +196,30 @@ export default function KnobsPanel({
               <>
                 <div className="flex gap-2 flex-wrap mb-2">
                   {def.presets.map((p) => (
-                    <button
-                      key={p.value}
-                      type="button"
-                      onClick={() => {
-                        setValue(def.key, p.value);
-                        setCustomMode((prev) => ({ ...prev, [def.key]: false }));
-                      }}
-                      className="px-3 py-1.5 rounded-full text-sm border-[1.5px]"
-                      style={
-                        !usingCustom && values[def.key] === p.value
-                          ? { background: "var(--teal)", borderColor: "var(--teal)", color: "white" }
-                          : { borderColor: "var(--pencil-light)", color: "var(--pencil)" }
-                      }
-                    >
-                      {p.label}
-                    </button>
+                  <button
+                    key={p.value}
+                    type="button"
+                    onClick={() => {
+                      setValue(def.key, p.value);
+                      setCustomMode((prev) => ({ ...prev, [def.key]: false }));
+                    }}
+                    className="px-2.5 py-1 rounded-full text-[11px] border-[1.5px]"
+                    style={
+                      !usingCustom && values[def.key] === p.value
+                        ? { background: def.color.fg, borderColor: def.color.fg, color: "white" }
+                        : { borderColor: "var(--pencil-light)", color: "var(--pencil)" }
+                    }
+                  >
+                    {p.label}
+                  </button>
                   ))}
                   <button
                     type="button"
                     onClick={() => setCustomMode((prev) => ({ ...prev, [def.key]: true }))}
-                    className="px-3 py-1.5 rounded-full text-sm border-[1.5px]"
+                    className="px-2.5 py-1 rounded-full text-[11px] border-[1.5px]"
                     style={
                       usingCustom
-                        ? { background: "var(--teal)", borderColor: "var(--teal)", color: "white" }
+                        ? { background: def.color.fg, borderColor: def.color.fg, color: "white" }
                         : { borderColor: "var(--pencil-light)", color: "var(--pencil)" }
                     }
                   >
@@ -224,7 +232,7 @@ export default function KnobsPanel({
                     value={values[def.key]}
                     onChange={(e) => setValue(def.key, e.target.value)}
                     placeholder="Describe it yourself..."
-                    className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
+                    className="w-full px-2.5 py-1.5 rounded-md border-[1.5px] outline-none text-sm"
                     style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
                   />
                 )}

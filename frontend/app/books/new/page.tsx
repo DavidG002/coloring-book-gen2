@@ -38,7 +38,7 @@ export default function NewBookPage() {
         base_prompt: basePrompt.trim(),
         product_noun: productNoun.trim(),
       });
-      router.push(`/books/${book.id}`);
+      router.push(`/books/${book.id}?new=1`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to create book");
       setSubmitting(false);

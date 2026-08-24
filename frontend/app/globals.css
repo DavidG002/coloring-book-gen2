@@ -11,6 +11,17 @@
   --coral: #e8664f;
   --coral-dark: #c94f3a;
   --coral-light: #fdf0ee;
+  --teal-tint: #e2ebf1;
+  --tone-sage-bg: #e3ece5;
+  --tone-sage: #5c8171;
+  --tone-blue-bg: #e0eaf0;
+  --tone-blue: #66879a;
+  --tone-peach-bg: #f5e5d9;
+  --tone-peach: #a7755d;
+  --tone-yellow-bg: #f2e9bf;
+  --tone-yellow: #9a8353;
+  --tone-lavender-bg: #e8e2ef;
+  --tone-lavender: #81718e;
 }
 
 .dark {
@@ -24,6 +35,17 @@
   --coral: #e8664f;
   --coral-dark: #f08a76;
   --coral-light: #2a1815;
+  --teal-tint: #1a2530;
+  --tone-sage-bg: #1e2a22;
+  --tone-sage: #8fb89f;
+  --tone-blue-bg: #1c2530;
+  --tone-blue: #8aa8bd;
+  --tone-peach-bg: #2e2420;
+  --tone-peach: #c99878;
+  --tone-yellow-bg: #2c2818;
+  --tone-yellow: #cbb87a;
+  --tone-lavender-bg: #262133;
+  --tone-lavender: #a998bb;
 }
 
 body {
@@ -34,5 +56,21 @@ body {
 }
 
 h1, h2, h3, .font-display {
-  font-family: var(--font-display), serif;
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+.nav-hover {
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.nav-hover:hover {
+  background: var(--teal-tint);
+  color: var(--teal-dark);
+}
+
+.lift-hover {
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.lift-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px rgba(28, 27, 26, 0.06);
 }

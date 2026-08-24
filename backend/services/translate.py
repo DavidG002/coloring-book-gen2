@@ -80,12 +80,19 @@ def translate_template(text: str, target_lang: str) -> str:
 def translate_template_structure_for_book(product_noun: str, target_lang: str) -> dict[str, str]:
     """Translates a neutral template structure, using this specific Book's
     product noun, into a new language, once — the result becomes that
-    Book+language's reusable default."""
+    Book+language's reusable default. If the target is English, the neutral
+    templates ARE the English version already — asking an LLM to 'translate
+    English into English' is a degenerate, unreliable request that can
+    produce garbled mixed-language output, so we skip the call entirely."""
     neutral_templates = {
         "filename_template": "{category}-{item}",
         "alt_template": f"{{category}} {{item}} {product_noun}, free printable",
         "title_template": f"{{category}} {{item}} {product_noun}",
     }
+
+    if target_lang.lower() == "en":
+        return neutral_templates
+
     return {
         key: translate_template(text, target_lang)
         for key, text in neutral_templates.items()

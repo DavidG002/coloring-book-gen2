@@ -1,11 +1,16 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { Settings2 } from "lucide-react";
 import { getBook, updateBook, ApiError, type Book } from "@/lib/api";
-import { Card, SaveRow, Field, PAPER_PRESETS } from "./SettingsUI";
+import { Panel, PanelSection, SaveRow, Field, PAPER_PRESETS } from "./SettingsUI";
 import KnobsPanel from "./KnobsPanel";
+import { useSearchParams } from "next/navigation";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+type SectionKey = "basics" | "image" | "knobs" | "watermark";
+const SECTION_ORDER: SectionKey[] = ["basics", "image", "knobs", "watermark"];
 
 async function getWatermarkSettings(bookId: number) {
   const res = await fetch(`${API_BASE_URL}/books/${bookId}/watermark`);
@@ -40,7 +45,6 @@ export default function BookSettingsFields({
 }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
   const [book, setBook] = useState<Book | null>(null);
 
   const [name, setName] = useState("");
@@ -71,7 +75,27 @@ export default function BookSettingsFields({
   const [watermarkSaved, setWatermarkSaved] = useState(false);
   const [uploadingWatermark, setUploadingWatermark] = useState(false);
 
+  const searchParams = useSearchParams();
+  const isNewBook = searchParams.get("new") === "1";
+  const [activeSection, setActiveSectionState] = useState<SectionKey>(isNewBook ? "image" : "basics");
+  const [sectionRestored, setSectionRestored] = useState(false);
 
+function setActiveSection(key: SectionKey) {
+  setActiveSectionState(key);
+  if (typeof window !== "undefined") {
+    localStorage.setItem(`book-settings-section-${bookId}`, key);
+  }
+}
+
+  function toggleSection(key: SectionKey) {
+    if (activeSection === key) {
+      const idx = SECTION_ORDER.indexOf(key);
+      const next = idx < SECTION_ORDER.length - 1 ? SECTION_ORDER[idx + 1] : SECTION_ORDER[idx - 1];
+      setActiveSection(next);
+    } else {
+      setActiveSection(key);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -83,8 +107,14 @@ export default function BookSettingsFields({
         const data = await getBook(bookId);
         if (cancelled) return;
         setBook(data);
+        if (!isNewBook && typeof window !== "undefined") {
+          const saved = localStorage.getItem(`book-settings-section-${bookId}`) as SectionKey | null;
+          if (saved && SECTION_ORDER.includes(saved)) {
+            setActiveSectionState(saved);
+          }
+        }
+        setSectionRestored(true);
         setName(data.name);
-        setBasePrompt(data.base_prompt);
         setBasePrompt(data.base_prompt);
         setProductNoun(data.product_noun);
         setCanvasWidth(data.canvas_width);
@@ -149,7 +179,7 @@ export default function BookSettingsFields({
     setError(null);
     const trimmed = productNoun.trim();
     if (!trimmed) {
-      setError("Product type cannot be empty.");
+      setError("Book type cannot be empty.");
       return;
     }
     setSavingProductNoun(true);
@@ -160,33 +190,32 @@ export default function BookSettingsFields({
       setProductNounSaved(true);
       setTimeout(() => setProductNounSaved(false), 2000);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to save product type");
+      setError(err instanceof ApiError ? err.message : "Failed to save book type");
     } finally {
       setSavingProductNoun(false);
     }
   }
 
- async function handleSavePrompt() {
-  setError(null);
-  const trimmed = basePrompt.trim();
-  if (!trimmed) {
-    setError("Base prompt cannot be empty.");
-    return;
+  async function handleSavePrompt() {
+    setError(null);
+    const trimmed = basePrompt.trim();
+    if (!trimmed) {
+      setError("Creative direction cannot be empty.");
+      return;
+    }
+    setSavingPrompt(true);
+    try {
+      const updated = await updateBook(bookId, { base_prompt: trimmed });
+      setBook(updated);
+      onBookLoaded?.(updated);
+      setPromptSaved(true);
+      setTimeout(() => setPromptSaved(false), 2000);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to save creative direction");
+    } finally {
+      setSavingPrompt(false);
+    }
   }
-  setSavingPrompt(true);
-  try {
-    const updated = await updateBook(bookId, { base_prompt: trimmed });
-    setBook(updated);
-    onBookLoaded?.(updated);
-    setPromptSaved(true);
-    setTimeout(() => setPromptSaved(false), 2000);
-  } catch (err) {
-    setError(err instanceof ApiError ? err.message : "Failed to save prompt");
-  } finally {
-    setSavingPrompt(false);
-  }
-}
-
 
   async function handleSaveSettings() {
     setError(null);
@@ -248,72 +277,133 @@ export default function BookSettingsFields({
   }
 
   return (
-    <div className="space-y-6">
+      <Panel
+        compact
+        collapsible
+        title={
+          <span className="inline-flex items-center gap-2">
+            <Settings2 size={15} style={{ color: "var(--teal)" }} /> Book settings
+          </span>
+        }
+      >
       {error && (
         <div
-          className="px-4 py-3 rounded-md text-sm"
+          className="mb-4 px-4 py-3 rounded-md text-sm"
           style={{ background: "var(--coral-light)", color: "var(--coral-dark)", border: "1px solid var(--coral)" }}
         >
           {error}
         </div>
       )}
 
-      <Card title="Book name & type" description="How this book appears throughout the app.">
+        {/* Accordion: only one open at a time; closing one advances to the next */}
         <div>
-          <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
-            Book name
+          <label className="block text-[10px] uppercase font-bold mb-1.5" style={{ color: "var(--pencil)", letterSpacing: "0.08em" }}>
+            Creative direction
           </label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
+          <textarea
+            value={basePrompt}
+            onChange={(e) => setBasePrompt(e.target.value)}
+            rows={4}
+            className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-xs leading-relaxed"
             style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
           />
-          <SaveRow onClick={handleSaveName} saving={savingName} saved={nameSaved} />
+          <SaveRow onClick={handleSavePrompt} saving={savingPrompt} saved={promptSaved} label="Save prompt" />
         </div>
 
-        <div className="mt-6 pt-6 border-t-[1.5px]" style={{ borderColor: "var(--pencil-light)" }}>
-          <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
-            Book type
+        <PanelSection label="Book basics" open={activeSection === "basics"} onToggle={() => toggleSection("basics")}>
+          <div>
+            <label className="block text-[10px] uppercase font-bold mb-1.5" style={{ color: "var(--pencil)", letterSpacing: "0.08em" }}>
+              Book title
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-xs"
+              style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+            />
+            <SaveRow onClick={handleSaveName} saving={savingName} saved={nameSaved} />
+          </div>
+
+          <div className="mt-5">
+            <label className="block text-[10px] uppercase font-bold mb-1.5" style={{ color: "var(--pencil)", letterSpacing: "0.08em" }}>
+              Book type
+            </label>
+            <p className="text-[11px] mb-1.5" style={{ color: "var(--pencil)" }}>
+              The word used consistently across generated titles, descriptions, and SEO content.
+            </p>
+            <input
+              type="text"
+              value={productNoun}
+              onChange={(e) => setProductNoun(e.target.value)}
+              className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-xs"
+              style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+            />
+            <SaveRow onClick={handleSaveProductNoun} saving={savingProductNoun} saved={productNounSaved} />
+          </div>
+        </PanelSection>
+
+        <PanelSection label="Image settings" open={activeSection === "image"} onToggle={() => toggleSection("image")}>
+        <div className="mb-4">
+          <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--ink)" }}>
+            Paper size preset
           </label>
-          <p className="text-xs mb-1.5" style={{ color: "var(--pencil)" }}>
-            The word used consistently across generated titles, descriptions, and SEO content.
-          </p>
-          <input
-            type="text"
-            value={productNoun}
-            onChange={(e) => setProductNoun(e.target.value)}
-            className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
+          <select
+            value={PAPER_PRESETS.find((p) => p.width === canvasWidth && p.height === canvasHeight)?.label ?? "custom"}
+            onChange={(e) => e.target.value !== "custom" && applyPreset(e.target.value)}
+            className="w-full px-2.5 py-1.5 rounded-md border-[1.5px] outline-none text-xs"
             style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
-          />
-          <SaveRow onClick={handleSaveProductNoun} saving={savingProductNoun} saved={productNounSaved} />
+          >
+            <option value="custom" disabled>
+              {PAPER_PRESETS.some((p) => p.width === canvasWidth && p.height === canvasHeight)
+                ? "Choose a preset..."
+                : "Custom size"}
+            </option>
+            {PAPER_PRESETS.map((preset) => (
+              <option key={preset.label} value={preset.label}>
+                {preset.label}
+              </option>
+            ))}
+          </select>
         </div>
-      </Card>
 
-      <Card
-        title="Base prompt"
-        description="Shared by every category in this book. Subjects and pose variations are defined per category."
-      >
-        <textarea
-          value={basePrompt}
-          onChange={(e) => setBasePrompt(e.target.value)}
-          rows={8}
-          className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm leading-relaxed"
-          style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
-        />
-        <SaveRow onClick={handleSavePrompt} saving={savingPrompt} saved={promptSaved} label="Save prompt" />
-      </Card>
-       <Card title="Style knobs" description="Structured style controls, applied on top of the base prompt for every generated image. Each can be turned off if it doesn't apply to this book's product type.">
-        {book && <KnobsPanel bookId={bookId} book={book} onBookLoaded={(updated) => { setBook(updated); onBookLoaded?.(updated); }} />}
-      </Card>
-      <Card
-        title="Watermark / logo"
-        description="Applied to every generated image — local publish and WordPress pushes included."
-      >
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <Field label="Canvas width (px)" hint="A4 default is 595" value={canvasWidth} onChange={setCanvasWidth} min={1} />
+          <Field label="Canvas height (px)" hint="A4 default is 842" value={canvasHeight} onChange={setCanvasHeight} min={1} />
+          <Field
+            label="Subject size ratio"
+            hint="Fraction of canvas height"
+            value={subjectSizeRatio}
+            onChange={setSubjectSizeRatio}
+            step={0.05}
+            min={0.1}
+            max={1}
+          />
+          <Field label="White threshold" hint="Cleanup cutoff" value={whiteThreshold} onChange={setWhiteThreshold} min={0} max={255} />
+          <Field label="Black threshold" hint="Cleanup cutoff" value={blackThreshold} onChange={setBlackThreshold} min={0} max={255} />
+          <Field label="Palette colors" hint="Smaller = smaller file" value={paletteColors} onChange={setPaletteColors} min={2} max={256} />
+        </div>
+
+        <SaveRow onClick={handleSaveSettings} saving={savingSettings} saved={settingsSaved} label="Save settings" />
+      </PanelSection>
+
+      <PanelSection label="Style knobs" open={activeSection === "knobs"} onToggle={() => toggleSection("knobs")}>
+        {book && (
+          <KnobsPanel
+            bookId={bookId}
+            book={book}
+            onBookLoaded={(updated) => {
+              setBook(updated);
+              onBookLoaded?.(updated);
+            }}
+          />
+        )}
+      </PanelSection>
+
+      <PanelSection label="Watermark / logo" open={activeSection === "watermark"} onToggle={() => toggleSection("watermark")}>
         <div className="flex items-center gap-3 mb-4">
           <label
-            className="px-4 py-2 rounded-md text-sm font-medium cursor-pointer border-[1.5px]"
+            className="px-3 py-1.5 rounded-md text-sm font-medium cursor-pointer border-[1.5px]"
             style={{ borderColor: "var(--pencil-light)", color: "var(--pencil)" }}
           >
             {uploadingWatermark ? "Uploading..." : hasWatermarkFile ? "Replace logo" : "Upload logo"}
@@ -326,7 +416,7 @@ export default function BookSettingsFields({
           )}
         </div>
 
-        <label className="flex items-center gap-2 text-sm mb-4" style={{ color: "var(--ink)" }}>
+        <label className="flex items-center gap-2 text-xs mb-4" style={{ color: "var(--ink)" }}>
           <input
             type="checkbox"
             checked={watermarkEnabled}
@@ -347,7 +437,7 @@ export default function BookSettingsFields({
                     key={pos}
                     type="button"
                     onClick={() => setWatermarkPosition(pos)}
-                    className="px-3 py-1.5 rounded-full text-sm border-[1.5px]"
+                    className="px-2.5 py-1 rounded-full text-[11px] border-[1.5px]"
                     style={
                       watermarkPosition === pos
                         ? { background: "var(--teal)", borderColor: "var(--teal)", color: "white" }
@@ -360,87 +450,42 @@ export default function BookSettingsFields({
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
-                Opacity: {Math.round(watermarkOpacity * 100)}%
-              </label>
-              <input
-                type="range"
-                min={0.1}
-                max={1}
-                step={0.05}
-                value={watermarkOpacity}
-                onChange={(e) => setWatermarkOpacity(parseFloat(e.target.value))}
-                className="w-full"
-              />
-            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--ink)" }}>
+                  Opacity: {Math.round(watermarkOpacity * 100)}%
+                </label>
+                <input
+                  type="range"
+                  min={0.1}
+                  max={1}
+                  step={0.05}
+                  value={watermarkOpacity}
+                  onChange={(e) => setWatermarkOpacity(parseFloat(e.target.value))}
+                  className="w-full"
+                />
+              </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
-                Size: {Math.round(watermarkScale * 100)}% of page width
-              </label>
-              <input
-                type="range"
-                min={0.05}
-                max={0.35}
-                step={0.01}
-                value={watermarkScale}
-                onChange={(e) => setWatermarkScale(parseFloat(e.target.value))}
-                className="w-full"
-              />
+              <div>
+                <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
+                  Size: {Math.round(watermarkScale * 100)}%
+                </label>
+                <input
+                  type="range"
+                  min={0.05}
+                  max={0.35}
+                  step={0.01}
+                  value={watermarkScale}
+                  onChange={(e) => setWatermarkScale(parseFloat(e.target.value))}
+                  className="w-full"
+                />
+              </div>
             </div>
           </div>
         )}
 
         <SaveRow onClick={handleSaveWatermark} saving={savingWatermark} saved={watermarkSaved} />
-      </Card>
-
-      <Card title="Image settings" description="Canvas size, subject scale, and cleanup thresholds.">
-        <div className="mb-5">
-          <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
-            Paper size preset
-          </label>
-          <select
-            value={PAPER_PRESETS.find((p) => p.width === canvasWidth && p.height === canvasHeight)?.label ?? "custom"}
-            onChange={(e) => e.target.value !== "custom" && applyPreset(e.target.value)}
-            className="w-56 px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
-            style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
-          >
-            <option value="custom" disabled>
-              {PAPER_PRESETS.some((p) => p.width === canvasWidth && p.height === canvasHeight)
-                ? "Choose a preset..."
-                : "Custom size"}
-            </option>
-            {PAPER_PRESETS.map((preset) => (
-              <option key={preset.label} value={preset.label}>
-                {preset.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="grid grid-cols-2 gap-5 mb-6">
-          <Field label="Canvas width (px)" hint="A4 default is 595" value={canvasWidth} onChange={setCanvasWidth} min={1} />
-          <Field label="Canvas height (px)" hint="A4 default is 842" value={canvasHeight} onChange={setCanvasHeight} min={1} />
-          <Field
-            label="Subject size ratio"
-            hint="Fraction of canvas height the subject fills"
-            value={subjectSizeRatio}
-            onChange={setSubjectSizeRatio}
-            step={0.05}
-            min={0.1}
-            max={1}
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-5">
-          <Field label="White threshold" hint="Pixels brighter than this become pure white" value={whiteThreshold} onChange={setWhiteThreshold} min={0} max={255} />
-          <Field label="Black threshold" hint="Pixels darker than this become pure black" value={blackThreshold} onChange={setBlackThreshold} min={0} max={255} />
-          <Field label="Palette colors" hint="Fewer colors = smaller file size" value={paletteColors} onChange={setPaletteColors} min={2} max={256} />
-        </div>
-
-        <SaveRow onClick={handleSaveSettings} saving={savingSettings} saved={settingsSaved} label="Save settings" />
-      </Card>
-    </div>
+      </PanelSection>
+    </Panel>
   );
 }

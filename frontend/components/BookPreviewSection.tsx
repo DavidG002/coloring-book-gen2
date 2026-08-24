@@ -1,13 +1,26 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { FileText, WandSparkles } from "lucide-react";
 import { getBook, ApiError } from "@/lib/api";
-import { Card } from "./SettingsUI";
-import type { components } from "@/lib/api/generated-types";
+import { Panel, PanelSection } from "./SettingsUI";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-type BookPreviewHistoryItem = components["schemas"]["BookPreviewRead"];
+interface BookPreviewHistoryItem {
+  id: number;
+  category: string;
+  subject: string;
+  variation_text: string;
+  canvas_width: number;
+  canvas_height: number;
+  subject_size_ratio: number;
+  white_clean_threshold: number;
+  black_clean_threshold: number;
+  palette_colors: number;
+  prompt_used?: string | null;
+  created_at: string;
+}
 
 async function checkPreviewAvailability(bookId: number) {
   const res = await fetch(`${API_BASE_URL}/books/${bookId}/preview-availability`);
@@ -160,9 +173,6 @@ export default function BookPreviewSection({ bookId }: { bookId: number }) {
         if (cancelled) return;
         setCategorySubjects(opts.subjects);
         setCategoryVariations(opts.variations);
-        // Default to the auto-picked sample, but only if it's genuinely
-        // part of this category's real options — otherwise fall back to
-        // the first available choice.
         setSelectedSubject(opts.subjects.includes(sampleSubject ?? "") ? (sampleSubject as string) : opts.subjects[0] ?? "");
         setSelectedVariation(
           opts.variations.includes(sampleVariation ?? "") ? (sampleVariation as string) : opts.variations[0] ?? ""
@@ -246,6 +256,16 @@ export default function BookPreviewSection({ bookId }: { bookId: number }) {
     return <p className="text-sm" style={{ color: "var(--pencil)" }}>Loading...</p>;
   }
 
+  if (!previewAvailable) {
+    return (
+      <Panel kicker="PREVIEW CANVAS" title="Bring the story to life">
+        <p className="text-sm" style={{ color: "var(--pencil)" }}>
+          Add at least one subject and one pose variation to a category in this book to enable a real preview.
+        </p>
+      </Panel>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {error && (
@@ -257,228 +277,229 @@ export default function BookPreviewSection({ bookId }: { bookId: number }) {
         </div>
       )}
 
-      <Card title="Preview settings" tinted>
-        {!previewAvailable ? (
-          <p className="text-sm" style={{ color: "var(--pencil)" }}>
-            Add at least one subject and one pose variation to a category in this book to enable a real preview.
-          </p>
-        ) : (
-          <>
-            <div className="grid grid-cols-3 gap-4 mb-4">
-              <div>
-                <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
-                  Category
-                </label>
-                <select
-                  value={selectedPreviewCategory}
-                  onChange={(e) => handlePreviewCategoryChange(e.target.value)}
-                  className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm capitalize"
-                  style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
-                >
-                  {allCategories.map((cat) => (
-                    <option key={cat} value={cat} className="capitalize">
-                      {cat}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
-                  Subject
-                </label>
-                <select
-                  value={selectedSubject}
-                  onChange={(e) => {
-                    setSelectedSubject(e.target.value);
-                    handleClosePreview();
-                  }}
-                  disabled={loadingOptions || categorySubjects.length === 0}
-                  className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm disabled:opacity-50"
-                  style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
-                >
-                  {categorySubjects.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
-                  Variation
-                </label>
-                <select
-                  value={selectedVariation}
-                  onChange={(e) => {
-                    setSelectedVariation(e.target.value);
-                    handleClosePreview();
-                  }}
-                  disabled={loadingOptions || categoryVariations.length === 0}
-                  className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm disabled:opacity-50"
-                  style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
-                >
-                  {categoryVariations.map((v) => (
-                    <option key={v} value={v}>
-                      {v}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {!eligibleCategories.includes(selectedPreviewCategory) && (
-              <p className="mb-4 text-xs" style={{ color: "var(--coral-dark)" }}>
-                This category has no subject and variation yet — add at least one of each before previewing.
-              </p>
-            )}
-
-            {previewState === "idle" ? (
-              <div>
-                <p className="text-sm mb-3" style={{ color: "var(--pencil)" }}>
-                  Generates one real test image of the selected subject + variation, using this book&apos;s current
-                  saved settings. Costs about $0.007.
-                </p>
-                <button
-                  onClick={() => setPreviewState("confirming")}
-                  disabled={!eligibleCategories.includes(selectedPreviewCategory) || !selectedSubject || !selectedVariation}
-                  className="px-4 py-2 rounded-md text-sm font-medium text-white disabled:opacity-40"
-                  style={{ background: "var(--teal)" }}
-                >
-                  Preview settings
-                </button>
-              </div>
-            ) : previewState === "confirming" ? (
-              <div className="flex items-center gap-3">
-                <p className="text-sm" style={{ color: "var(--ink)" }}>
-                  Generate &quot;{selectedSubject} — {selectedVariation}&quot; for ~$0.007?
-                </p>
-                <button
-                  onClick={handleGeneratePreview}
-                  className="px-4 py-2 rounded-md text-sm font-medium text-white"
-                  style={{ background: "var(--teal)" }}
-                >
-                  Yes, generate
-                </button>
-                <button
-                  onClick={() => setPreviewState("idle")}
-                  className="px-4 py-2 rounded-md text-sm font-medium"
-                  style={{ color: "var(--pencil)" }}
-                >
-                  Cancel
-                </button>
-              </div>
-            ) : previewState === "loading" ? (
-              <p className="text-sm" style={{ color: "var(--pencil)" }}>
-                Generating preview...
-              </p>
-            ) : (
-              previewImageUrl && (
-                <div>
-                  <img
-                    src={previewImageUrl}
-                    alt="Settings preview"
-                    onClick={() => {
-                      setLightboxImageUrl(previewImageUrl);
-                      setShowFullSize(true);
-                    }}
-                    className="max-w-xs rounded-md border-[1.5px] mb-3 cursor-pointer hover:opacity-90 transition-opacity"
-                    style={{ borderColor: "var(--pencil-light)" }}
-                  />
-                  <p className="text-xs mb-3" style={{ color: "var(--pencil)" }}>
-                    Click to view at true size ({lastCanvasWidth} × {lastCanvasHeight}px,{" "}
-                    {(lastCanvasWidth / 72).toFixed(2)}&quot; × {(lastCanvasHeight / 72).toFixed(2)}&quot; at 72 DPI)
-                  </p>
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => setPreviewState("confirming")}
-                      className="px-4 py-2 rounded-md text-sm font-medium text-white"
-                      style={{ background: "var(--teal)" }}
-                    >
-                      Regenerate
-                    </button>
-                    <button
-                      onClick={handleClosePreview}
-                      className="px-4 py-2 rounded-md text-sm font-medium"
-                      style={{ color: "var(--pencil)" }}
-                    >
-                      Close
-                    </button>
-                  </div>
-                </div>
-              )
-            )}
-          </>
-        )}
-      </Card>
-
-      <Card
-        title="Preview history"
-        description="Every preview you've generated for this book, kept so nothing paid for goes to waste."
+      {/* Preview canvas */}
+      <Panel
+        kicker="PREVIEW CANVAS"
+        title="Bring the story to life"
+        right={
+          <span className="inline-flex items-center gap-1.5 text-[10px] font-bold" style={{ color: "var(--teal)" }}>
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--teal)" }} />
+            {previewImageUrl ? "Preview ready" : "Ready to create"}
+          </span>
+        }
       >
-        {loadingHistory ? (
-          <p className="text-sm" style={{ color: "var(--pencil)" }}>
-            Loading...
-          </p>
-        ) : previewHistory.length === 0 ? (
-          <p className="text-sm" style={{ color: "var(--pencil)" }}>
-            No previews generated yet.
-          </p>
-        ) : (
-          <div className="space-y-2">
-            {previewHistory.map((p) => (
-              <div key={p.id} className="rounded-md border-[1.5px]" style={{ borderColor: "var(--pencil-light)" }}>
-                <button
-                  onClick={() => setExpandedPreviewId(expandedPreviewId === p.id ? null : p.id)}
-                  className="w-full flex items-center justify-between px-4 py-3 text-left"
-                >
-                  <div>
-                    <span className="text-sm font-medium capitalize" style={{ color: "var(--ink)" }}>
-                      {p.category} — {p.subject}
-                    </span>
-                    <span className="ml-3 text-xs" style={{ color: "var(--pencil)" }}>
-                      {formatDate(p.created_at)}
-                    </span>
-                  </div>
-                  <span className="text-xs" style={{ color: "var(--teal)" }}>
-                    {expandedPreviewId === p.id ? "Hide" : "View"}
-                  </span>
-                </button>
-                {expandedPreviewId === p.id && (
-                  <div className="px-4 pb-4">
-                    <img
-                      src={previewFileUrl(p.id)}
-                      alt={`${p.subject} preview`}
-                      onClick={() => {
-                        setLightboxImageUrl(previewFileUrl(p.id));
-                        setShowFullSize(true);
-                      }}
-                      className="max-w-xs rounded-md border-[1.5px] mb-2 cursor-pointer hover:opacity-90 transition-opacity"
-                      style={{ borderColor: "var(--pencil-light)" }}
-                    />
-                    <p className="text-xs mb-2" style={{ color: "var(--pencil)" }}>
-                      {p.canvas_width}×{p.canvas_height}px, ratio {p.subject_size_ratio}, palette {p.palette_colors} —{" "}
-                      {p.variation_text}
-                    </p>
-                    <div>
-                      <p className="text-xs font-medium mb-1" style={{ color: "var(--ink)" }}>
-                        Prompt used
-                      </p>
-                      <p
-                        className="text-xs px-2 py-1.5 rounded"
-                        style={{ background: "var(--paper)", color: p.prompt_used ? "var(--pencil)" : "var(--coral-dark)" }}
-                      >
-                        {p.prompt_used ?? "Not recorded — generated before prompt tracking was added."}
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
+          {/* flex-wrap + gap so a future multi-preview comparison view can drop
+              additional images in here as siblings, laid out side by side, without
+              restructuring this container */}
+          <div
+            className="rounded-lg flex flex-wrap items-center justify-center gap-4"
+            style={{ minHeight: 480, background: "var(--teal-tint)", padding: 20 }}
+          >
+          {previewState === "loading" ? (
+            <p className="text-sm" style={{ color: "var(--teal-dark)" }}>
+              Generating...
+            </p>
+          ) : previewImageUrl ? (
+            <img
+              src={previewImageUrl}
+              alt="Settings preview"
+              onClick={() => {
+                setLightboxImageUrl(previewImageUrl);
+                setShowFullSize(true);
+              }}
+              className="cursor-pointer hover:opacity-90 transition-opacity rounded"
+              style={{ maxHeight: 260, boxShadow: "0 0 0 1px rgba(0,0,0,0.08)" }}
+            />
+          ) : (
+            <div
+              className="flex flex-col items-center justify-center text-center"
+              style={{ width: "min(76%, 390px)", aspectRatio: "1.42", border: "1px solid var(--teal)", opacity: 0.75, borderRadius: 6 }}
+            >
+              <span className="font-display" style={{ fontSize: 62, lineHeight: 1, color: "var(--teal)" }}>
+                {"\u2726"}
+              </span>
+              <p className="font-display m-0 mt-2.5" style={{ fontSize: 20, color: "var(--teal-dark)" }}>
+                No preview yet
+              </p>
+              <p className="text-[10px] m-0 mt-1" style={{ color: "var(--teal-dark)", opacity: 0.75 }}>
+                Choose a subject below and generate one
+              </p>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between gap-3.5 mt-4">
+          <span className="inline-flex items-center gap-1.5 text-[11px]" style={{ color: "var(--pencil)" }}>
+            <FileText size={15} />
+            {selectedSubject && selectedVariation ? `${selectedSubject} — ${selectedVariation}` : "No selection"}
+          </span>
+
+          {previewState === "confirming" ? (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleGeneratePreview}
+                className="px-4 py-2 rounded-md text-xs font-bold text-white"
+                style={{ background: "var(--teal)" }}
+              >
+                Yes, generate (~$0.007)
+              </button>
+              <button
+                onClick={() => setPreviewState("idle")}
+                className="px-3 py-2 rounded-md text-xs font-medium"
+                style={{ color: "var(--pencil)" }}
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setPreviewState("confirming")}
+              disabled={previewState === "loading" || !eligibleCategories.includes(selectedPreviewCategory) || !selectedSubject || !selectedVariation}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-md text-xs font-bold text-white disabled:opacity-40"
+              style={{ background: "var(--teal)" }}
+            >
+              {previewImageUrl ? "Regenerate preview" : "Generate preview"} <WandSparkles size={14} />
+            </button>
+          )}
+        </div>
+      </Panel>
+
+      {/* Selection + history, one panel */}
+      <Panel kicker="WHAT TO PREVIEW" title="Preview settings">
+        <div className="grid grid-cols-3 gap-4">
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--ink)" }}>
+              Category
+            </label>
+            <select
+              value={selectedPreviewCategory}
+              onChange={(e) => handlePreviewCategoryChange(e.target.value)}
+              className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm capitalize"
+              style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+            >
+              {allCategories.map((cat) => (
+                <option key={cat} value={cat} className="capitalize">
+                  {cat}
+                </option>
+              ))}
+            </select>
           </div>
+
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--ink)" }}>
+              Subject
+            </label>
+            <select
+              value={selectedSubject}
+              onChange={(e) => {
+                setSelectedSubject(e.target.value);
+                handleClosePreview();
+              }}
+              disabled={loadingOptions || categorySubjects.length === 0}
+              className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm disabled:opacity-50"
+              style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+            >
+              {categorySubjects.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--ink)" }}>
+              Variation
+            </label>
+            <select
+              value={selectedVariation}
+              onChange={(e) => {
+                setSelectedVariation(e.target.value);
+                handleClosePreview();
+              }}
+              disabled={loadingOptions || categoryVariations.length === 0}
+              className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm disabled:opacity-50"
+              style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+            >
+              {categoryVariations.map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {!eligibleCategories.includes(selectedPreviewCategory) && (
+          <p className="mt-3 text-xs" style={{ color: "var(--coral-dark)" }}>
+            This category has no subject and variation yet — add at least one of each before previewing.
+          </p>
         )}
-      </Card>
+
+        <PanelSection label={`Preview history (${previewHistory.length})`}>
+          {loadingHistory ? (
+            <p className="text-sm" style={{ color: "var(--pencil)" }}>
+              Loading...
+            </p>
+          ) : previewHistory.length === 0 ? (
+            <p className="text-sm" style={{ color: "var(--pencil)" }}>
+              No previews generated yet.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {previewHistory.map((p) => (
+                <div key={p.id} className="rounded-md border-[1.5px]" style={{ borderColor: "var(--pencil-light)" }}>
+                  <button
+                    onClick={() => setExpandedPreviewId(expandedPreviewId === p.id ? null : p.id)}
+                    className="w-full flex items-center justify-between px-4 py-3 text-left"
+                  >
+                    <div>
+                      <span className="text-sm font-medium capitalize" style={{ color: "var(--ink)" }}>
+                        {p.category} — {p.subject}
+                      </span>
+                      <span className="ml-3 text-xs" style={{ color: "var(--pencil)" }}>
+                        {formatDate(p.created_at)}
+                      </span>
+                    </div>
+                    <span className="text-xs" style={{ color: "var(--teal)" }}>
+                      {expandedPreviewId === p.id ? "Hide" : "View"}
+                    </span>
+                  </button>
+                  {expandedPreviewId === p.id && (
+                    <div className="px-4 pb-4">
+                      <img
+                        src={previewFileUrl(p.id)}
+                        alt={`${p.subject} preview`}
+                        onClick={() => {
+                          setLightboxImageUrl(previewFileUrl(p.id));
+                          setShowFullSize(true);
+                        }}
+                        className="max-w-xs rounded-md border-[1.5px] mb-2 cursor-pointer hover:opacity-90 transition-opacity"
+                        style={{ borderColor: "var(--pencil-light)" }}
+                      />
+                      <p className="text-xs mb-2" style={{ color: "var(--pencil)" }}>
+                        {p.canvas_width}×{p.canvas_height}px, ratio {p.subject_size_ratio}, palette {p.palette_colors} —{" "}
+                        {p.variation_text}
+                      </p>
+                      <div>
+                        <p className="text-xs font-medium mb-1" style={{ color: "var(--ink)" }}>
+                          Prompt used
+                        </p>
+                        <p
+                          className="text-xs px-2 py-1.5 rounded"
+                          style={{ background: "var(--paper)", color: p.prompt_used ? "var(--pencil)" : "var(--coral-dark)" }}
+                        >
+                          {p.prompt_used ?? "Not recorded — generated before prompt tracking was added."}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </PanelSection>
+      </Panel>
 
       {showFullSize && lightboxImageUrl && (
         <div
@@ -529,15 +550,14 @@ export default function BookPreviewSection({ bookId }: { bookId: number }) {
             </div>
             <div className="flex items-center gap-4 mt-4">
               <span className="text-sm" style={{ color: "white" }}>
-                {lastCanvasWidth} × {lastCanvasHeight}px — {(lastCanvasWidth / 72).toFixed(2)}&quot; ×{" "}
-                {(lastCanvasHeight / 72).toFixed(2)}&quot; at 72 DPI
+                {lastCanvasWidth} × {lastCanvasHeight}px
               </span>
               <button
                 onClick={() => setTrueSizeView((v) => !v)}
                 className="px-4 py-2 rounded-md text-sm font-medium"
                 style={{ background: "var(--teal)", color: "white" }}
               >
-                {trueSizeView ? "See full page (composition check)" : "Zoom to actual size (detail check)"}
+                {trueSizeView ? "See full page" : "Zoom to actual size"}
               </button>
               <button
                 onClick={() => setShowFullSize(false)}

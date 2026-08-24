@@ -1,13 +1,8 @@
 import type { Metadata } from "next";
-import { Fraunces, Inter } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import ThemeToggle from "@/components/ThemeToggle";
 
-const fraunces = Fraunces({
-  subsets: ["latin"],
-  variable: "--font-display",
-  weight: ["500", "600", "700"],
-});
 
 const inter = Inter({
   subsets: ["latin"],
@@ -38,7 +33,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
-      <body className={`${fraunces.variable} ${inter.variable}`}>
+      <body className={inter.variable}>
         <div className="fixed top-4 right-4 z-40">
           <ThemeToggle />
         </div>
