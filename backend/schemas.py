@@ -640,3 +640,25 @@ class ReviewImage(BaseModel):
     variation_text: Optional[str] = None
     status: str
     filename: str
+
+
+# ---------- subjects variation pairing ----------
+
+
+class SubjectVariationPair(BaseModel):
+    subject: str
+    variation_text: str
+
+
+class GenerationPairsPlanRequest(BaseModel):
+    category: str
+    pairs: list[SubjectVariationPair]
+
+
+class GenerationPairsRunRequest(BaseModel):
+    category: str
+    pairs: list[SubjectVariationPair]
+
+
+class PairGenerationCounts(BaseModel):
+    counts: dict[str, int]

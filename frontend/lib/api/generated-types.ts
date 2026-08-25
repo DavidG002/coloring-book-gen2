@@ -232,6 +232,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/generate/plan-pairs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Plan Generation Pairs */
+        post: operations["plan_generation_pairs_generate_plan_pairs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/generate/run-pairs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run Generation Pairs */
+        post: operations["run_generation_pairs_generate_run_pairs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/generate/pair-counts/{category_name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Pair Counts */
+        get: operations["pair_counts_generate_pair_counts__category_name__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/defaults/prompt-template": {
         parameters: {
             query?: never;
@@ -1539,6 +1590,20 @@ export interface components {
             /** Excluded */
             excluded: boolean;
         };
+        /** GenerationPairsPlanRequest */
+        GenerationPairsPlanRequest: {
+            /** Category */
+            category: string;
+            /** Pairs */
+            pairs: components["schemas"]["SubjectVariationPair"][];
+        };
+        /** GenerationPairsRunRequest */
+        GenerationPairsRunRequest: {
+            /** Category */
+            category: string;
+            /** Pairs */
+            pairs: components["schemas"]["SubjectVariationPair"][];
+        };
         /** GenerationPlanRequest */
         GenerationPlanRequest: {
             /** Category */
@@ -1645,6 +1710,13 @@ export interface components {
             output_path: string;
             /** Publish Root */
             publish_root: string;
+        };
+        /** PairGenerationCounts */
+        PairGenerationCounts: {
+            /** Counts */
+            counts: {
+                [key: string]: number;
+            };
         };
         /** PlannedTask */
         PlannedTask: {
@@ -1871,6 +1943,13 @@ export interface components {
             name: string;
             /** Id */
             id: number;
+        };
+        /** SubjectVariationPair */
+        SubjectVariationPair: {
+            /** Subject */
+            subject: string;
+            /** Variation Text */
+            variation_text: string;
         };
         /** SupportedLanguageCreate */
         SupportedLanguageCreate: {
@@ -2837,6 +2916,103 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    plan_generation_pairs_generate_plan_pairs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GenerationPairsPlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerationPlanResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_generation_pairs_generate_run_pairs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GenerationPairsRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerationRunResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pair_counts_generate_pair_counts__category_name__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                category_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PairGenerationCounts"];
                 };
             };
             /** @description Validation Error */

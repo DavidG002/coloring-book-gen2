@@ -75,6 +75,56 @@ def _get_existing_max_variation(category_name: str, subject_name: str) -> int:
     return max(numbers) if numbers else 0
 
 
+def build_task_list_from_pairs(db: Session, category_name: str, pairs: list[dict]) -> list[dict]:
+    """pairs: [{"subject": "Car", "variation_text": "jumping over a puddle"}, ...]
+    Unlike build_task_list's cycling, this uses exactly the pairs the user
+    chose — no auto-cycling, no guessing. Filename numbering still just
+    needs to be unique per subject, so we keep the existing global-per-
+    subject counter for that; it doesn't need to encode which variation
+    was used, since variation_text is already stored separately."""
+    category = db.query(Category).filter(Category.name == category_name).first()
+    if not category:
+        raise ValueError(f"Category '{category_name}' not found")
+
+    from services.prompt_knobs import get_book_knobs
+
+    counters: dict[str, int] = {}
+    tasks = []
+    for pair in pairs:
+        subject_name = pair["subject"]
+        if subject_name not in counters:
+            counters[subject_name] = _get_existing_max_variation(category_name, subject_name)
+        counters[subject_name] += 1
+
+        tasks.append({
+            "category": category_name,
+            "subject": subject_name,
+            "variation_number": counters[subject_name],
+            "variation_text": pair["variation_text"],
+            "base_prompt": category.book.base_prompt,
+            "knobs": get_book_knobs(category.book),
+        })
+    return tasks
+
+
+def get_pair_generation_counts(db: Session, category_name: str) -> dict[str, int]:
+    """Returns {'Car|jumping over a puddle': 2, ...} — how many times each
+    exact subject+variation pair has actually been generated, queried
+    from real GenerationImage rows (not a filename glob), so it reflects
+    reality even across multiple separate batches."""
+    from models import GenerationImage
+    rows = (
+        db.query(GenerationImage.subject, GenerationImage.variation_text)
+        .filter(GenerationImage.category == category_name)
+        .all()
+    )
+    counts: dict[str, int] = {}
+    for subject, variation_text in rows:
+        key = f"{subject}|{variation_text}"
+        counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
 def get_sample_task_for_book(
     db: Session,
     book_id: int,

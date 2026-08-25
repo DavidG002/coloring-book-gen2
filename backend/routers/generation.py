@@ -7,8 +7,9 @@ from models import GenerationJob, GenerationImage, Category
 from schemas import (
     GenerationPlanRequest, GenerationPlanResponse, PlannedTask,
     GenerationRunRequest, GenerationRunResponse, GenerationStatusResponse,
+    GenerationPairsPlanRequest, GenerationPairsRunRequest, PairGenerationCounts,
 )
-from services.generation import build_task_list, COST_PER_IMAGE_USD
+from services.generation import build_task_list, build_task_list_from_pairs, get_pair_generation_counts, COST_PER_IMAGE_USD
 from services.job_runner import run_generation_job, request_cancel
 from routers.settings import get_settings as get_settings_route, DEFAULTS
 
@@ -117,3 +118,52 @@ def cancel_job(job_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail=f"Job is already '{job.status}', cannot cancel")
     request_cancel(job_id)
     return {"detail": f"Cancel requested for job {job_id}"}
+
+@router.post("/plan-pairs", response_model=GenerationPlanResponse)
+def plan_generation_pairs(payload: GenerationPairsPlanRequest, db: Session = Depends(get_db)):
+    try:
+        tasks = build_task_list_from_pairs(
+            db, payload.category, [p.model_dump() for p in payload.pairs]
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return GenerationPlanResponse(
+        tasks=[PlannedTask(**t) for t in tasks],
+        total_images=len(tasks),
+        estimated_cost_usd=round(len(tasks) * COST_PER_IMAGE_USD, 4),
+    )
+
+
+@router.post("/run-pairs", response_model=GenerationRunResponse)
+def run_generation_pairs(payload: GenerationPairsRunRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    try:
+        tasks = build_task_list_from_pairs(
+            db, payload.category, [p.model_dump() for p in payload.pairs]
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if not tasks:
+        raise HTTPException(status_code=400, detail="No images to generate for this request")
+
+    job = GenerationJob(
+        category=payload.category,
+        params_json=json.dumps(payload.model_dump()),
+        status="pending",
+        total_images=len(tasks),
+        completed_images=0,
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+
+    settings = _load_settings_dict(db, payload.category)
+    background_tasks.add_task(run_generation_job, job.id, tasks, settings)
+
+    return GenerationRunResponse(job_id=job.id, status=job.status, total_images=job.total_images)
+
+
+@router.get("/pair-counts/{category_name}", response_model=PairGenerationCounts)
+def pair_counts(category_name: str, db: Session = Depends(get_db)):
+    return PairGenerationCounts(counts=get_pair_generation_counts(db, category_name))
