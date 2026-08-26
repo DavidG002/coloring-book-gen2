@@ -37,8 +37,7 @@ def run_generation_job(job_id: int, tasks: list[dict], settings: dict):
             filename = f"{task['subject'].lower().replace(' ', '_')}_v{task['variation_number']:03d}.png"
             output_path = os.path.join(category_dir, filename)
 
-            success = generate_image_file(task, settings, output_path)
-
+            success, prompt_used = generate_image_file(task, settings, output_path)
             if success:
                 db.add(GenerationImage(
                     job_id=job_id,
@@ -47,6 +46,7 @@ def run_generation_job(job_id: int, tasks: list[dict], settings: dict):
                     variation_number=task["variation_number"],
                     variation_text=task["variation_text"],
                     file_path=output_path,
+                    prompt_used=prompt_used,
                 ))
                 job.completed_images += 1
                 db.commit()

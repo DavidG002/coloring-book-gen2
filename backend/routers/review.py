@@ -4,8 +4,8 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from database import get_db
-from schemas import ReviewJob, ReviewImage
-from services.review import get_images_for_job, get_jobs_for_category, reject_image, restore_image, get_current_file_path
+from schemas import ReviewJob, ReviewImage, CategoryImageStatus
+from services.review import get_images_for_job, get_jobs_for_category, reject_image, restore_image, get_current_file_path, get_images_for_category
 
 router = APIRouter(prefix="/review", tags=["review"])
 
@@ -70,3 +70,8 @@ def restore(image_id: int, db: Session = Depends(get_db)):
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     return {"id": image.id, "status": image.status}
+
+
+@router.get("/images/{category_name}", response_model=list[CategoryImageStatus])
+def list_category_images(category_name: str, db: Session = Depends(get_db)):
+    return get_images_for_category(db, category_name)

@@ -16,6 +16,54 @@ def get_images_for_job(db: Session, job_id: int) -> list[GenerationImage]:
         .all()
     )
 
+def get_images_for_category(db: Session, category_name: str) -> list[dict]:
+    """Every real generated image for this category, oldest first, with its
+    actual local-publish and WordPress status — a real pipeline snapshot,
+    not just the raw file. WordPress status reflects whether it's been
+    pushed in ANY language, and prefers 'publish' over 'draft' if pushed
+    in multiple languages with different statuses."""
+    from models import GenerationImage, PublishedFile, WordPressPublishedItem
+
+    images = (
+        db.query(GenerationImage)
+        .filter(GenerationImage.category == category_name)
+        .order_by(GenerationImage.created_at.asc())
+        .all()
+    )
+
+    published_paths = {
+        p.source_path
+        for p in db.query(PublishedFile.source_path)
+        .join(GenerationImage, GenerationImage.file_path == PublishedFile.source_path)
+        .filter(GenerationImage.category == category_name)
+        .distinct()
+    }
+
+    wp_rows = (
+        db.query(WordPressPublishedItem.source_path, WordPressPublishedItem.status)
+        .filter(WordPressPublishedItem.category == category_name)
+        .all()
+    )
+    wp_status_by_path: dict[str, str] = {}
+    for source_path, status in wp_rows:
+        if source_path not in wp_status_by_path or status == "publish":
+            wp_status_by_path[source_path] = status
+
+    return [
+        {
+            "id": img.id,
+            "subject": img.subject,
+            "variation_text": img.variation_text,
+            "status": img.status,
+            "wp_excluded": img.wp_excluded,
+            "created_at": img.created_at,
+            "locally_published": img.file_path in published_paths,
+            "wordpress_status": wp_status_by_path.get(img.file_path),
+            "prompt_used": img.prompt_used,
+            "job_id": img.job_id,
+        }
+        for img in images
+    ]
 
 def get_jobs_for_category(db: Session, category: str) -> list[GenerationJob]:
     return (

@@ -196,6 +196,7 @@ class GenerationImage(Base):
     status = Column(String, nullable=False, default="approved")
     created_at = Column(DateTime, default=datetime.utcnow)
     wp_excluded = Column(Boolean, nullable=False, default=False)
+    prompt_used = Column(Text, nullable=True)
 
     job = relationship("GenerationJob", back_populates="images")
 

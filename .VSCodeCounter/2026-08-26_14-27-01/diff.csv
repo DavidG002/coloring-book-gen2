@@ -1,0 +1,30 @@
+"filename", "language", "JSON", "TypeScript JSX", "Python", "TypeScript", "PostCSS", "comment", "blank", "total"
+"/home/davidg/Developer/projects/coloring-book-gen2/backend/models.py", "Python", 0, 0, 12, 0, 0, 0, 2, 14
+"/home/davidg/Developer/projects/coloring-book-gen2/backend/routers/books.py", "Python", 0, 0, 32, 0, 0, 0, 0, 32
+"/home/davidg/Developer/projects/coloring-book-gen2/backend/routers/generation.py", "Python", 0, 0, 40, 0, 0, 0, 10, 50
+"/home/davidg/Developer/projects/coloring-book-gen2/backend/routers/review.py", "Python", 0, 0, 3, 0, 0, 0, 2, 5
+"/home/davidg/Developer/projects/coloring-book-gen2/backend/schemas.py", "Python", 0, 0, 44, 0, 0, 1, 11, 56
+"/home/davidg/Developer/projects/coloring-book-gen2/backend/services/generation.py", "Python", 0, 0, 28, 0, 0, 13, 8, 49
+"/home/davidg/Developer/projects/coloring-book-gen2/backend/services/job_runner.py", "Python", 0, 0, 1, 0, 0, 0, -1, 0
+"/home/davidg/Developer/projects/coloring-book-gen2/backend/services/prompt_knobs.py", "Python", 0, 0, 71, 0, 0, 16, 13, 100
+"/home/davidg/Developer/projects/coloring-book-gen2/backend/services/review.py", "Python", 0, 0, 39, 0, 0, 5, 4, 48
+"/home/davidg/Developer/projects/coloring-book-gen2/backend/services/translate.py", "Python", 0, 0, 2, 0, 0, 3, 2, 7
+"/home/davidg/Developer/projects/coloring-book-gen2/frontend/app/books/[id]/page.tsx", "TypeScript JSX", 0, 46, 0, 0, 0, 1, 5, 52
+"/home/davidg/Developer/projects/coloring-book-gen2/frontend/app/categories/[name]/page.tsx", "TypeScript JSX", 0, -351, 0, 0, 0, 0, -31, -382
+"/home/davidg/Developer/projects/coloring-book-gen2/frontend/app/globals.css", "PostCSS", 0, 0, 0, 0, 36, 0, 1, 37
+"/home/davidg/Developer/projects/coloring-book-gen2/frontend/app/layout.tsx", "TypeScript JSX", 0, -5, 0, 0, 0, 0, 0, -5
+"/home/davidg/Developer/projects/coloring-book-gen2/frontend/app/page.tsx", "TypeScript JSX", 0, -54, 0, 0, 0, 0, -2, -56
+"/home/davidg/Developer/projects/coloring-book-gen2/frontend/components/BookPreviewSection.tsx", "TypeScript JSX", 0, 15, 0, 0, 0, 2, 3, 20
+"/home/davidg/Developer/projects/coloring-book-gen2/frontend/components/BookSettingsFields.tsx", "TypeScript JSX", 0, -56, 0, 0, 0, 1, 1, -54
+"/home/davidg/Developer/projects/coloring-book-gen2/frontend/components/CategoryImageStrip.tsx", "TypeScript JSX", 0, 422, 0, 0, 0, 5, 35, 462
+"/home/davidg/Developer/projects/coloring-book-gen2/frontend/components/CategorySequenceShell.tsx", "TypeScript JSX", 0, 111, 0, 0, 0, 0, 11, 122
+"/home/davidg/Developer/projects/coloring-book-gen2/frontend/components/Dashboard.tsx", "TypeScript JSX", 0, 398, 0, 0, 0, 2, 27, 427
+"/home/davidg/Developer/projects/coloring-book-gen2/frontend/components/GenerateSequencePanel.tsx", "TypeScript JSX", 0, 386, 0, 0, 0, 1, 41, 428
+"/home/davidg/Developer/projects/coloring-book-gen2/frontend/components/KnobsPanel.tsx", "TypeScript JSX", 0, 227, 0, 0, 0, 3, 19, 249
+"/home/davidg/Developer/projects/coloring-book-gen2/frontend/components/PrepareCategoryPanel.tsx", "TypeScript JSX", 0, 147, 0, 0, 0, 0, 13, 160
+"/home/davidg/Developer/projects/coloring-book-gen2/frontend/components/SequencePanel.tsx", "TypeScript JSX", 0, 54, 0, 0, 0, 0, 4, 58
+"/home/davidg/Developer/projects/coloring-book-gen2/frontend/components/SettingsUI.tsx", "TypeScript JSX", 0, 102, 0, 0, 0, 0, 5, 107
+"/home/davidg/Developer/projects/coloring-book-gen2/frontend/lib/api/generated-types.ts", "TypeScript", 0, 0, 0, 246, 0, 136, 0, 382
+"/home/davidg/Developer/projects/coloring-book-gen2/frontend/package-lock.json", "JSON", 10, 0, 0, 0, 0, 0, 0, 10
+"/home/davidg/Developer/projects/coloring-book-gen2/frontend/package.json", "JSON", 1, 0, 0, 0, 0, 0, 0, 1
+"Total", "-", 11, 1442, 272, 246, 36, 189, 183, 2379

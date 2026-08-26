@@ -523,6 +523,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/review/images/{category_name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Category Images */
+        get: operations["list_category_images_review_images__category_name__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/books": {
         parameters: {
             query?: never;
@@ -1532,6 +1549,32 @@ export interface components {
         CategoryDescriptionUpdate: {
             /** Description */
             description: string;
+        };
+        /** CategoryImageStatus */
+        CategoryImageStatus: {
+            /** Id */
+            id: number;
+            /** Subject */
+            subject: string;
+            /** Variation Text */
+            variation_text?: string | null;
+            /** Status */
+            status: string;
+            /** Wp Excluded */
+            wp_excluded: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Locally Published */
+            locally_published: boolean;
+            /** Wordpress Status */
+            wordpress_status?: string | null;
+            /** Prompt Used */
+            prompt_used?: string | null;
+            /** Job Id */
+            job_id: number;
         };
         /** CategoryPreviewOptions */
         CategoryPreviewOptions: {
@@ -3516,6 +3559,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_category_images_review_images__category_name__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                category_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryImageStatus"][];
                 };
             };
             /** @description Validation Error */

@@ -270,7 +270,10 @@ def _process_raw_image(image_bytes: bytes, settings: dict):
 
     return final
 
-def generate_image_file(task: dict, settings: dict, output_path: str) -> bool:
+def generate_image_file(task: dict, settings: dict, output_path: str) -> tuple[bool, str | None]:
+    """Returns (success, prompt_used) — the caller needs the real prompt to
+    persist it on GenerationImage, so a future user can see exactly what
+    produced this specific file."""
     from services.prompt_knobs import build_full_prompt
     prompt = build_full_prompt(
         task["base_prompt"],
@@ -290,13 +293,13 @@ def generate_image_file(task: dict, settings: dict, output_path: str) -> bool:
         image_bytes = base64.b64decode(response.data[0].b64_json)
         final = _process_raw_image(image_bytes, settings)
         final.save(output_path, "PNG", optimize=True, compress_level=9)
-        return True
+        return True, prompt
 
     except Exception as e:
         import traceback
         print(f"Error generating image: {e}")
         traceback.print_exc()
-        return False
+        return False, None
 
 
 PREVIEW_DIR = "preview_cache"

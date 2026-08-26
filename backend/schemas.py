@@ -147,6 +147,18 @@ class CategoryPreviewOptions(BaseModel):
     variations: list[str]
 
 
+class CategoryImageStatus(BaseModel):
+    id: int
+    subject: str
+    variation_text: Optional[str] = None
+    status: str
+    wp_excluded: bool
+    created_at: datetime
+    locally_published: bool
+    wordpress_status: Optional[str] = None  # None | "draft" | "publish" (any language)
+    prompt_used: Optional[str] = None
+    job_id: int
+
     # ---------- Translation ----------
 
 class TranslationItemInput(BaseModel):
