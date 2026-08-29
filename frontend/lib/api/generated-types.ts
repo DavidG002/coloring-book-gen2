@@ -1932,6 +1932,8 @@ export interface components {
             seo_content: string;
             /** Generated */
             generated: boolean;
+            /** Sample Image Id */
+            sample_image_id: number;
         };
         /** SeoContentVariantUpdate */
         SeoContentVariantUpdate: {

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Sparkles, CircleCheck, Languages, Send } from "lucide-react";
+import { ArrowLeft, Sparkles, CircleCheck, CornerDownRight } from "lucide-react";
 
 const STEPS = [
   { id: "generate", label: "Generate", eyebrow: "01" },
@@ -10,23 +10,29 @@ const STEPS = [
   { id: "publish", label: "Publish", eyebrow: "03" },
 ] as const;
 
-type StepId = (typeof STEPS)[number]["id"];
+type MainStepId = (typeof STEPS)[number]["id"];
+export type StepId = MainStepId | "wordpress";
 
 export default function CategorySequenceShell({
   bookId,
   bookName,
   categoryName,
   hasAnyPairingSelected,
+  wordPressStepAvailable,
+  wordPressSiteLabel,
   children,
 }: {
   bookId: number;
   bookName: string;
   categoryName: string;
   hasAnyPairingSelected: boolean;
-  children: (activeStep: StepId) => React.ReactNode;
+  wordPressStepAvailable: boolean;
+  wordPressSiteLabel: string;
+  children: (activeStep: StepId, setActiveStep: (s: StepId) => void) => React.ReactNode;
 }) {
   const [activeStep, setActiveStep] = useState<StepId>("generate");
-  const stepIndex = STEPS.findIndex((s) => s.id === activeStep);
+  const mainStepIndex = STEPS.findIndex((s) => s.id === activeStep);
+  const stepIndex = activeStep === "wordpress" ? STEPS.length - 1 : mainStepIndex;
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--paper)" }}>
@@ -92,6 +98,22 @@ export default function CategorySequenceShell({
                 </button>
               );
             })}
+
+            {wordPressStepAvailable && (
+              <button
+                onClick={() => setActiveStep("wordpress")}
+                className="flex items-center gap-2 rounded-lg text-left text-xs ml-3"
+                style={{
+                  padding: "10px 13px",
+                  color: activeStep === "wordpress" ? "var(--teal-dark)" : "var(--pencil)",
+                  background: activeStep === "wordpress" ? "var(--teal-tint)" : "transparent",
+                  fontWeight: activeStep === "wordpress" ? 700 : 400,
+                }}
+              >
+                <CornerDownRight size={13} style={{ flexShrink: 0 }} />
+                <span className="truncate">{wordPressSiteLabel}</span>
+              </button>
+            )}
           </nav>
 
           <div className="flex gap-2 mt-16 pt-4" style={{ borderTop: "1px solid var(--pencil-light)" }}>
@@ -113,7 +135,7 @@ export default function CategorySequenceShell({
             </div>
           </div>
 
-          {children(activeStep)}
+          {children(activeStep, setActiveStep)}
         </section>
       </main>
     </div>

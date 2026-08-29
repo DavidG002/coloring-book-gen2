@@ -51,6 +51,10 @@ async function saveContentVariant(categoryName: string, lang: string, row: Conte
   });
 }
 
+function imageFileUrl(imageId: number): string {
+  return `${API_BASE_URL}/review/image/${imageId}/file`;
+}
+
 async function generateMissing(categoryName: string, lang: string): Promise<number> {
   const res = await fetch(
     `${API_BASE_URL}/categories/${encodeURIComponent(categoryName)}/seo/${lang}/content/generate-missing`,
@@ -371,15 +375,23 @@ export default function SeoPanel({ categoryName }: { categoryName: string }) {
               const isExpanded = expandedRow === key;
               const isDirty = dirtyRows.has(key);
               return (
-                <div key={key} className="rounded-md border-[1.5px]" style={{ borderColor: row.generated ? "var(--pencil-light)" : "var(--coral)" }}>
+                <div key={key} className="rounded-md border-[1.5px] overflow-hidden" style={{ borderColor: row.generated ? "var(--pencil-light)" : "var(--coral)" }}>
                   <button
                     onClick={() => setExpandedRow(isExpanded ? null : key)}
-                    className="w-full flex items-center justify-between px-3 py-2 text-left text-xs"
+                    className="w-full flex items-center justify-between gap-3 px-3 py-2 text-left text-xs"
                   >
-                    <span className="font-medium" style={{ color: "var(--ink)" }}>
-                      {row.subject_name} — {row.variation_text}
+                    <span className="flex items-center gap-3 min-w-0">
+                      <img
+                        src={imageFileUrl(row.sample_image_id)}
+                        alt={`${row.subject_name} — ${row.variation_text}`}
+                        className="w-9 h-9 rounded object-cover shrink-0"
+                        style={{ background: "var(--tone-sage-bg)" }}
+                      />
+                      <span className="font-medium truncate capitalize" style={{ color: "var(--ink)" }}>
+                        {row.subject_name} — {row.variation_text}
+                      </span>
                     </span>
-                    <span className="flex items-center gap-2">
+                    <span className="flex items-center gap-2 shrink-0">
                       {isDirty && (
                         <span className="font-medium" style={{ color: "var(--coral-dark)" }}>Unsaved</span>
                       )}

@@ -187,15 +187,45 @@ def regenerate_content_variant(
 
 
 def list_content_variants(db: Session, category_name: str, lang: str) -> list[dict]:
-    """Every subject×variation combination for this category, showing
-    generated content if it exists, blank fields if it doesn't yet."""
+    """Only subject×variation pairings that have at least one real, approved
+    (non-rejected) generated image — not the full theoretical cross-product.
+    A pairing with no approved images yet has nothing to publish, so it has
+    no reason to appear in the SEO list. Each row includes a real image_id
+    to source a genuine thumbnail from, rather than being purely abstract
+    text. Content itself is still cached per (subject, variation, lang) —
+    multiple approved images sharing a pairing correctly share one set of
+    SEO content, since they depict the same thing."""
+    from models import GenerationImage
+
     category = db.query(Category).filter(Category.name == category_name).first()
     if not category:
         raise ValueError(f"Category '{category_name}' not found")
 
+    # One representative approved image per (subject, variation_text) —
+    # used both to confirm the pairing was actually generated and to give
+    # the SEO list a real thumbnail to show.
+    approved_images = (
+        db.query(GenerationImage)
+        .filter(GenerationImage.category == category_name, GenerationImage.status == "approved")
+        .order_by(GenerationImage.created_at.asc())
+        .all()
+    )
+    representative_image_by_pairing: dict[tuple[str, str], "GenerationImage"] = {}
+    for img in approved_images:
+        if not img.variation_text:
+            continue  # legacy images with no recorded variation can't be matched to a pairing
+        key = (img.subject, img.variation_text)
+        if key not in representative_image_by_pairing:
+            representative_image_by_pairing[key] = img
+
     rows = []
     for subject in category.subjects:
         for variation in sorted(category.variations, key=lambda v: v.order):
+            key = (subject.name, variation.text)
+            representative = representative_image_by_pairing.get(key)
+            if not representative:
+                continue  # nothing real generated for this pairing yet — skip it
+
             existing = (
                 db.query(ContentVariant)
                 .filter(ContentVariant.subject_id == subject.id, ContentVariant.variation_id == variation.id, ContentVariant.lang == lang)
@@ -209,6 +239,7 @@ def list_content_variants(db: Session, category_name: str, lang: str) -> list[di
                 "seo_excerpt": existing.seo_excerpt if existing else "",
                 "seo_content": existing.seo_content if existing else "",
                 "generated": existing is not None,
+                "sample_image_id": representative.id,
             })
     return rows
 

@@ -565,6 +565,7 @@ class SeoContentVariantRow(BaseModel):
     seo_excerpt: str
     seo_content: str
     generated: bool
+    sample_image_id: int
 
 
 class SeoContentVariantUpdate(BaseModel):

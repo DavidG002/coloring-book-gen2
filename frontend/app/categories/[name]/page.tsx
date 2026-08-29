@@ -2,16 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { Languages, Send } from "lucide-react";
 import { getCategory, ApiError, type Category } from "@/lib/api";
 import CategorySequenceShell from "@/components/CategorySequenceShell";
-import SequencePanel from "@/components/SequencePanel";
-import TabbedSection from "@/components/TabbedSection";
-import TranslationsPanel from "@/components/TranslationsPanel";
-import SeoPanel from "@/components/SeoPanel";
-import PublishPanel from "@/components/PublishPanel";
-import WordPressPushPanel from "@/components/WordPressPushPanel";
+import LanguageSequencePanel from "@/components/LanguageSequencePanel";
 import GenerateSequencePanel from "@/components/GenerateSequencePanel";
+import PublishSequencePanel from "@/components/PublishSequencePanel";
+import WordPressSequencePanel from "@/components/WordPressSequencePanel";
 
 export default function CategoryDetailPage() {
   const router = useRouter();
@@ -22,6 +18,36 @@ export default function CategoryDetailPage() {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [wordPressAvailable, setWordPressAvailable] = useState(false);
+  const [wordPressSiteLabel, setWordPressSiteLabel] = useState("WordPress");
+
+  useEffect(() => {
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+        const [historyRes, wpRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/publish/history/${encodeURIComponent(categoryName)}`),
+          fetch(`${API_BASE_URL}/account/wordpress`),
+        ]);
+        const history = await historyRes.json();
+        const wp = await wpRes.json();
+        if (cancelled) return;
+        setWordPressAvailable(Array.isArray(history) && history.length > 0);
+        if (wp?.site_url) {
+          const hostname = wp.site_url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+          setWordPressSiteLabel(`WordPress: ${hostname}`);
+        }
+      } catch {
+        // silent — the sub-nav item just won't show if this fails
+      }
+    }, 0);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [categoryName]);
 
   useEffect(() => {
     let cancelled = false;
@@ -59,6 +85,26 @@ export default function CategoryDetailPage() {
     );
   }
 
+  if (error) {
+    return (
+      <main className="min-h-screen px-8 py-12 max-w-3xl mx-auto">
+        <div
+          className="px-4 py-3 rounded-md text-sm"
+          style={{ background: "var(--coral-light)", color: "var(--coral-dark)", border: "1px solid var(--coral)" }}
+        >
+          {error}
+        </div>
+        <button
+          onClick={() => router.push("/books")}
+          className="mt-6 px-5 py-2.5 rounded-md text-sm font-medium text-white"
+          style={{ background: "var(--teal)" }}
+        >
+          Back to books
+        </button>
+      </main>
+    );
+  }
+
   if (notFound || !category) {
     return (
       <main className="min-h-screen px-8 py-12 max-w-3xl mx-auto">
@@ -82,65 +128,28 @@ export default function CategoryDetailPage() {
       bookName={category.book_name}
       categoryName={categoryName}
       hasAnyPairingSelected={category.subjects.length > 0 && category.variations.length > 0}
+      wordPressStepAvailable={wordPressAvailable}
+      wordPressSiteLabel={wordPressSiteLabel}
     >
-      {(activeStep) => (
+      {(activeStep, setActiveStep) => (
         <>
           {activeStep === "generate" && (
             <GenerateSequencePanel categoryName={categoryName} category={category} onCategoryChanged={setCategory} />
           )}
           {activeStep === "language" && (
-            <SequencePanel
-              eyebrow="02 / LANGUAGE"
-              title="Translate and describe your pages"
-              description="Keep the generated copy consistent across every page in this category."
-              icon={<Languages size={25} />}
-            >
-              <div className="p-2">
-                <TabbedSection
-                  id="language-tabs"
-                  title=""
-                  isOpen
-                  onToggle={() => {}}
-                  tabs={[
-                    {
-                      id: "translations",
-                      label: "Translations",
-                      content: (
-                        <TranslationsPanel
-                          categoryName={categoryName}
-                          bookId={category.book_id}
-                          subjects={category.subjects}
-                          variations={category.variations}
-                        />
-                      ),
-                    },
-                    { id: "seo", label: "SEO", content: <SeoPanel categoryName={categoryName} /> },
-                  ]}
-                />
-              </div>
-            </SequencePanel>
+            <LanguageSequencePanel
+              categoryName={categoryName}
+              bookId={category.book_id}
+              subjects={category.subjects}
+              variations={category.variations}
+              onContinue={() => setActiveStep("publish")}
+            />
           )}
-
           {activeStep === "publish" && (
-            <SequencePanel
-              eyebrow="03 / PUBLISH"
-              title="Publish to your book"
-              description="When you're happy with the generated pages, publish this category."
-              icon={<Send size={25} />}
-            >
-              <div className="p-2">
-                <TabbedSection
-                  id="publish-tabs"
-                  title=""
-                  isOpen
-                  onToggle={() => {}}
-                  tabs={[
-                    { id: "local", label: "Local", content: <PublishPanel categoryName={categoryName} /> },
-                    { id: "wordpress", label: "WordPress", content: <WordPressPushPanel categoryName={categoryName} /> },
-                  ]}
-                />
-              </div>
-            </SequencePanel>
+            <PublishSequencePanel categoryName={categoryName} onGoToWordPress={() => setActiveStep("wordpress")} />
+          )}
+          {activeStep === "wordpress" && (
+            <WordPressSequencePanel categoryName={categoryName} onBackToFiles={setActiveStep} />
           )}
         </>
       )}
