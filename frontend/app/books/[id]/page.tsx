@@ -11,6 +11,7 @@ import BookSettingsFields from "@/components/BookSettingsFields";
 import BookPreviewSection from "@/components/BookPreviewSection";
 import PrepareCategoryPanel from "@/components/PrepareCategoryPanel";
 import { Panel, PanelSection } from "@/components/SettingsUI";
+import AppShell from "@/components/AppShell";
 
 const TONES = [
   { bg: "var(--tone-sage-bg)", fg: "var(--tone-sage)" },
@@ -80,15 +81,15 @@ export default function BookDetailPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen px-8 py-12 max-w-6xl mx-auto">
+      <AppShell active="Books" breadcrumb="Books">
         <p style={{ color: "var(--pencil)" }}>Loading...</p>
-      </main>
+      </AppShell>
     );
   }
 
   if (notFound || !book) {
     return (
-      <main className="min-h-screen px-8 py-12 max-w-3xl mx-auto">
+      <AppShell active="Books" breadcrumb="Books">
         <p className="text-lg font-display" style={{ color: "var(--ink)" }}>
           Book not found
         </p>
@@ -99,18 +100,15 @@ export default function BookDetailPage() {
         >
           Back to books
         </button>
-      </main>
+      </AppShell>
     );
   }
 
   const totalSubjects = categories.reduce((sum, c) => sum + c.subject_count, 0);
 
   return (
-    <div style={{ background: "var(--paper)" }}>
-      <div
-        className="flex items-center justify-between px-11"
-        style={{ height: 62, borderBottom: "1px solid var(--pencil-light)" }}
-      >
+    <AppShell active="Books" breadcrumb={book.name}>
+      <div className="flex items-center justify-between mb-6 pb-4" style={{ borderBottom: "1px solid var(--pencil-light)" }}>
         <button
           onClick={() => router.push("/books")}
           className="inline-flex items-center gap-2 text-xs"
@@ -127,128 +125,126 @@ export default function BookDetailPage() {
         </button>
       </div>
 
-      <main className="max-w-6xl mx-auto px-8 py-10">
-        <div className="flex items-end justify-between gap-5 mb-9">
-          <div>
-            <p className="text-[10px] uppercase font-bold m-0 mb-2" style={{ color: "var(--pencil)", letterSpacing: "0.12em" }}>
-              Book studio / {book.name}
+      <div className="flex items-end justify-between gap-5 mb-9">
+        <div>
+          <p className="text-[10px] uppercase font-bold m-0 mb-2" style={{ color: "var(--pencil)", letterSpacing: "0.12em" }}>
+            Book studio / {book.name}
+          </p>
+          <h1
+            className="font-display font-normal m-0"
+            style={{ fontSize: "clamp(36px, 5vw, 52px)", letterSpacing: "-0.05em", color: "var(--ink)" }}
+          >
+            {book.name}
+            <span style={{ color: "var(--teal)" }}>.</span>
+          </h1>
+          {book.base_prompt && (
+            <p className="text-[13px] m-0 mt-2.5 max-w-lg" style={{ color: "var(--pencil)" }}>
+              {book.base_prompt}
             </p>
-            <h1
-              className="font-display font-normal m-0"
-              style={{ fontSize: "clamp(36px, 5vw, 52px)", letterSpacing: "-0.05em", color: "var(--ink)" }}
-            >
-              {book.name}
-              <span style={{ color: "var(--teal)" }}>.</span>
-            </h1>
-            {book.base_prompt && (
-              <p className="text-[13px] m-0 mt-2.5 max-w-lg" style={{ color: "var(--pencil)" }}>
-                {book.base_prompt}
-              </p>
-            )}
-          </div>
-          <div
-            className="inline-flex items-center gap-2 shrink-0 rounded-lg"
-            style={{ padding: "12px 14px", border: "1px solid var(--pencil-light)", background: "var(--canvas)" }}
-          >
-            <BookOpen size={16} style={{ color: "var(--teal)" }} />
-            <span className="font-display" style={{ fontSize: 19, color: "var(--ink)" }}>
-              {totalSubjects}
-            </span>
-            <span className="text-[11px]" style={{ color: "var(--pencil)" }}>
-              subjects
-            </span>
-          </div>
+          )}
         </div>
+        <div
+          className="inline-flex items-center gap-2 shrink-0 rounded-lg"
+          style={{ padding: "12px 14px", border: "1px solid var(--pencil-light)", background: "var(--canvas)" }}
+        >
+          <BookOpen size={16} style={{ color: "var(--teal)" }} />
+          <span className="font-display" style={{ fontSize: 19, color: "var(--ink)" }}>
+            {totalSubjects}
+          </span>
+          <span className="text-[11px]" style={{ color: "var(--pencil)" }}>
+            subjects
+          </span>
+        </div>
+      </div>
 
-        {error && (
-          <div
-            className="mb-6 px-4 py-3 rounded-md text-sm"
-            style={{ background: "var(--coral-light)", color: "var(--coral-dark)", border: "1px solid var(--coral)" }}
-          >
-            {error}
-          </div>
-        )}
+      {error && (
+        <div
+          className="mb-6 px-4 py-3 rounded-md text-sm"
+          style={{ background: "var(--coral-light)", color: "var(--coral-dark)", border: "1px solid var(--coral)" }}
+        >
+          {error}
+        </div>
+      )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6 items-start">
-          <div className="space-y-6 min-w-0">
-            <BookPreviewSection bookId={bookId} />
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6 items-start">
+        <div className="space-y-6 min-w-0">
+          <BookPreviewSection bookId={bookId} />
 
-            <Panel
-              kicker="YOUR COLLECTIONS"
-              title={
-                <>
-                  Categories{" "}
-                  <span style={{ fontSize: 14, color: "var(--teal)", fontFamily: "inherit" }}>{categories.length}</span>
-                </>
-              }
-              right={
-                <button
-                  onClick={() => setShowNewCategoryModal(true)}
-                  className="inline-flex items-center gap-1.5 text-xs font-bold"
-                  style={{ color: "var(--teal)" }}
-                >
-                  <Plus size={15} /> Add category
-                </button>
-              }
-            >
-              {categories.length === 0 ? (
-                <p className="text-sm" style={{ color: "var(--pencil)" }}>
-                  No categories yet in this book.
-                </p>
-              ) : (
-                <div className="grid gap-2">
-                  {categories.map((cat, i) => {
-                    const tone = TONES[i % TONES.length];
-                    return (
-                      <Link
-                        key={cat.id}
-                        href={`/categories/${encodeURIComponent(cat.name)}`}
-                        className="lift-hover flex items-center gap-3"
-                        style={{ padding: "11px 10px", border: "1px solid var(--pencil-light)", borderRadius: 9 }}
-                      >
-                        <div
-                          className="w-[34px] h-[34px] rounded-lg flex items-center justify-center shrink-0"
-                          style={{ background: tone.bg, color: tone.fg }}
-                        >
-                          <ImageIcon size={16} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-bold m-0 capitalize" style={{ color: "var(--ink)" }}>
-                            {cat.name}
-                          </p>
-                          <p className="text-[10px] m-0 mt-1" style={{ color: "var(--pencil)" }}>
-                            {cat.subject_count} subjects, {cat.variation_count} variations
-                          </p>
-                        </div>
-                        <MoreHorizontal size={16} style={{ color: "var(--pencil)" }} />
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
-
+          <Panel
+            kicker="YOUR COLLECTIONS"
+            title={
+              <>
+                Categories{" "}
+                <span style={{ fontSize: 14, color: "var(--teal)", fontFamily: "inherit" }}>{categories.length}</span>
+              </>
+            }
+            right={
               <button
                 onClick={() => setShowNewCategoryModal(true)}
-                className="w-full flex items-center justify-between mt-2 text-xs font-bold"
-                style={{ color: "var(--teal)", padding: "10px 2px" }}
+                className="inline-flex items-center gap-1.5 text-xs font-bold"
+                style={{ color: "var(--teal)" }}
               >
-                <span className="inline-flex items-center gap-1.5">
-                  <Plus size={14} /> Add another category
-                </span>
-                <ArrowUpRight size={14} />
+                <Plus size={15} /> Add category
               </button>
+            }
+          >
+            {categories.length === 0 ? (
+              <p className="text-sm" style={{ color: "var(--pencil)" }}>
+                No categories yet in this book.
+              </p>
+            ) : (
+              <div className="grid gap-2">
+                {categories.map((cat, i) => {
+                  const tone = TONES[i % TONES.length];
+                  return (
+                    <Link
+                      key={cat.id}
+                      href={`/categories/${encodeURIComponent(cat.name)}`}
+                      className="lift-hover flex items-center gap-3"
+                      style={{ padding: "11px 10px", border: "1px solid var(--pencil-light)", borderRadius: 9 }}
+                    >
+                      <div
+                        className="w-[34px] h-[34px] rounded-lg flex items-center justify-center shrink-0"
+                        style={{ background: tone.bg, color: tone.fg }}
+                      >
+                        <ImageIcon size={16} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold m-0 capitalize" style={{ color: "var(--ink)" }}>
+                          {cat.name}
+                        </p>
+                        <p className="text-[10px] m-0 mt-1" style={{ color: "var(--pencil)" }}>
+                          {cat.subject_count} subjects, {cat.variation_count} variations
+                        </p>
+                      </div>
+                      <MoreHorizontal size={16} style={{ color: "var(--pencil)" }} />
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
 
-              <PanelSection label="Prepare a category">
-                <PrepareCategoryPanel categories={categories} defaultCategoryName={lastCreatedCategory} />
-              </PanelSection>
-            </Panel>
-          </div>
+            <button
+              onClick={() => setShowNewCategoryModal(true)}
+              className="w-full flex items-center justify-between mt-2 text-xs font-bold"
+              style={{ color: "var(--teal)", padding: "10px 2px" }}
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <Plus size={14} /> Add another category
+              </span>
+              <ArrowUpRight size={14} />
+            </button>
 
-          <div className="space-y-6">
-            <BookSettingsFields bookId={bookId} onBookLoaded={setBook} />
-          </div>
+            <PanelSection label="Prepare a category">
+              <PrepareCategoryPanel categories={categories} defaultCategoryName={lastCreatedCategory} />
+            </PanelSection>
+          </Panel>
         </div>
-      </main>
+
+        <div className="space-y-6">
+          <BookSettingsFields bookId={bookId} onBookLoaded={setBook} />
+        </div>
+      </div>
 
       {showNewCategoryModal && book && (
         <NewCategoryModal
@@ -260,6 +256,6 @@ export default function BookDetailPage() {
       {showDeleteModal && (
         <DeleteBookModal bookId={bookId} onClose={() => setShowDeleteModal(false)} />
       )}
-    </div>
+    </AppShell>
   );
 }

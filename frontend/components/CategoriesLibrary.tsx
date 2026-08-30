@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { Grid2X2, Image as ImageIcon, MoreHorizontal, Plus, Search, ChevronDown, ArrowUpRight } from "lucide-react";
+import { Grid2X2, Image as ImageIcon, MoreHorizontal, Plus, Search, ChevronDown, ArrowUpRight, ChevronUp, Workflow } from "lucide-react";
+import CategoryImageStrip from "./CategoryImageStrip";
 import { getCategories, getBooks, type CategorySummary, type BookSummary } from "@/lib/api";
 import AppShell from "./AppShell";
 import NewCategoryFromLibraryModal from "./NewCategoryFromLibraryModal";
@@ -22,6 +23,7 @@ export default function CategoriesLibrary() {
   const [query, setQuery] = useState("");
   const [bookFilter, setBookFilter] = useState<number | "all">("all");
   const [showCreate, setShowCreate] = useState(false);
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
 
   function load() {
     setLoading(true);
@@ -75,7 +77,7 @@ export default function CategoriesLibrary() {
             Organize the worlds, creatures, and little ideas inside your books.
           </p>
         </div>
-        <button
+                <button
           onClick={() => setShowCreate(true)}
           className="lift-hover inline-flex items-center gap-2 rounded-lg text-white text-xs font-bold shrink-0"
           style={{ padding: "11px 15px", background: "var(--teal)", boxShadow: "0 5px 14px rgba(91,124,147,0.14)" }}
@@ -136,56 +138,105 @@ export default function CategoriesLibrary() {
           Loading...
         </p>
       ) : (
-        <div className="grid grid-cols-2 gap-3.5">
-          {filtered.map((cat, i) => {
-            const tone = TONES[i % TONES.length];
-            return (
-              <article key={cat.id} className="lift-hover rounded-xl overflow-hidden" style={{ border: "1px solid var(--pencil-light)", background: "var(--canvas)" }}>
-                <div className="flex items-center justify-between" style={{ minHeight: 138, padding: 20, background: tone.bg, color: tone.fg }}>
-                  <ImageIcon size={27} style={{ opacity: 0.55 }} />
-                  <span className="font-display" style={{ fontSize: 38, opacity: 0.4 }}>{cat.subject_count}</span>
-                </div>
-                <div style={{ padding: "16px 17px 14px" }}>
-                  <div className="flex justify-between gap-3">
-                    <div>
-                      <h2 className="font-display font-normal m-0 capitalize" style={{ fontSize: 21, letterSpacing: "-0.03em", color: "var(--ink)" }}>
-                        {cat.name}
-                      </h2>
-                      <p className="text-[11px] m-0 mt-1.5" style={{ color: "var(--pencil)" }}>
-                        {bookNameById[cat.book_id] ?? "Unknown book"}
-                      </p>
-                    </div>
-                    <MoreHorizontal size={18} style={{ color: "var(--pencil)" }} />
-                  </div>
-                  <div className="flex items-center justify-between gap-3 mt-5 pt-3" style={{ borderTop: "1px solid var(--pencil-light)" }}>
-                    <span className="text-[10px]" style={{ color: "var(--pencil)" }}>
-                      {cat.variation_count} pose {cat.variation_count === 1 ? "variation" : "variations"}
-                    </span>
-                    <Link
-                      href={`/categories/${encodeURIComponent(cat.name)}`}
-                      className="inline-flex items-center gap-1 text-[11px] font-bold"
-                      style={{ color: "var(--teal)" }}
-                    >
-                      Open <ArrowUpRight size={13} />
-                    </Link>
-                  </div>
-                </div>
-              </article>
-            );
-          })}
-          {filtered.length === 0 && (
-            <div
-              className="col-span-2 flex flex-col items-center justify-center gap-2 rounded-xl"
-              style={{ minHeight: 190, border: "1px dashed var(--pencil-light)", color: "var(--pencil)" }}
-            >
-              <Grid2X2 size={22} />
-              <strong className="font-display font-normal" style={{ fontSize: 20, color: "var(--ink)" }}>
-                No categories found
-              </strong>
-              <span className="text-xs">Try a different search or book filter.</span>
+      <div className="grid grid-cols-2 gap-3.5">
+      {filtered.flatMap((cat, i) => {
+        const tone = TONES[i % TONES.length];
+        const isExpanded = expandedCategory === cat.name;
+
+        const card = (
+          <article
+            key={cat.id}
+            className="lift-hover rounded-xl overflow-hidden"
+            style={{ border: `1.5px solid ${isExpanded ? "var(--teal)" : "var(--pencil-light)"}`, background: "var(--canvas)" }}
+          >
+            <div className="flex items-center justify-between" style={{ minHeight: 138, padding: 20, background: tone.bg, color: tone.fg }}>
+              <ImageIcon size={27} style={{ opacity: 0.55 }} />
+              <span className="font-display" style={{ fontSize: 38, opacity: 0.4 }}>{cat.subject_count}</span>
             </div>
-          )}
-        </div>
+            <div style={{ padding: "16px 17px 14px" }}>
+              <div className="flex justify-between gap-3">
+                <div>
+                  <h2 className="font-display font-normal m-0 capitalize" style={{ fontSize: 21, letterSpacing: "-0.03em", color: "var(--ink)" }}>
+                    {cat.name}
+                  </h2>
+                  <p className="text-[11px] m-0 mt-1.5" style={{ color: "var(--pencil)" }}>
+                    {bookNameById[cat.book_id] ?? "Unknown book"}
+                  </p>
+                </div>
+                <MoreHorizontal size={18} style={{ color: "var(--pencil)" }} />
+              </div>
+              <div className="flex items-center justify-between gap-3 mt-5 pt-3" style={{ borderTop: "1px solid var(--pencil-light)" }}>
+                <span className="text-[10px]" style={{ color: "var(--pencil)" }}>
+                  {cat.variation_count} pose {cat.variation_count === 1 ? "variation" : "variations"}
+                </span>
+                <button
+                  onClick={() => setExpandedCategory(isExpanded ? null : cat.name)}
+                  className="inline-flex items-center gap-1 text-[11px] font-bold"
+                  style={{ color: "var(--teal)" }}
+                >
+                  {isExpanded ? "Collapse" : "Open"}
+                  {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                </button>
+              </div>
+            </div>
+          </article>
+        );
+
+        if (!isExpanded) return [card];
+
+        const expandedPanel = (
+          <div
+            key={`${cat.id}-expanded`}
+            className="rounded-xl overflow-hidden"
+            style={{ gridColumn: "1 / -1", border: "1.5px solid var(--teal)", background: "var(--paper)" }}
+          >
+            <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "1px solid var(--pencil-light)" }}>
+              <div>
+                <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--pencil)", letterSpacing: "0.1em" }}>
+                  {bookNameById[cat.book_id] ?? "Unknown book"}
+                </p>
+                <h3 className="font-display font-normal m-0 mt-1 capitalize" style={{ fontSize: 20, color: "var(--ink)" }}>
+                  {cat.name}
+                </h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <Link
+                  href={`/categories/${encodeURIComponent(cat.name)}`}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold text-white"
+                  style={{ background: "var(--teal)" }}
+                >
+                  <Workflow size={13} /> Open workflow
+                </Link>
+                <button
+                  onClick={() => setExpandedCategory(null)}
+                  className="w-8 h-8 rounded-md flex items-center justify-center"
+                  style={{ border: "1px solid var(--pencil-light)", color: "var(--pencil)" }}
+                >
+                  <ChevronUp size={14} />
+                </button>
+              </div>
+            </div>
+            <div className="p-4">
+              <CategoryImageStrip categoryName={cat.name} refreshKey={0} />
+            </div>
+          </div>
+        );
+
+        return [card, expandedPanel];
+      })} 
+        {filtered.length === 0 && (
+          <div
+            className="col-span-2 flex flex-col items-center justify-center gap-2 rounded-xl"
+            style={{ minHeight: 190, border: "1px dashed var(--pencil-light)", color: "var(--pencil)" }}
+          >
+            <Grid2X2 size={22} />
+            <strong className="font-display font-normal" style={{ fontSize: 20, color: "var(--ink)" }}>
+              No categories found
+            </strong>
+            <span className="text-xs">Try a different search or book filter.</span>
+          </div>
+        )}
+      </div>
       )}
 
       {showCreate && <NewCategoryFromLibraryModal books={books} onClose={() => { setShowCreate(false); load(); }} />}

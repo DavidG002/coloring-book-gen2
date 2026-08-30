@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Sparkles, CircleCheck, CornerDownRight } from "lucide-react";
+import { ArrowLeft, Sparkles, CircleCheck, CornerDownRight, BookOpen } from "lucide-react";
 
 const STEPS = [
   { id: "generate", label: "Generate", eyebrow: "01" },
@@ -40,9 +40,21 @@ export default function CategorySequenceShell({
         className="flex items-center justify-between px-11"
         style={{ height: 70, borderBottom: "1px solid var(--pencil-light)", background: "var(--canvas)" }}
       >
-        <Link href={`/books/${bookId}`} className="inline-flex items-center gap-2 text-xs" style={{ color: "var(--pencil)" }}>
-          <ArrowLeft size={16} /> Back to {bookName}
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link href="/" className="flex items-center gap-2" style={{ color: "var(--pencil)" }}>
+            <div
+              className="w-6 h-6 rounded-md flex items-center justify-center"
+              style={{ background: "var(--teal)", transform: "rotate(-5deg)" }}
+              title="Back to overview"
+            >
+              <BookOpen size={12} color="white" />
+            </div>
+          </Link>
+          <span style={{ width: 1, height: 16, background: "var(--pencil-light)" }} />
+          <Link href={`/books/${bookId}`} className="inline-flex items-center gap-2 text-xs" style={{ color: "var(--pencil)" }}>
+            <ArrowLeft size={16} /> Back to {bookName}
+          </Link>
+        </div>
         <div className="text-center">
           <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--pencil)", letterSpacing: "0.12em" }}>
             Book studio

@@ -297,3 +297,57 @@ export function SubCard({
     </div>
   );
 }
+
+export function AccountSection({
+  eyebrow,
+  title,
+  description,
+  icon,
+  children,
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-[14px] overflow-hidden" style={{ border: "1px solid var(--pencil-light)", background: "var(--canvas)" }}>
+      <div className="flex gap-3.5 p-5" style={{ borderBottom: "1px solid var(--pencil-light)", background: "var(--paper)" }}>
+        <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: "var(--teal-tint)", color: "var(--teal-dark)" }}>
+          {icon}
+        </div>
+        <div>
+          <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--pencil)", letterSpacing: "0.1em" }}>
+            {eyebrow}
+          </p>
+          <h2 className="font-display font-normal m-0 mt-1" style={{ fontSize: 20, color: "var(--ink)" }}>
+            {title}
+          </h2>
+          <p className="text-xs m-0 mt-1" style={{ color: "var(--pencil)", maxWidth: 480 }}>
+            {description}
+          </p>
+        </div>
+      </div>
+      <div className="p-5">{children}</div>
+    </section>
+  );
+}
+
+export function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className="rounded-full shrink-0"
+      style={{ width: 42, height: 24, padding: 3, background: checked ? "var(--teal)" : "var(--pencil-light)", transition: "background 0.2s ease", border: "none" }}
+    >
+      <span
+        className="block rounded-full"
+        style={{ width: 18, height: 18, background: "white", transform: checked ? "translateX(18px)" : "translateX(0)", transition: "transform 0.2s ease" }}
+      />
+    </button>
+  );
+}
