@@ -26,7 +26,7 @@ def push_to_wordpress(payload: WordPressPushRequest, db: Session = Depends(get_d
     try:
         result = push_batch_to_wordpress(
             db,
-            category_name=payload.category,
+            category_id=payload.category_id,
             lang=payload.lang,
             status=payload.status,
             only_new=payload.only_new,
@@ -40,7 +40,7 @@ def push_to_wordpress(payload: WordPressPushRequest, db: Session = Depends(get_d
 @router.post("/preview", response_model=WordPressPreviewResponse)
 def preview_push(payload: WordPressPreviewRequest, db: Session = Depends(get_db)):
     try:
-        result = preview_wordpress_push(db, payload.category, payload.lang)
+        result = preview_wordpress_push(db, payload.category_id, payload.lang)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return WordPressPreviewResponse(**result)
@@ -67,7 +67,7 @@ def sync_to_wordpress(payload: WordPressSyncRequest, db: Session = Depends(get_d
 @router.post("/verify", response_model=WordPressVerifyResponse)
 def verify_push(payload: WordPressVerifyRequest, db: Session = Depends(get_db)):
     try:
-        result = verify_and_clean_stale_pushes(db, payload.category, payload.lang, _get_wp_config(db).site_url)
+        result = verify_and_clean_stale_pushes(db, payload.category_id, payload.lang, _get_wp_config(db).site_url)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return WordPressVerifyResponse(**result)

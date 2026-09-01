@@ -72,6 +72,6 @@ def restore(image_id: int, db: Session = Depends(get_db)):
     return {"id": image.id, "status": image.status}
 
 
-@router.get("/images/{category_name}", response_model=list[CategoryImageStatus])
-def list_category_images(category_name: str, db: Session = Depends(get_db)):
-    return get_images_for_category(db, category_name)
+@router.get("/images/{category_id}", response_model=list[CategoryImageStatus])
+def list_category_images(category_id: int, db: Session = Depends(get_db)):
+    return get_images_for_category(db, category_id)

@@ -13,28 +13,31 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 type ContentVariantRow = components["schemas"]["SeoContentVariantRow"];
 type SeoData = components["schemas"]["SeoDataResponse"];
 
-async function getSeoData(categoryName: string, lang: string): Promise<SeoData> {
-  const res = await fetch(`${API_BASE_URL}/categories/${encodeURIComponent(categoryName)}/seo/${lang}`);
+async function getSeoData(categoryId: number, lang: string): Promise<SeoData> {
+  const res = await fetch(`${API_BASE_URL}/categories/${categoryId}/seo/${lang}`);
   if (!res.ok) {
     const data = await res.json();
     throw new ApiError(res.status, data.detail);
   }
   return res.json();
 }
-async function saveDescription(categoryName: string, lang: string, description: string): Promise<void> {
-  await fetch(`${API_BASE_URL}/categories/${encodeURIComponent(categoryName)}/seo/${lang}/description`, {
+async function saveDescription(categoryId: number, lang: string, description: string): Promise<void> {
+  await fetch(`${API_BASE_URL}/categories/${categoryId}/seo/${lang}/description`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ description }),
   });
 }
-async function regenerateDescription(categoryName: string, lang: string): Promise<string> {
-  const res = await fetch(`${API_BASE_URL}/categories/${encodeURIComponent(categoryName)}/seo/${lang}/description/regenerate`, { method: "POST" });
+async function regenerateDescription(categoryId: number, lang: string): Promise<string> {
+  const res = await fetch(
+    `${API_BASE_URL}/categories/${categoryId}/seo/${lang}/description/regenerate`,
+    { method: "POST" }
+  );
   const data = await res.json();
   return data.description;
 }
-async function saveContentVariant(categoryName: string, lang: string, row: ContentVariantRow): Promise<void> {
-  await fetch(`${API_BASE_URL}/categories/${encodeURIComponent(categoryName)}/seo/${lang}/content`, {
+async function saveContentVariant(categoryId: number, lang: string, row: ContentVariantRow): Promise<void> {
+  await fetch(`${API_BASE_URL}/categories/${categoryId}/seo/${lang}/content`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -50,14 +53,13 @@ async function saveContentVariant(categoryName: string, lang: string, row: Conte
 function imageFileUrl(imageId: number): string {
   return `${API_BASE_URL}/review/image/${imageId}/file`;
 }
-async function generateMissing(categoryName: string, lang: string): Promise<number> {
-  const res = await fetch(`${API_BASE_URL}/categories/${encodeURIComponent(categoryName)}/seo/${lang}/content/generate-missing`, { method: "POST" });
+async function generateMissing(categoryId: number, lang: string): Promise<number> {
+  const res = await fetch(`${API_BASE_URL}/categories/${categoryId}/seo/${lang}/content/generate-missing`, { method: "POST" });
   const data = await res.json();
   return data.generated_count;
 }
-async function regenerateOne(categoryName: string, lang: string, subjectName: string, variationText: string): Promise<Partial<ContentVariantRow>> {
-  const res = await fetch(`${API_BASE_URL}/categories/${encodeURIComponent(categoryName)}/seo/${lang}/content/regenerate`, {
-    method: "POST",
+async function regenerateOne(categoryId: number, lang: string, subjectName: string, variationText: string): Promise<Partial<ContentVariantRow>> {
+  const res = await fetch(`${API_BASE_URL}/categories/${categoryId}/seo/${lang}/content/regenerate`, {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ subject_name: subjectName, variation_text: variationText }),
   });
@@ -86,10 +88,12 @@ async function runPublishForLang(category: string, lang: string) {
 }
 
 export default function PublishSequencePanel({
+  categoryId,
   categoryName,
   onGoToWordPress,
   onGoToLanguage,
 }: {
+  categoryId: number;
   categoryName: string;
   onGoToWordPress: () => void;
   onGoToLanguage: () => void;
@@ -126,7 +130,7 @@ export default function PublishSequencePanel({
   useEffect(() => {
     let cancelled = false;
     const timer = setTimeout(() => {
-      getTranslations(categoryName)
+      getTranslations(categoryId)
         .then((data: Translation[]) => {
           if (cancelled) return;
           const langs = data.map((t) => t.lang);
@@ -144,7 +148,7 @@ export default function PublishSequencePanel({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [categoryName]);
+   }, [categoryId]);
 
   useEffect(() => {
     if (languages.length === 0) return;
@@ -204,7 +208,7 @@ export default function PublishSequencePanel({
     const timer = setTimeout(() => {
       setLoadingSeo(true);
       setError(null);
-      getSeoData(categoryName, selectedLang)
+      getSeoData(categoryId, selectedLang)
         .then((data) => {
           if (cancelled) return;
           setSeoData(data);
@@ -223,12 +227,12 @@ export default function PublishSequencePanel({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [categoryName, selectedLang]);
+  }, [categoryId, selectedLang]);
 
   async function handleSaveDescription() {
     setSavingDescription(true);
     try {
-      await saveDescription(categoryName, selectedLang, description);
+      await saveDescription(categoryId, selectedLang, description);
       setSavedDescriptionSnapshot(description);
     } catch {
       setError("Failed to save description");
@@ -240,7 +244,7 @@ export default function PublishSequencePanel({
   async function handleRegenerateDescription() {
     setRegeneratingDescription(true);
     try {
-      const newDescription = await regenerateDescription(categoryName, selectedLang);
+      const newDescription = await regenerateDescription(categoryId, selectedLang);
       setDescription(newDescription);
     } catch {
       setError("Failed to regenerate description");
@@ -267,7 +271,7 @@ export default function PublishSequencePanel({
     const key = `${row.subject_name}::${row.variation_text}`;
     setSavingRow(key);
     try {
-      await saveContentVariant(categoryName, selectedLang, row);
+      await saveContentVariant(categoryId, selectedLang, row);
       setDirtyRows((prev) => {
         const next = new Set(prev);
         next.delete(key);
@@ -293,7 +297,7 @@ export default function PublishSequencePanel({
     const key = `${row.subject_name}::${row.variation_text}`;
     setRegeneratingRow(key);
     try {
-      const result = await regenerateOne(categoryName, selectedLang, row.subject_name, row.variation_text);
+      const result = await regenerateOne(categoryId, selectedLang, row.subject_name, row.variation_text);
       setDirtyRows((prev) => {
         const next = new Set(prev);
         next.delete(key);
@@ -319,9 +323,9 @@ export default function PublishSequencePanel({
     setGeneratingMissing(true);
     setMissingResult(null);
     try {
-      const count = await generateMissing(categoryName, selectedLang);
+      const count = await generateMissing(categoryId, selectedLang);
       setMissingResult(count > 0 ? `Generated ${count} new` : "Nothing missing");
-      const refreshed = await getSeoData(categoryName, selectedLang);
+      const refreshed = await getSeoData(categoryId, selectedLang);
       setSeoData(refreshed);
       setTimeout(() => setMissingResult(null), 4000);
     } catch {

@@ -22,7 +22,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/categories/{name}": {
+    "/categories/{category_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -30,18 +30,18 @@ export interface paths {
             cookie?: never;
         };
         /** Get Category */
-        get: operations["get_category_categories__name__get"];
+        get: operations["get_category_categories__category_id__get"];
         /** Update Category */
-        put: operations["update_category_categories__name__put"];
+        put: operations["update_category_categories__category_id__put"];
         post?: never;
         /** Delete Category */
-        delete: operations["delete_category_categories__name__delete"];
+        delete: operations["delete_category_categories__category_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/categories/{name}/deletion-info": {
+    "/categories/{category_id}/deletion-info": {
         parameters: {
             query?: never;
             header?: never;
@@ -49,7 +49,7 @@ export interface paths {
             cookie?: never;
         };
         /** Category Deletion Info */
-        get: operations["category_deletion_info_categories__name__deletion_info_get"];
+        get: operations["category_deletion_info_categories__category_id__deletion_info_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -58,7 +58,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/categories/{category_name}/translations": {
+    "/categories/{category_id}/translations": {
         parameters: {
             query?: never;
             header?: never;
@@ -66,17 +66,17 @@ export interface paths {
             cookie?: never;
         };
         /** List Translations */
-        get: operations["list_translations_categories__category_name__translations_get"];
+        get: operations["list_translations_categories__category_id__translations_get"];
         put?: never;
         /** Create Translation */
-        post: operations["create_translation_categories__category_name__translations_post"];
+        post: operations["create_translation_categories__category_id__translations_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/categories/{category_name}/translations/{lang}": {
+    "/categories/{category_id}/translations/{lang}": {
         parameters: {
             query?: never;
             header?: never;
@@ -84,18 +84,18 @@ export interface paths {
             cookie?: never;
         };
         /** Get Translation */
-        get: operations["get_translation_categories__category_name__translations__lang__get"];
+        get: operations["get_translation_categories__category_id__translations__lang__get"];
         /** Update Translation */
-        put: operations["update_translation_categories__category_name__translations__lang__put"];
+        put: operations["update_translation_categories__category_id__translations__lang__put"];
         post?: never;
         /** Delete Translation */
-        delete: operations["delete_translation_categories__category_name__translations__lang__delete"];
+        delete: operations["delete_translation_categories__category_id__translations__lang__delete"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/categories/{category_name}/translations/{lang}/translate-variations": {
+    "/categories/{category_id}/translations/{lang}/translate-variations": {
         parameters: {
             query?: never;
             header?: never;
@@ -105,14 +105,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Translate Variations */
-        post: operations["translate_variations_categories__category_name__translations__lang__translate_variations_post"];
+        post: operations["translate_variations_categories__category_id__translations__lang__translate_variations_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/categories/{category_name}/translations/{lang}/translate-subjects": {
+    "/categories/{category_id}/translations/{lang}/translate-subjects": {
         parameters: {
             query?: never;
             header?: never;
@@ -122,14 +122,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Translate Subjects */
-        post: operations["translate_subjects_categories__category_name__translations__lang__translate_subjects_post"];
+        post: operations["translate_subjects_categories__category_id__translations__lang__translate_subjects_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/categories/{category_name}/translations/{lang}/translate-category-name": {
+    "/categories/{category_id}/translations/{lang}/translate-category-name": {
         parameters: {
             query?: never;
             header?: never;
@@ -139,7 +139,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Translate Category Name */
-        post: operations["translate_category_name_categories__category_name__translations__lang__translate_category_name_post"];
+        post: operations["translate_category_name_categories__category_id__translations__lang__translate_category_name_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -266,7 +266,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/generate/pair-counts/{category_name}": {
+    "/generate/pair-counts/{category_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -274,7 +274,7 @@ export interface paths {
             cookie?: never;
         };
         /** Pair Counts */
-        get: operations["pair_counts_generate_pair_counts__category_name__get"];
+        get: operations["pair_counts_generate_pair_counts__category_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -871,7 +871,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/categories/{category_name}/seo/{lang}": {
+    "/wordpress/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Verify Push */
+        post: operations["verify_push_wordpress_verify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/categories/{category_id}/seo/{lang}": {
         parameters: {
             query?: never;
             header?: never;
@@ -879,7 +896,7 @@ export interface paths {
             cookie?: never;
         };
         /** Get Seo Data */
-        get: operations["get_seo_data_categories__category_name__seo__lang__get"];
+        get: operations["get_seo_data_categories__category_id__seo__lang__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -888,7 +905,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/categories/{category_name}/seo/{lang}/description": {
+    "/categories/{category_id}/seo/{lang}/description": {
         parameters: {
             query?: never;
             header?: never;
@@ -897,7 +914,7 @@ export interface paths {
         };
         get?: never;
         /** Update Description */
-        put: operations["update_description_categories__category_name__seo__lang__description_put"];
+        put: operations["update_description_categories__category_id__seo__lang__description_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -905,7 +922,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/categories/{category_name}/seo/{lang}/description/regenerate": {
+    "/categories/{category_id}/seo/{lang}/description/regenerate": {
         parameters: {
             query?: never;
             header?: never;
@@ -915,14 +932,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Regen Description */
-        post: operations["regen_description_categories__category_name__seo__lang__description_regenerate_post"];
+        post: operations["regen_description_categories__category_id__seo__lang__description_regenerate_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/categories/{category_name}/seo/{lang}/content": {
+    "/categories/{category_id}/seo/{lang}/content": {
         parameters: {
             query?: never;
             header?: never;
@@ -931,7 +948,7 @@ export interface paths {
         };
         get?: never;
         /** Update Content Variant */
-        put: operations["update_content_variant_categories__category_name__seo__lang__content_put"];
+        put: operations["update_content_variant_categories__category_id__seo__lang__content_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -939,7 +956,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/categories/{category_name}/seo/{lang}/content/generate-missing": {
+    "/categories/{category_id}/seo/{lang}/content/generate-missing": {
         parameters: {
             query?: never;
             header?: never;
@@ -949,14 +966,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Generate Missing Content */
-        post: operations["generate_missing_content_categories__category_name__seo__lang__content_generate_missing_post"];
+        post: operations["generate_missing_content_categories__category_id__seo__lang__content_generate_missing_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/categories/{category_name}/seo/{lang}/content/regenerate": {
+    "/categories/{category_id}/seo/{lang}/content/regenerate": {
         parameters: {
             query?: never;
             header?: never;
@@ -966,7 +983,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Regen One Content */
-        post: operations["regen_one_content_categories__category_name__seo__lang__content_regenerate_post"];
+        post: operations["regen_one_content_categories__category_id__seo__lang__content_regenerate_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1635,22 +1652,22 @@ export interface components {
         };
         /** GenerationPairsPlanRequest */
         GenerationPairsPlanRequest: {
-            /** Category */
-            category: string;
+            /** Category Id */
+            category_id: number;
             /** Pairs */
             pairs: components["schemas"]["SubjectVariationPair"][];
         };
         /** GenerationPairsRunRequest */
         GenerationPairsRunRequest: {
-            /** Category */
-            category: string;
+            /** Category Id */
+            category_id: number;
             /** Pairs */
             pairs: components["schemas"]["SubjectVariationPair"][];
         };
         /** GenerationPlanRequest */
         GenerationPlanRequest: {
-            /** Category */
-            category: string;
+            /** Category Id */
+            category_id: number;
             /** Subjects */
             subjects?: string[] | null;
             /**
@@ -1672,8 +1689,8 @@ export interface components {
         };
         /** GenerationRunRequest */
         GenerationRunRequest: {
-            /** Category */
-            category: string;
+            /** Category Id */
+            category_id: number;
             /** Subjects */
             subjects?: string[] | null;
             /**
@@ -2258,8 +2275,8 @@ export interface components {
         };
         /** WordPressPreviewRequest */
         WordPressPreviewRequest: {
-            /** Category */
-            category: string;
+            /** Category Id */
+            category_id: number;
             /** Lang */
             lang: string;
         };
@@ -2287,8 +2304,8 @@ export interface components {
         };
         /** WordPressPushRequest */
         WordPressPushRequest: {
-            /** Category */
-            category: string;
+            /** Category Id */
+            category_id: number;
             /** Lang */
             lang: string;
             /**
@@ -2353,6 +2370,20 @@ export interface components {
             /** Message */
             message: string;
         };
+        /** WordPressVerifyRequest */
+        WordPressVerifyRequest: {
+            /** Category */
+            category: string;
+            /** Lang */
+            lang: string;
+        };
+        /** WordPressVerifyResponse */
+        WordPressVerifyResponse: {
+            /** Checked Count */
+            checked_count: number;
+            /** Removed Count */
+            removed_count: number;
+        };
     };
     responses: never;
     parameters: never;
@@ -2415,12 +2446,12 @@ export interface operations {
             };
         };
     };
-    get_category_categories__name__get: {
+    get_category_categories__category_id__get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                name: string;
+                category_id: number;
             };
             cookie?: never;
         };
@@ -2446,12 +2477,12 @@ export interface operations {
             };
         };
     };
-    update_category_categories__name__put: {
+    update_category_categories__category_id__put: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                name: string;
+                category_id: number;
             };
             cookie?: never;
         };
@@ -2481,14 +2512,14 @@ export interface operations {
             };
         };
     };
-    delete_category_categories__name__delete: {
+    delete_category_categories__category_id__delete: {
         parameters: {
             query?: {
                 delete_files?: boolean;
             };
             header?: never;
             path: {
-                name: string;
+                category_id: number;
             };
             cookie?: never;
         };
@@ -2514,12 +2545,12 @@ export interface operations {
             };
         };
     };
-    category_deletion_info_categories__name__deletion_info_get: {
+    category_deletion_info_categories__category_id__deletion_info_get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                name: string;
+                category_id: number;
             };
             cookie?: never;
         };
@@ -2545,12 +2576,12 @@ export interface operations {
             };
         };
     };
-    list_translations_categories__category_name__translations_get: {
+    list_translations_categories__category_id__translations_get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                category_name: string;
+                category_id: number;
             };
             cookie?: never;
         };
@@ -2576,12 +2607,12 @@ export interface operations {
             };
         };
     };
-    create_translation_categories__category_name__translations_post: {
+    create_translation_categories__category_id__translations_post: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                category_name: string;
+                category_id: number;
             };
             cookie?: never;
         };
@@ -2611,12 +2642,12 @@ export interface operations {
             };
         };
     };
-    get_translation_categories__category_name__translations__lang__get: {
+    get_translation_categories__category_id__translations__lang__get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                category_name: string;
+                category_id: number;
                 lang: string;
             };
             cookie?: never;
@@ -2643,12 +2674,12 @@ export interface operations {
             };
         };
     };
-    update_translation_categories__category_name__translations__lang__put: {
+    update_translation_categories__category_id__translations__lang__put: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                category_name: string;
+                category_id: number;
                 lang: string;
             };
             cookie?: never;
@@ -2679,12 +2710,12 @@ export interface operations {
             };
         };
     };
-    delete_translation_categories__category_name__translations__lang__delete: {
+    delete_translation_categories__category_id__translations__lang__delete: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                category_name: string;
+                category_id: number;
                 lang: string;
             };
             cookie?: never;
@@ -2709,12 +2740,12 @@ export interface operations {
             };
         };
     };
-    translate_variations_categories__category_name__translations__lang__translate_variations_post: {
+    translate_variations_categories__category_id__translations__lang__translate_variations_post: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                category_name: string;
+                category_id: number;
                 lang: string;
             };
             cookie?: never;
@@ -2741,12 +2772,12 @@ export interface operations {
             };
         };
     };
-    translate_subjects_categories__category_name__translations__lang__translate_subjects_post: {
+    translate_subjects_categories__category_id__translations__lang__translate_subjects_post: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                category_name: string;
+                category_id: number;
                 lang: string;
             };
             cookie?: never;
@@ -2773,12 +2804,12 @@ export interface operations {
             };
         };
     };
-    translate_category_name_categories__category_name__translations__lang__translate_category_name_post: {
+    translate_category_name_categories__category_id__translations__lang__translate_category_name_post: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                category_name: string;
+                category_id: number;
                 lang: string;
             };
             cookie?: never;
@@ -3052,12 +3083,12 @@ export interface operations {
             };
         };
     };
-    pair_counts_generate_pair_counts__category_name__get: {
+    pair_counts_generate_pair_counts__category_id__get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                category_name: string;
+                category_id: number;
             };
             cookie?: never;
         };
@@ -4430,12 +4461,45 @@ export interface operations {
             };
         };
     };
-    get_seo_data_categories__category_name__seo__lang__get: {
+    verify_push_wordpress_verify_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WordPressVerifyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WordPressVerifyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_seo_data_categories__category_id__seo__lang__get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                category_name: string;
+                category_id: number;
                 lang: string;
             };
             cookie?: never;
@@ -4462,12 +4526,12 @@ export interface operations {
             };
         };
     };
-    update_description_categories__category_name__seo__lang__description_put: {
+    update_description_categories__category_id__seo__lang__description_put: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                category_name: string;
+                category_id: number;
                 lang: string;
             };
             cookie?: never;
@@ -4498,12 +4562,12 @@ export interface operations {
             };
         };
     };
-    regen_description_categories__category_name__seo__lang__description_regenerate_post: {
+    regen_description_categories__category_id__seo__lang__description_regenerate_post: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                category_name: string;
+                category_id: number;
                 lang: string;
             };
             cookie?: never;
@@ -4530,12 +4594,12 @@ export interface operations {
             };
         };
     };
-    update_content_variant_categories__category_name__seo__lang__content_put: {
+    update_content_variant_categories__category_id__seo__lang__content_put: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                category_name: string;
+                category_id: number;
                 lang: string;
             };
             cookie?: never;
@@ -4566,12 +4630,12 @@ export interface operations {
             };
         };
     };
-    generate_missing_content_categories__category_name__seo__lang__content_generate_missing_post: {
+    generate_missing_content_categories__category_id__seo__lang__content_generate_missing_post: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                category_name: string;
+                category_id: number;
                 lang: string;
             };
             cookie?: never;
@@ -4598,12 +4662,12 @@ export interface operations {
             };
         };
     };
-    regen_one_content_categories__category_name__seo__lang__content_regenerate_post: {
+    regen_one_content_categories__category_id__seo__lang__content_regenerate_post: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                category_name: string;
+                category_id: number;
                 lang: string;
             };
             cookie?: never;

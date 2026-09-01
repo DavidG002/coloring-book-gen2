@@ -13,12 +13,12 @@ function parseLines(text: string): string[] {
 
 export default function PrepareCategoryPanel({
   categories,
-  defaultCategoryName,
+  defaultCategoryId,
 }: {
   categories: CategorySummary[];
-  defaultCategoryName?: string;
+  defaultCategoryId?: number;
 }) {
-  const [selected, setSelected] = useState(defaultCategoryName ?? categories[0]?.name ?? "");
+  const [selected, setSelected] = useState<number | undefined>(defaultCategoryId ?? categories[0]?.id);
   const [subjectsText, setSubjectsText] = useState("");
   const [variationsText, setVariationsText] = useState("");
   const [loading, setLoading] = useState(false);
@@ -27,8 +27,8 @@ export default function PrepareCategoryPanel({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (defaultCategoryName) setSelected(defaultCategoryName);
-  }, [defaultCategoryName]);
+    if (defaultCategoryId) setSelected(defaultCategoryId);
+  }, [defaultCategoryId]);
 
   useEffect(() => {
     if (!selected) return;
@@ -99,13 +99,13 @@ export default function PrepareCategoryPanel({
           Category
         </label>
         <select
-          value={selected}
-          onChange={(e) => setSelected(e.target.value)}
+          value={selected ?? ""}
+          onChange={(e) => setSelected(parseInt(e.target.value, 10))}
           className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm capitalize"
           style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
         >
           {categories.map((c) => (
-            <option key={c.id} value={c.name} className="capitalize">
+            <option key={c.id} value={c.id} className="capitalize">
               {c.name}
             </option>
           ))}

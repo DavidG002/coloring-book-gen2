@@ -38,12 +38,13 @@ def build_task_list(
 
     tasks = []
     for subject in all_subjects:
-        existing_max = _get_existing_max_variation(category_name, subject.name)
+        existing_max = _get_existing_max_variation(category.id, subject.name)
         for i in range(new_variations_per_subject):
             variation_num = existing_max + i + 1
             modifier = variations[(variation_num - 1) % len(variations)]
             tasks.append({
                 "category": category_name,
+                "category_id": category.id,
                 "subject": subject.name,
                 "variation_number": variation_num,
                 "variation_text": modifier.text,
@@ -57,17 +58,14 @@ def build_task_list(
     return tasks
 
 
-def _get_existing_max_variation(category_name: str, subject_name: str) -> int:
+def _get_existing_max_variation(category_id: int, subject_name: str) -> int:
     """Mirrors get_next_variation_number() from the original script —
     scans existing files on disk to avoid overwriting a published subject."""
     import glob
-    category_dir = os.path.join(OUTPUT_DIR, category_name)
+    category_dir = os.path.join(OUTPUT_DIR, str(category_id))
     pattern = os.path.join(category_dir, f"{subject_name.lower().replace(' ', '_')}_v*.png")
-    existing = glob.glob(pattern)
-    if not existing:
-        return 0
     numbers = []
-    for f in existing:
+    for f in glob.glob(pattern):
         try:
             numbers.append(int(f.split("_v")[-1].replace(".png", "")))
         except ValueError:
@@ -76,12 +74,6 @@ def _get_existing_max_variation(category_name: str, subject_name: str) -> int:
 
 
 def build_task_list_from_pairs(db: Session, category_name: str, pairs: list[dict]) -> list[dict]:
-    """pairs: [{"subject": "Car", "variation_text": "jumping over a puddle"}, ...]
-    Unlike build_task_list's cycling, this uses exactly the pairs the user
-    chose — no auto-cycling, no guessing. Filename numbering still just
-    needs to be unique per subject, so we keep the existing global-per-
-    subject counter for that; it doesn't need to encode which variation
-    was used, since variation_text is already stored separately."""
     category = db.query(Category).filter(Category.name == category_name).first()
     if not category:
         raise ValueError(f"Category '{category_name}' not found")
@@ -93,11 +85,12 @@ def build_task_list_from_pairs(db: Session, category_name: str, pairs: list[dict
     for pair in pairs:
         subject_name = pair["subject"]
         if subject_name not in counters:
-            counters[subject_name] = _get_existing_max_variation(category_name, subject_name)
+            counters[subject_name] = _get_existing_max_variation(category.id, subject_name)
         counters[subject_name] += 1
 
         tasks.append({
             "category": category_name,
+            "category_id": category.id,
             "subject": subject_name,
             "variation_number": counters[subject_name],
             "variation_text": pair["variation_text"],

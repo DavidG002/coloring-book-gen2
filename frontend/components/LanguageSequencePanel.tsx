@@ -33,20 +33,20 @@ async function autoTranslateLanguageTemplate(bookId: number, lang: string) {
   if (!res.ok) throw new ApiError(res.status, data.detail);
   return data as { filename_template: string; alt_template: string; title_template: string };
 }
-async function translateCategoryName(categoryName: string, lang: string): Promise<string> {
-  const res = await fetch(`${API_BASE_URL}/categories/${encodeURIComponent(categoryName)}/translations/${encodeURIComponent(lang)}/translate-category-name`, { method: "POST" });
+async function translateCategoryName(categoryId: number, lang: string): Promise<string> {
+  const res = await fetch(`${API_BASE_URL}/categories/${categoryId}/translations/${encodeURIComponent(lang)}/translate-category-name`, { method: "POST" });
   const data = await res.json();
   if (!res.ok) throw new ApiError(res.status, data.detail);
   return data.translated_text as string;
 }
-async function translateSubjects(categoryName: string, lang: string) {
-  const res = await fetch(`${API_BASE_URL}/categories/${encodeURIComponent(categoryName)}/translations/${encodeURIComponent(lang)}/translate-subjects`, { method: "POST" });
+async function translateSubjects(categoryId: number, lang: string) {
+  const res = await fetch(`${API_BASE_URL}/categories/${categoryId}/translations/${encodeURIComponent(lang)}/translate-subjects`, { method: "POST" });
   const data = await res.json();
   if (!res.ok) throw new ApiError(res.status, data.detail);
   return data.translated_count as number;
 }
-async function translateVariations(categoryName: string, lang: string) {
-  const res = await fetch(`${API_BASE_URL}/categories/${encodeURIComponent(categoryName)}/translations/${encodeURIComponent(lang)}/translate-variations`, { method: "POST" });
+async function translateVariations(categoryId: number, lang: string) {
+  const res = await fetch(`${API_BASE_URL}/categories/${categoryId}/translations/${encodeURIComponent(lang)}/translate-variations`, { method: "POST" });
   const data = await res.json();
   if (!res.ok) throw new ApiError(res.status, data.detail);
   return data.translated_count as number;
@@ -63,6 +63,7 @@ function computeCompleteness(t: Translation | undefined, subjects: Subject[]): C
 }
 
 export default function LanguageSequencePanel({
+  categoryId,
   categoryName,
   bookId,
   subjects,
@@ -70,6 +71,7 @@ export default function LanguageSequencePanel({
   onContinue,
   onTranslationsChanged,
 }: {
+  categoryId: number;
   categoryName: string;
   bookId: number;
   subjects: Subject[];
@@ -94,7 +96,7 @@ export default function LanguageSequencePanel({
 
   function load() {
     setLoading(true);
-    Promise.all([getSupportedLanguages(), getTranslations(categoryName)])
+    Promise.all([getSupportedLanguages(), getTranslations(categoryId)])
       .then(([langs, list]) => {
         setSupported(langs);
         const byLang: Record<string, Translation> = {};
@@ -121,7 +123,7 @@ export default function LanguageSequencePanel({
     }, 0);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [categoryName]);
+  }, [categoryId]);
 
   function persistHidden(next: Set<string>) {
     setHiddenLangs(next);
@@ -147,8 +149,8 @@ export default function LanguageSequencePanel({
       if (!exists) {
         let templates = await getLanguageTemplateDefault(bookId, lang);
         if (!templates) templates = await autoTranslateLanguageTemplate(bookId, lang);
-        const categoryTranslated = await translateCategoryName(categoryName, lang);
-        await createTranslation(categoryName, {
+        const categoryTranslated = await translateCategoryName(categoryId, lang);
+        await createTranslation(categoryId, {
           lang,
           category_translated: categoryTranslated,
           filename_template: templates.filename_template,
@@ -158,9 +160,9 @@ export default function LanguageSequencePanel({
           variation_items: [],
         });
       } else {
-        const categoryTranslated = await translateCategoryName(categoryName, lang);
-        const current = await getTranslation(categoryName, lang);
-        await updateTranslation(categoryName, lang, {
+        const categoryTranslated = await translateCategoryName(categoryId, lang);
+        const current = await getTranslation(categoryId, lang);
+        await updateTranslation(categoryId, lang, {
           category_translated: categoryTranslated,
           filename_template: current.filename_template,
           alt_template: current.alt_template,
@@ -169,9 +171,9 @@ export default function LanguageSequencePanel({
           variation_items: current.variation_items.map((i) => ({ variation_text: i.variation_text, translated_text: i.translated_text })),
         });
       }
-      await translateSubjects(categoryName, lang);
-      await translateVariations(categoryName, lang);
-      const refreshed = await getTranslation(categoryName, lang);
+      await translateSubjects(categoryId, lang);
+      await translateVariations(categoryId, lang);
+      const refreshed = await getTranslation(categoryId, lang);
       setTranslations((prev) => ({ ...prev, [lang]: refreshed }));
     } catch (err) {
       setError(err instanceof ApiError ? `${lang.toUpperCase()}: ${err.message}` : `Failed to generate ${lang.toUpperCase()}`);
@@ -451,13 +453,13 @@ export default function LanguageSequencePanel({
 
       {modalLang && (
         <TranslationEditorModal
-          categoryName={categoryName}
+          categoryId={categoryId}
           bookId={bookId}
           lang={modalLang}
           subjects={subjects}
           variations={variations}
           onClose={async () => {
-            const refreshed = await getTranslation(categoryName, modalLang).catch(() => null);
+            const refreshed = await getTranslation(categoryId, modalLang).catch(() => null);
             if (refreshed) setTranslations((prev) => ({ ...prev, [modalLang]: refreshed }));
             setModalLang(null);
             onTranslationsChanged?.();

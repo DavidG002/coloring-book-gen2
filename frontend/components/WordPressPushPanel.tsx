@@ -12,11 +12,11 @@ type WordPressPreviewResponse = components["schemas"]["WordPressPreviewResponse"
 
 type LangFile = WordPressPreviewFile & { lang: string };
 
-async function previewPush(category: string, lang: string): Promise<WordPressPreviewResponse> {
+async function previewPush(categoryId: number, lang: string): Promise<WordPressPreviewResponse> {
   const res = await fetch(`${API_BASE_URL}/wordpress/preview`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ category, lang }),
+    body: JSON.stringify({ category_id: categoryId, lang }),
   });
   if (!res.ok) {
     const data = await res.json();
@@ -25,11 +25,11 @@ async function previewPush(category: string, lang: string): Promise<WordPressPre
   return res.json();
 }
 
-async function runPush(category: string, lang: string, status: string, sourcePaths: string[]) {
+async function runPush(categoryId: number, lang: string, status: string, sourcePaths: string[]) {
   const res = await fetch(`${API_BASE_URL}/wordpress/push`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ category, lang, status, source_paths: sourcePaths }),
+    body: JSON.stringify({ category_id: categoryId, lang, status, source_paths: sourcePaths }),
   });
   if (!res.ok) {
     const data = await res.json();
@@ -69,7 +69,7 @@ function formatBatchDate(iso: string | null): string {
   return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
-export default function WordPressPushPanel({ categoryName }: { categoryName: string }) {
+export default function WordPressPushPanel({ categoryId, categoryName }: { categoryId: number; categoryName: string }) {
   const [languages, setLanguages] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -92,12 +92,12 @@ export default function WordPressPushPanel({ categoryName }: { categoryName: str
   function loadAll() {
     setLoading(true);
     setError(null);
-    getTranslations(categoryName)
+    getTranslations(categoryId)
       .then(async (data: Translation[]) => {
         const langs = data.map((t) => t.lang);
         setLanguages(langs);
         const results = await Promise.all(
-          langs.map((lang) => previewPush(categoryName, lang).then((p) => [lang, p] as const).catch(() => [lang, null] as const))
+          langs.map((lang) => previewPush(categoryId, lang).then((p) => [lang, p] as const).catch(() => [lang, null] as const))
         );
         const byLang: Record<string, WordPressPreviewResponse> = {};
         for (const [lang, preview] of results) {
@@ -122,7 +122,7 @@ export default function WordPressPushPanel({ categoryName }: { categoryName: str
     const timer = setTimeout(loadAll, 0);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [categoryName]);
+  }, [categoryId]);
 
   const allFiles: LangFile[] = useMemo(() => {
     const out: LangFile[] = [];
@@ -259,7 +259,7 @@ export default function WordPressPushPanel({ categoryName }: { categoryName: str
 
       for (const [lang, paths] of Object.entries(pathsByLang)) {
         if (paths.length === 0) continue;
-        const result = await runPush(categoryName, lang, status, paths);
+        const result = await runPush(categoryId, lang, status, paths);
         totalPushed += result.pushed_count;
         totalFailed += result.failed_count;
         allFailedItems.push(...result.failed_items);
@@ -275,11 +275,11 @@ export default function WordPressPushPanel({ categoryName }: { categoryName: str
     }
   }
 
-  async function verifyPushes(category: string, lang: string) {
+  async function verifyPushes(categoryId: number, lang: string) {
     const res = await fetch(`${API_BASE_URL}/wordpress/verify`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ category, lang }),
+      body: JSON.stringify({ category_id: categoryId, lang }),
     });
     if (!res.ok) {
       const data = await res.json();
@@ -295,7 +295,7 @@ export default function WordPressPushPanel({ categoryName }: { categoryName: str
     try {
       let totalRemoved = 0;
       for (const lang of languages) {
-        const result = await verifyPushes(categoryName, lang);
+        const result = await verifyPushes(categoryId, lang);
         totalRemoved += result.removed_count;
       }
       setVerifyResult(

@@ -16,10 +16,16 @@ from routers.settings import get_settings as get_settings_route, DEFAULTS
 router = APIRouter(prefix="/generate", tags=["generation"])
 
 
-def _load_settings_dict(db: Session, category_name: str) -> dict:
-    category = db.query(Category).filter(Category.name == category_name).first()
-    if not category or not category.book:
-        raise HTTPException(status_code=400, detail=f"Category '{category_name}' has no associated book")
+def _get_category_or_404(db: Session, category_id: int) -> Category:
+    category = db.query(Category).filter(Category.id == category_id).first()
+    if not category:
+        raise HTTPException(status_code=404, detail=f"Category {category_id} not found")
+    return category
+
+
+def _load_settings_dict(db: Session, category: Category) -> dict:
+    if not category.book:
+        raise HTTPException(status_code=400, detail=f"Category '{category.name}' has no associated book")
     book = category.book
     return {
         "canvas_width": book.canvas_width,
@@ -40,9 +46,10 @@ def _load_settings_dict(db: Session, category_name: str) -> dict:
 
 @router.post("/plan", response_model=GenerationPlanResponse)
 def plan_generation(payload: GenerationPlanRequest, db: Session = Depends(get_db)):
+    category = _get_category_or_404(db, payload.category_id)
     try:
         tasks = build_task_list(
-            db, payload.category, payload.subjects,
+            db, category.name, payload.subjects,
             payload.new_variations_per_subject, payload.max_images,
         )
     except ValueError as e:
@@ -57,9 +64,10 @@ def plan_generation(payload: GenerationPlanRequest, db: Session = Depends(get_db
 
 @router.post("/run", response_model=GenerationRunResponse)
 def run_generation(payload: GenerationRunRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    category = _get_category_or_404(db, payload.category_id)
     try:
         tasks = build_task_list(
-            db, payload.category, payload.subjects,
+            db, category.name, payload.subjects,
             payload.new_variations_per_subject, payload.max_images,
         )
     except ValueError as e:
@@ -69,7 +77,7 @@ def run_generation(payload: GenerationRunRequest, background_tasks: BackgroundTa
         raise HTTPException(status_code=400, detail="No images to generate for this request")
 
     job = GenerationJob(
-        category=payload.category,
+        category=category.name,
         params_json=json.dumps(payload.model_dump()),
         status="pending",
         total_images=len(tasks),
@@ -79,7 +87,7 @@ def run_generation(payload: GenerationRunRequest, background_tasks: BackgroundTa
     db.commit()
     db.refresh(job)
 
-    settings = _load_settings_dict(db, payload.category)
+    settings = _load_settings_dict(db, category)
     background_tasks.add_task(run_generation_job, job.id, tasks, settings)
 
     return GenerationRunResponse(job_id=job.id, status=job.status, total_images=job.total_images)
@@ -119,11 +127,13 @@ def cancel_job(job_id: int, db: Session = Depends(get_db)):
     request_cancel(job_id)
     return {"detail": f"Cancel requested for job {job_id}"}
 
+
 @router.post("/plan-pairs", response_model=GenerationPlanResponse)
 def plan_generation_pairs(payload: GenerationPairsPlanRequest, db: Session = Depends(get_db)):
+    category = _get_category_or_404(db, payload.category_id)
     try:
         tasks = build_task_list_from_pairs(
-            db, payload.category, [p.model_dump() for p in payload.pairs]
+            db, category.name, [p.model_dump() for p in payload.pairs]
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -137,9 +147,10 @@ def plan_generation_pairs(payload: GenerationPairsPlanRequest, db: Session = Dep
 
 @router.post("/run-pairs", response_model=GenerationRunResponse)
 def run_generation_pairs(payload: GenerationPairsRunRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    category = _get_category_or_404(db, payload.category_id)
     try:
         tasks = build_task_list_from_pairs(
-            db, payload.category, [p.model_dump() for p in payload.pairs]
+            db, category.name, [p.model_dump() for p in payload.pairs]
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -148,7 +159,7 @@ def run_generation_pairs(payload: GenerationPairsRunRequest, background_tasks: B
         raise HTTPException(status_code=400, detail="No images to generate for this request")
 
     job = GenerationJob(
-        category=payload.category,
+        category=category.name,
         params_json=json.dumps(payload.model_dump()),
         status="pending",
         total_images=len(tasks),
@@ -158,12 +169,13 @@ def run_generation_pairs(payload: GenerationPairsRunRequest, background_tasks: B
     db.commit()
     db.refresh(job)
 
-    settings = _load_settings_dict(db, payload.category)
+    settings = _load_settings_dict(db, category)
     background_tasks.add_task(run_generation_job, job.id, tasks, settings)
 
     return GenerationRunResponse(job_id=job.id, status=job.status, total_images=job.total_images)
 
 
-@router.get("/pair-counts/{category_name}", response_model=PairGenerationCounts)
-def pair_counts(category_name: str, db: Session = Depends(get_db)):
-    return PairGenerationCounts(counts=get_pair_generation_counts(db, category_name))
+@router.get("/pair-counts/{category_id}", response_model=PairGenerationCounts)
+def pair_counts(category_id: int, db: Session = Depends(get_db)):
+    category = _get_category_or_404(db, category_id)
+    return PairGenerationCounts(counts=get_pair_generation_counts(db, category.name))

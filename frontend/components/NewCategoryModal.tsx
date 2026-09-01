@@ -35,7 +35,7 @@ export default function NewCategoryModal({
         subjects: [],
         variations: [],
       });
-      router.push(`/categories/${encodeURIComponent(category.name)}`);
+      router.push(`/categories/${category.id}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to create category");
       setSubmitting(false);

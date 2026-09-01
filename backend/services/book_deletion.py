@@ -126,11 +126,12 @@ def delete_book_cascade(db: Session, book_id: int, delete_files: bool) -> dict:
         "deleted_file_count": deleted_files_count,
     }
 
-def get_category_deletion_info(db: Session, category_name: str) -> dict:
+def get_category_deletion_info(db: Session, category_id: int) -> dict:
     """Real counts for a single category, same shape as book-level info."""
-    category = db.query(Category).filter(Category.name == category_name).first()
+    category = db.query(Category).filter(Category.id == category_id).first()
     if not category:
-        raise ValueError(f"Category '{category_name}' not found")
+        raise ValueError(f"Category {category_id} not found")
+    category_name = category.name
 
     image_count = db.query(GenerationImage).filter(GenerationImage.category == category_name).count()
     published_count = (
@@ -157,13 +158,14 @@ def get_category_deletion_info(db: Session, category_name: str) -> dict:
     }
 
 
-def delete_category_cascade(db: Session, category_name: str, delete_files: bool) -> dict:
+def delete_category_cascade(db: Session, category_id: int, delete_files: bool) -> dict:
     """Deletes one category. Configuration is always removed. Files and
     local publish history are only removed if delete_files is True.
     WordPress content is never touched, same rule as book deletion."""
-    category = db.query(Category).filter(Category.name == category_name).first()
+    category = db.query(Category).filter(Category.id == category_id).first()
     if not category:
-        raise ValueError(f"Category '{category_name}' not found")
+        raise ValueError(f"Category {category_id} not found")
+    category_name = category.name
 
     db.query(WordPressPublishedItem).filter(WordPressPublishedItem.category == category_name).delete()
     db.query(WordPressCategoryTerm).filter(WordPressCategoryTerm.category == category_name).delete()

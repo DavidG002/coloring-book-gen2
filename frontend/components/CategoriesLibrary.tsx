@@ -201,7 +201,7 @@ export default function CategoriesLibrary() {
               </div>
               <div className="flex items-center gap-2">
                 <Link
-                  href={`/categories/${encodeURIComponent(cat.name)}`}
+                  href={`/categories/${cat.id}`}
                   className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold text-white"
                   style={{ background: "var(--teal)" }}
                 >
@@ -217,7 +217,7 @@ export default function CategoriesLibrary() {
               </div>
             </div>
             <div className="p-4">
-              <CategoryImageStrip categoryName={cat.name} refreshKey={0} />
+              <CategoryImageStrip categoryId={cat.id} categoryName={cat.name} refreshKey={0} />
             </div>
           </div>
         );

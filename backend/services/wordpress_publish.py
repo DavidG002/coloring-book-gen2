@@ -42,12 +42,12 @@ def get_sibling_translations(db: Session, source_path: str, exclude_lang: str, s
     return {lang: post_id for lang, post_id in rows}
 
 
-def get_sibling_term_translations(db: Session, category: str, exclude_lang: str, site_url: str) -> dict[str, int]:
+def get_sibling_term_translations(db: Session, category_id: int, exclude_lang: str, site_url: str) -> dict[str, int]:
     """Same idea, for the category's taxonomy term across languages, on this same site."""
     rows = (
         db.query(WordPressCategoryTerm.lang, WordPressCategoryTerm.wp_term_id)
         .filter(
-            WordPressCategoryTerm.category == category,
+            WordPressCategoryTerm.category_id == category_id,
             WordPressCategoryTerm.lang != exclude_lang,
             WordPressCategoryTerm.site_url == site_url,
         )
@@ -59,20 +59,21 @@ def get_sibling_term_translations(db: Session, category: str, exclude_lang: str,
 def ensure_category_term(
     db: Session,
     config: WordPressIntegration,
-    category: str,
+    category_id: int,
+    category_name: str,
     lang: str,
     translated_name: str,
     description: str | None = None,
 ) -> int:
     """Returns the WP term ID for this category+language+site, creating it on
     WordPress only the first time it's ever needed for this specific site.
-    If Polylang Pro linking is enabled, links a newly-created term to any
+    If Polylang linking is enabled, links a newly-created term to any
     sibling terms that already exist for this category in other languages
     on this same site."""
     existing = (
         db.query(WordPressCategoryTerm)
         .filter(
-            WordPressCategoryTerm.category == category,
+            WordPressCategoryTerm.category_id == category_id,
             WordPressCategoryTerm.lang == lang,
             WordPressCategoryTerm.site_url == config.site_url,
         )
@@ -90,7 +91,7 @@ def ensure_category_term(
 
     if config.use_polylang_linking:
         payload["lang"] = lang
-        siblings = get_sibling_term_translations(db, category, exclude_lang=lang, site_url=config.site_url)
+        siblings = get_sibling_term_translations(db, category_id, exclude_lang=lang, site_url=config.site_url)
         if siblings:
             payload["translations"] = siblings
 
@@ -101,7 +102,7 @@ def ensure_category_term(
 
     term_id = response.json()["id"]
 
-    record = WordPressCategoryTerm(category=category, lang=lang, wp_term_id=term_id, site_url=config.site_url)
+    record = WordPressCategoryTerm(category=category_name, category_id=category_id, lang=lang, wp_term_id=term_id, site_url=config.site_url)
     db.add(record)
     db.commit()
     return term_id
@@ -190,11 +191,6 @@ def create_post(
 
     result = response.json()
 
-    # Free-tier Polylang doesn't expose lang/translations via its own REST
-    # fields at all — that native mechanism is Polylang PRO-only. Instead,
-    # we call a custom endpoint (see docs/wordpress-integration.md) that
-    # invokes Polylang's free, core pll_set_post_language() /
-    # pll_save_post_translations() functions directly.
     if lang or translations_link:
         post_id = result["id"]
         custom_url = config.site_url.rstrip("/") + "/wp-json/zuzu/v1/set-post-language"
@@ -242,6 +238,7 @@ def record_published_item(
     db: Session,
     source_path: str,
     category: str,
+    category_id: int,
     lang: str,
     wp_media_id: int,
     wp_post_id: int,
@@ -256,6 +253,7 @@ def record_published_item(
     record = WordPressPublishedItem(
         source_path=source_path,
         category=category,
+        category_id=category_id,
         lang=lang,
         wp_media_id=wp_media_id,
         wp_post_id=wp_post_id,
@@ -273,13 +271,13 @@ def record_published_item(
     return record
 
 
-def get_already_pushed_paths(db: Session, category: str, lang: str, site_url: str) -> set[str]:
+def get_already_pushed_paths(db: Session, category_id: int, lang: str, site_url: str) -> set[str]:
     """Every source_path already pushed for this category+language, on this
     specific site — used to compute the 'only new' filter."""
     rows = (
         db.query(WordPressPublishedItem.source_path)
         .filter(
-            WordPressPublishedItem.category == category,
+            WordPressPublishedItem.category_id == category_id,
             WordPressPublishedItem.lang == lang,
             WordPressPublishedItem.site_url == site_url,
         )
@@ -287,7 +285,8 @@ def get_already_pushed_paths(db: Session, category: str, lang: str, site_url: st
     )
     return {r[0] for r in rows}
 
-def verify_and_clean_stale_pushes(db: Session, category: str, lang: str, site_url: str) -> dict:
+
+def verify_and_clean_stale_pushes(db: Session, category_id: int, lang: str, site_url: str) -> dict:
     """Checks every tracked 'already pushed' item against the real
     WordPress site — if a post was deleted there directly (not through
     our app), WordPress returns 404 and we clear our stale local record,
@@ -299,7 +298,7 @@ def verify_and_clean_stale_pushes(db: Session, category: str, lang: str, site_ur
     items = (
         db.query(WordPressPublishedItem)
         .filter(
-            WordPressPublishedItem.category == category,
+            WordPressPublishedItem.category_id == category_id,
             WordPressPublishedItem.lang == lang,
             WordPressPublishedItem.site_url == site_url,
         )
@@ -313,7 +312,7 @@ def verify_and_clean_stale_pushes(db: Session, category: str, lang: str, site_ur
         try:
             response = httpx.get(url, auth=_auth(config), timeout=15.0)
         except Exception:
-            continue  # network hiccup — leave this item alone, don't wrongly clear it
+            continue
         if response.status_code == 404:
             db.delete(item)
             removed_count += 1
@@ -342,16 +341,17 @@ def get_locally_published_paths(db: Session, category: str, lang: str) -> set[st
     return {r[0] for r in rows}
 
 
-def preview_wordpress_push(db: Session, category_name: str, lang: str) -> dict:
+def preview_wordpress_push(db: Session, category_id: int, lang: str) -> dict:
     """Shows every locally-published-and-eligible file for this category+
     language — each tagged with push status (for the currently configured
     site), exclusion status, whether it needs re-syncing, and which local
     publish run it came from."""
     config = _get_wp_config(db)
 
-    category = db.query(Category).filter(Category.name == category_name).first()
+    category = db.query(Category).filter(Category.id == category_id).first()
     if not category:
-        raise ValueError(f"Category '{category_name}' not found")
+        raise ValueError(f"Category {category_id} not found")
+    category_name = category.name
 
     translation = (
         db.query(Translation)
@@ -362,7 +362,7 @@ def preview_wordpress_push(db: Session, category_name: str, lang: str) -> dict:
         raise ValueError(f"No '{lang}' translation for '{category_name}' — create it first")
 
     plan = build_publish_plan(db, category_name, lang)
-    already_pushed = get_already_pushed_paths(db, category_name, lang, site_url=config.site_url)
+    already_pushed = get_already_pushed_paths(db, category.id, lang, site_url=config.site_url)
     locally_published = get_locally_published_paths(db, category_name, lang)
     eligible_files = [f for f in plan["files"] if f["source_path"] in locally_published]
 
@@ -410,7 +410,7 @@ def preview_wordpress_push(db: Session, category_name: str, lang: str) -> dict:
             try:
                 variant = ensure_content_variant(
                     db,
-                    category_name=category_name,
+                    category_id=category.id,
                     subject_name=image_record.subject,
                     variation_text=image_record.variation_text,
                     lang=lang,
@@ -455,7 +455,7 @@ def preview_wordpress_push(db: Session, category_name: str, lang: str) -> dict:
 
 def push_batch_to_wordpress(
     db: Session,
-    category_name: str,
+    category_id: int,
     lang: str,
     status: str = "draft",
     only_new: bool = True,
@@ -468,9 +468,10 @@ def push_batch_to_wordpress(
     is scoped to the currently configured site."""
     config = _get_wp_config(db)
 
-    category = db.query(Category).filter(Category.name == category_name).first()
+    category = db.query(Category).filter(Category.id == category_id).first()
     if not category:
-        raise ValueError(f"Category '{category_name}' not found")
+        raise ValueError(f"Category {category_id} not found")
+    category_name = category.name
 
     translation = (
         db.query(Translation)
@@ -481,7 +482,7 @@ def push_batch_to_wordpress(
         raise ValueError(f"No '{lang}' translation for '{category_name}' — create it first")
 
     plan = build_publish_plan(db, category_name, lang)
-    already_pushed = get_already_pushed_paths(db, category_name, lang, site_url=config.site_url)
+    already_pushed = get_already_pushed_paths(db, category.id, lang, site_url=config.site_url)
     excluded_paths = {
         img.file_path for img in db.query(GenerationImage).filter(GenerationImage.wp_excluded == True).all()
     }
@@ -505,9 +506,8 @@ def push_batch_to_wordpress(
         ] if only_new else all_files
         skipped_count = len(all_files) - len(files_to_push)
 
-    category_description = ensure_category_description(db, category_name, translation.category_translated, lang)
-    term_id = ensure_category_term(db, config, category_name, lang, translation.category_translated, description=category_description)
-
+    category_description = ensure_category_description(db, category.id, translation.category_translated, lang)
+    term_id = ensure_category_term(db, config, category.id, category_name, lang, translation.category_translated, description=category_description)
     pushed_items = []
     failed_items = []
 
@@ -519,7 +519,7 @@ def push_batch_to_wordpress(
 
             variant = ensure_content_variant(
                 db,
-                category_name=category_name,
+                category_id=category.id,
                 subject_name=image_record.subject,
                 variation_text=image_record.variation_text,
                 lang=lang,
@@ -562,6 +562,7 @@ def push_batch_to_wordpress(
                 db,
                 source_path=f["source_path"],
                 category=category_name,
+                category_id=category.id,
                 lang=lang,
                 wp_media_id=media_id,
                 wp_post_id=result["id"],
@@ -620,7 +621,7 @@ def sync_pushed_item_to_wordpress(db: Session, source_path: str, lang: str) -> d
 
     variant = ensure_content_variant(
         db,
-        category_name=item.category,
+        category_id=category.id,
         subject_name=image_record.subject,
         variation_text=image_record.variation_text,
         lang=lang,

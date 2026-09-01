@@ -222,7 +222,7 @@ export default function Dashboard() {
           {recentCategories.map((cat, i) => (
             <Link
               key={cat.id}
-              href={`/categories/${encodeURIComponent(cat.name)}`}
+              href={`/categories/${cat.id}`}
               className="flex items-center gap-3.5"
               style={{ padding: "15px 2px", borderBottom: "1px solid var(--pencil-light)" }}
             >

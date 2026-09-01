@@ -25,11 +25,11 @@ interface JobStatus {
 }
 
 
-async function runPairs(category: string, pairs: Pair[]) {
+async function runPairs(categoryId: number, pairs: Pair[]) {
   const res = await fetch(`${API_BASE_URL}/generate/run-pairs`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ category, pairs }),
+    body: JSON.stringify({ category_id: categoryId, pairs }),
   });
   if (!res.ok) throw new Error((await res.json()).detail || "Failed to start generation");
   return res.json() as Promise<{ job_id: number; status: string; total_images: number }>;
@@ -44,14 +44,14 @@ async function cancelJob(jobId: number) {
   await fetch(`${API_BASE_URL}/generate/cancel/${jobId}`, { method: "POST" });
 }
 
-async function getPairCounts(category: string): Promise<Record<string, number>> {
-  const res = await fetch(`${API_BASE_URL}/generate/pair-counts/${encodeURIComponent(category)}`);
+async function getPairCounts(categoryId: number): Promise<Record<string, number>> {
+  const res = await fetch(`${API_BASE_URL}/generate/pair-counts/${categoryId}`);
   const data = await res.json();
   return data.counts ?? {};
 }
 
-async function updateCategoryLists(categoryName: string, body: { subjects?: string[]; variations?: string[] }) {
-  const res = await fetch(`${API_BASE_URL}/categories/${encodeURIComponent(categoryName)}`, {
+async function updateCategoryLists(categoryId: number, body: { subjects?: string[]; variations?: string[] }) {
+  const res = await fetch(`${API_BASE_URL}/categories/${categoryId}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -100,8 +100,8 @@ export default function GenerateSequencePanel({
 
 
   useEffect(() => {
-    getPairCounts(categoryName).then(setPairCounts).catch(() => {});
-  }, [categoryName]);
+    getPairCounts(category.id).then(setPairCounts).catch(() => {});
+  }, [category.id]);
 
   useEffect(() => {
     return () => {
@@ -138,7 +138,7 @@ export default function GenerateSequencePanel({
     const next = [...subjects, name.trim()];
     setSubjects(next);
     try {
-      const updated = await updateCategoryLists(categoryName, { subjects: next });
+      const updated = await updateCategoryLists(category.id, { subjects: next });
       onCategoryChanged(updated);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add subject");
@@ -151,7 +151,7 @@ export default function GenerateSequencePanel({
     const next = [...variations, text.trim()];
     setVariations(next);
     try {
-      const updated = await updateCategoryLists(categoryName, { variations: next });
+      const updated = await updateCategoryLists(category.id, { variations: next });
       onCategoryChanged(updated);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add variation");
@@ -163,7 +163,7 @@ export default function GenerateSequencePanel({
     setVariations(next);
     setPairs((prev) => prev.filter((p) => p.variation_text !== variation));
     try {
-      const updated = await updateCategoryLists(categoryName, { variations: next });
+      const updated = await updateCategoryLists(category.id, { variations: next });
       onCategoryChanged(updated);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to remove variation");
@@ -180,7 +180,7 @@ export default function GenerateSequencePanel({
     
 
     try {
-      const result = await runPairs(categoryName, pairs);
+      const result = await runPairs(category.id, pairs);
 
       pollRef.current = setInterval(async () => {
         try {
@@ -221,7 +221,7 @@ export default function GenerateSequencePanel({
             setGenerating(false);
             setPairs([]);
             setRefreshTrigger((n) => n + 1);
-            getPairCounts(categoryName).then(setPairCounts).catch(() => {});
+            getPairCounts(category.id).then(setPairCounts).catch(() => {});
           }
         } catch {
           // keep polling; a transient failure shouldn't kill the whole run
@@ -328,7 +328,7 @@ export default function GenerateSequencePanel({
         </div>
       )}
 
-      <CategoryImageStrip categoryName={categoryName} refreshKey={refreshTrigger} />
+      <CategoryImageStrip categoryId={category.id} categoryName={categoryName} refreshKey={refreshTrigger} />
       <BatchHistoryPanel categoryName={categoryName} refreshKey={refreshTrigger} />
 
       <div className="grid grid-cols-2" style={{ borderTop: "1px solid var(--pencil-light)", background: "var(--paper)" }}>

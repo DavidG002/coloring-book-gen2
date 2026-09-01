@@ -1,5 +1,3 @@
-from unicodedata import category
-
 from sqlalchemy.orm import Session
 from services.openai_client import get_openai_client
 from services.translate import LANGUAGE_NAMES
@@ -68,9 +66,16 @@ META_DESC: <a compelling meta description under 155 characters, written to earn 
     return result
 
 
+def _get_category_or_raise(db: Session, category_id: int) -> Category:
+    category = db.query(Category).filter(Category.id == category_id).first()
+    if not category:
+        raise ValueError(f"Category {category_id} not found")
+    return category
+
+
 def ensure_content_variant(
     db: Session,
-    category_name: str,
+    category_id: int,
     subject_name: str,
     variation_text: str,
     lang: str,
@@ -78,9 +83,8 @@ def ensure_content_variant(
     """Returns the cached ContentVariant if it exists, otherwise generates
     and stores it once — every future image using this same subject,
     variation, and language reuses it for free."""
-    category = db.query(Category).filter(Category.name == category_name).first()
-    if not category:
-        raise ValueError(f"Category '{category_name}' not found")
+    category = _get_category_or_raise(db, category_id)
+    category_name = category.name
 
     subject = db.query(Subject).filter(Subject.category_id == category.id, Subject.name == subject_name).first()
     if not subject:
@@ -134,39 +138,40 @@ ONLY the sentence, no quotes, no explanation."""
     return (response.choices[0].message.content or "").strip()
 
 
-def ensure_category_description(db: Session, category_name: str, translated_category_name: str, lang: str) -> str:
+def ensure_category_description(db: Session, category_id: int, translated_category_name: str, lang: str) -> str:
     """Returns the cached description if this category+language has one
     already; otherwise generates and stores it once."""
-    category = db.query(Category).filter(Category.name == category_name).first()
-    if not category:
-        raise ValueError(f"Category '{category_name}' not found")
+    category = _get_category_or_raise(db, category_id)
+    category_name = category.name
 
     existing = (
         db.query(CategoryDescription)
-        .filter(CategoryDescription.category == category_name, CategoryDescription.lang == lang)
+        .filter(CategoryDescription.category_id == category_id, CategoryDescription.lang == lang)
         .first()
     )
     if existing:
         return existing.description
 
     description = generate_category_description(category.book.base_prompt, category.book.product_noun, category_name, translated_category_name, lang)
-    
-    record = CategoryDescription(category=category_name, lang=lang, description=description)
+
+    record = CategoryDescription(category=category_name, category_id=category_id, lang=lang, description=description)
     db.add(record)
     db.commit()
     return description
+
+
 def regenerate_content_variant(
     db: Session,
-    category_name: str,
+    category_id: int,
     subject_name: str,
     variation_text: str,
     lang: str,
 ) -> ContentVariant:
     """Forces a fresh generation even if one is already cached — the fix
     for when the existing AI-written copy is wrong and needs a redo."""
-    category = db.query(Category).filter(Category.name == category_name).first()
-    if not category:
-        raise ValueError(f"Category '{category_name}' not found")
+    category = _get_category_or_raise(db, category_id)
+    category_name = category.name
+
     subject = db.query(Subject).filter(Subject.category_id == category.id, Subject.name == subject_name).first()
     variation = db.query(Variation).filter(Variation.category_id == category.id, Variation.text == variation_text).first()
     if not subject or not variation:
@@ -198,7 +203,7 @@ def regenerate_content_variant(
     return record
 
 
-def list_content_variants(db: Session, category_name: str, lang: str) -> list[dict]:
+def list_content_variants(db: Session, category_id: int, lang: str) -> list[dict]:
     """Only subject×variation pairings that have at least one real, approved
     (non-rejected) generated image — not the full theoretical cross-product.
     A pairing with no approved images yet has nothing to publish, so it has
@@ -209,9 +214,8 @@ def list_content_variants(db: Session, category_name: str, lang: str) -> list[di
     SEO content, since they depict the same thing."""
     from models import GenerationImage
 
-    category = db.query(Category).filter(Category.name == category_name).first()
-    if not category:
-        raise ValueError(f"Category '{category_name}' not found")
+    category = _get_category_or_raise(db, category_id)
+    category_name = category.name
 
     # One representative approved image per (subject, variation_text) —
     # used both to confirm the pairing was actually generated and to give
@@ -259,10 +263,9 @@ def list_content_variants(db: Session, category_name: str, lang: str) -> list[di
     return rows
 
 
-def regenerate_category_description(db: Session, category_name: str, translated_category_name: str, lang: str) -> str:
-    category = db.query(Category).filter(Category.name == category_name).first()
-    if not category:
-        raise ValueError(f"Category '{category_name}' not found")
+def regenerate_category_description(db: Session, category_id: int, translated_category_name: str, lang: str) -> str:
+    category = _get_category_or_raise(db, category_id)
+    category_name = category.name
 
     description = generate_category_description(category.book.base_prompt, category.book.product_noun, category_name, translated_category_name, lang)
 
@@ -275,7 +278,6 @@ def regenerate_category_description(db: Session, category_name: str, translated_
         existing.description = description
         db.commit()
         return description
-
     record = CategoryDescription(category=category_name, lang=lang, description=description)
     db.add(record)
     db.commit()

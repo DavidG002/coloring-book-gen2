@@ -72,13 +72,15 @@ class Category(Base):
     __tablename__ = "categories"
 
     id = Column(Integer, primary_key=True)
-    name = Column(String, unique=True, nullable=False)       # e.g. "dinosaurs"
+    name = Column(String, nullable=False)       # e.g. "dinosaurs" — unique per book, not globally
     book_id = Column(Integer, ForeignKey("books.id"), nullable=False)
 
     book = relationship("Book", back_populates="categories")
     subjects = relationship("Subject", back_populates="category", cascade="all, delete-orphan", order_by="Subject.id")
     variations = relationship("Variation", back_populates="category", cascade="all, delete-orphan")
     translations = relationship("Translation", back_populates="category", cascade="all, delete-orphan")
+
+    __table_args__ = (UniqueConstraint("book_id", "name", name="uq_category_per_book"),)
 
 class Subject(Base):
     __tablename__ = "subjects"
@@ -189,6 +191,7 @@ class GenerationImage(Base):
     id = Column(Integer, primary_key=True)
     job_id = Column(Integer, ForeignKey("generation_jobs.id"), nullable=False)
     category = Column(String, nullable=False)
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
     subject = Column(String, nullable=False)
     variation_number = Column(Integer, nullable=False)
     variation_text = Column(Text, nullable=True)  # nullable: images generated before this column existed won't have it
@@ -197,6 +200,7 @@ class GenerationImage(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     wp_excluded = Column(Boolean, nullable=False, default=False)
     prompt_used = Column(Text, nullable=True)
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
 
     job = relationship("GenerationJob", back_populates="images")
 
@@ -205,6 +209,7 @@ class PublishRun(Base):
 
     id = Column(Integer, primary_key=True)
     category = Column(String, nullable=False)
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
     lang = Column(String, nullable=False)
     published_count = Column(Integer, nullable=False)
     new_count = Column(Integer, nullable=False, default=0)
@@ -280,6 +285,7 @@ class WordPressCategoryTerm(Base):
 
     id = Column(Integer, primary_key=True)
     category = Column(String, nullable=False)
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
     lang = Column(String, nullable=False)
     wp_term_id = Column(Integer, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -298,6 +304,7 @@ class WordPressPublishedItem(Base):
     id = Column(Integer, primary_key=True)
     source_path = Column(String, nullable=False)
     category = Column(String, nullable=False)
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
     lang = Column(String, nullable=False)
     wp_media_id = Column(Integer, nullable=False)
     wp_post_id = Column(Integer, nullable=False)
@@ -358,6 +365,7 @@ class CategoryDescription(Base):
 
     id = Column(Integer, primary_key=True)
     category = Column(String, nullable=False)
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
     lang = Column(String, nullable=False)
     description = Column(Text, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)

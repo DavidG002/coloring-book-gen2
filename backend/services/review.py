@@ -16,32 +16,38 @@ def get_images_for_job(db: Session, job_id: int) -> list[GenerationImage]:
         .all()
     )
 
-def get_images_for_category(db: Session, category_name: str) -> list[dict]:
+def get_images_for_category(db: Session, category_id: int) -> list[dict]:
     """Every real generated image for this category, oldest first, with its
     actual local-publish and WordPress status — a real pipeline snapshot,
     not just the raw file. WordPress status reflects whether it's been
     pushed in ANY language, and prefers 'publish' over 'draft' if pushed
-    in multiple languages with different statuses."""
+    in multiple languages with different statuses.
+
+    Uses category_id (not the name string) to identify the real images —
+    since category names are only unique per-Book, not globally, filtering
+    by name alone could return another Book's same-named category's images."""
     from models import GenerationImage, PublishedFile, WordPressPublishedItem
 
     images = (
         db.query(GenerationImage)
-        .filter(GenerationImage.category == category_name)
+        .filter(GenerationImage.category_id == category_id)
         .order_by(GenerationImage.created_at.asc())
         .all()
     )
+    image_file_paths = {img.file_path for img in images}
 
+    # Scoped to exactly this category's real image file paths — not
+    # re-filtered by the ambiguous name string, which would silently
+    # reintroduce the same cross-Book mixing bug for these two checks.
     published_paths = {
         p.source_path
         for p in db.query(PublishedFile.source_path)
-        .join(GenerationImage, GenerationImage.file_path == PublishedFile.source_path)
-        .filter(GenerationImage.category == category_name)
+        .filter(PublishedFile.source_path.in_(image_file_paths))
         .distinct()
     }
-
     wp_rows = (
         db.query(WordPressPublishedItem.source_path, WordPressPublishedItem.status)
-        .filter(WordPressPublishedItem.category == category_name)
+        .filter(WordPressPublishedItem.source_path.in_(image_file_paths))
         .all()
     )
     wp_status_by_path: dict[str, str] = {}

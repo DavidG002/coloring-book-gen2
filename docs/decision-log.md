@@ -113,3 +113,15 @@ useful document for picking this project back up after time away.
   locally, not on a publicly exposed server, so real-world exploitability
   is low right now. Revisit as a dedicated task (with a full app
   re-test) before any real deployment to a public-facing environment.
+
+## Known caveat — browser image caching after a full data reset
+
+After a full local data reset (IDs restart from 1), the browser can serve
+a stale cached image for a reused numeric ID from before the reset, since
+`/review/image/{id}/file` is a plain cacheable URL with no content
+versioning. Confirmed real example: a post-reset image showed an old
+pre-reset image's content until a hard refresh. Not a bug in generation,
+storage, or the Tier 1/2 category-identity work — purely browser caching.
+Low priority to actually fix (resets are rare, deliberate actions), but
+worth knowing: after any future full reset, do a hard refresh before
+trusting what's displayed.

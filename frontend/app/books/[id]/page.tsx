@@ -33,7 +33,7 @@ export default function BookDetailPage() {
   const [notFound, setNotFound] = useState(false);
   const [showNewCategoryModal, setShowNewCategoryModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [lastCreatedCategory, setLastCreatedCategory] = useState<string | undefined>(undefined);
+  const [lastCreatedCategoryId, setLastCreatedCategoryId] = useState<number | undefined>(undefined);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,7 +72,7 @@ export default function BookDetailPage() {
       setCategories(mine);
       if (mine.length > 0) {
         const newest = mine.reduce((a, b) => (b.id > a.id ? b : a));
-        setLastCreatedCategory(newest.name);
+        setLastCreatedCategoryId(newest.id);
       }
     } catch {
       // silent
@@ -199,7 +199,7 @@ export default function BookDetailPage() {
                   return (
                     <Link
                       key={cat.id}
-                      href={`/categories/${encodeURIComponent(cat.name)}`}
+                      href={`/categories/${cat.id}`}
                       className="lift-hover flex items-center gap-3"
                       style={{ padding: "11px 10px", border: "1px solid var(--pencil-light)", borderRadius: 9 }}
                     >
@@ -236,7 +236,7 @@ export default function BookDetailPage() {
             </button>
 
             <PanelSection label="Prepare a category">
-              <PrepareCategoryPanel categories={categories} defaultCategoryName={lastCreatedCategory} />
+              <PrepareCategoryPanel categories={categories} defaultCategoryId={lastCreatedCategoryId} />
             </PanelSection>
           </Panel>
         </div>

@@ -27,8 +27,8 @@ def _variation_number_from_path(path: str) -> int:
     return int(match.group(1)) if match else 0
 
 
-def _get_generated_files(category_name: str, subject_name: str) -> list[str]:
-    category_dir = os.path.join(OUTPUT_DIR, category_name)
+def _get_generated_files(category_id: int, subject_name: str) -> list[str]:
+    category_dir = os.path.join(OUTPUT_DIR, str(category_id))
     pattern = os.path.join(category_dir, f"{subject_name.lower().replace(' ', '_')}_v*.png")
     return sorted(glob.glob(pattern), key=_variation_number_from_path)
 
@@ -85,7 +85,7 @@ def build_publish_plan(db: Session, category_name: str, lang: str, only_new: boo
             skipped_subjects.append(subject.name)
             continue
 
-        source_files = _get_generated_files(category_name, subject.name)
+        source_files = _get_generated_files(category.id, subject.name)
         for source_path in source_files:
             variation_number = _variation_number_from_path(source_path)
 
@@ -148,6 +148,10 @@ def build_publish_plan(db: Session, category_name: str, lang: str, only_new: boo
 
 
 def execute_publish(db: Session, category_name: str, lang: str, only_new: bool = False) -> dict:
+    category = db.query(Category).filter(Category.name == category_name).first()
+    if not category:
+        raise ValueError(f"Category '{category_name}' not found")
+
     plan = build_publish_plan(db, category_name, lang, only_new=only_new)
     files_info = plan["files"]
 
@@ -170,7 +174,7 @@ def execute_publish(db: Session, category_name: str, lang: str, only_new: bool =
             try:
                 variant = ensure_content_variant(
                     db,
-                    category_name=category_name,
+                    category_id=category.id,
                     subject_name=image_record.subject,
                     variation_text=image_record.variation_text,
                     lang=lang,

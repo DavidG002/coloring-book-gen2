@@ -1,14 +1,14 @@
 "use client";
-
 import { Send, ChevronLeft } from "lucide-react";
 import SequencePanel from "./SequencePanel";
 import WordPressPushPanel from "./WordPressPushPanel";
 import type { StepId } from "./CategorySequenceShell";
-
 export default function WordPressSequencePanel({
+  categoryId,
   categoryName,
   onBackToFiles,
 }: {
+  categoryId: number;
   categoryName: string;
   onBackToFiles: (step: StepId) => void;
 }) {
@@ -24,7 +24,7 @@ export default function WordPressSequencePanel({
         </button>
       </div>
       <div className="px-6 pb-6">
-        <WordPressPushPanel categoryName={categoryName} />
+        <WordPressPushPanel categoryId={categoryId} categoryName={categoryName} />
       </div>
     </SequencePanel>
   );

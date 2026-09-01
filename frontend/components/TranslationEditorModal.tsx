@@ -46,7 +46,7 @@ async function autoTranslateLanguageTemplate(bookId: number, lang: string) {
 }
 
 export default function TranslationEditorModal({
-  categoryName,
+  categoryId,
   bookId,
   lang,
   subjects,
@@ -55,7 +55,7 @@ export default function TranslationEditorModal({
   onSaved,
   onDeleted,
 }: {
-  categoryName: string;
+  categoryId: number;
   bookId: number;
   lang: string;
   subjects: Subject[];
@@ -94,7 +94,7 @@ export default function TranslationEditorModal({
       setLoading(true);
       setError(null);
       try {
-        const translation = await getTranslation(categoryName, lang);
+        const translation = await getTranslation(categoryId, lang);
         if (cancelled) return;
         const itemsBySubject: Record<string, string> = {};
         for (const item of translation.items) itemsBySubject[item.subject_name] = item.translated_text;
@@ -135,7 +135,7 @@ export default function TranslationEditorModal({
     return () => {
       cancelled = true;
     };
-  }, [categoryName, lang, bookId]);
+  }, [categoryId, lang, bookId]);
 
   function updateSubjectItem(subjectName: string, value: string) {
     setForm((f) => ({ ...f, itemsBySubject: { ...f.itemsBySubject, [subjectName]: value } }));
@@ -168,10 +168,10 @@ export default function TranslationEditorModal({
         variation_items: variationItems,
       };
       if (isNew) {
-        await createTranslation(categoryName, { lang, ...payload });
+        await createTranslation(categoryId, { lang, ...payload });
         setIsNew(false);
       } else {
-        await updateTranslation(categoryName, lang, payload);
+        await updateTranslation(categoryId, lang, payload);
       }
       setSaved(true);
       onSaved();
@@ -189,7 +189,7 @@ export default function TranslationEditorModal({
     setDeleting(true);
     setError(null);
     try {
-      await deleteTranslation(categoryName, lang);
+      await deleteTranslation(categoryId, lang);
       onDeleted();
       onClose();
     } catch (err) {
@@ -204,7 +204,7 @@ export default function TranslationEditorModal({
     setTranslatingCategoryName(true);
     try {
       const res = await fetch(
-        `${API_BASE_URL}/categories/${encodeURIComponent(categoryName)}/translations/${encodeURIComponent(lang)}/translate-category-name`,
+        `${API_BASE_URL}/categories/${categoryId}/translations/${encodeURIComponent(lang)}/translate-category-name`,
         { method: "POST" }
       );
       const data = await res.json();
@@ -237,14 +237,14 @@ export default function TranslationEditorModal({
     setAutoTranslatingSubjects(true);
     try {
       const res = await fetch(
-        `${API_BASE_URL}/categories/${encodeURIComponent(categoryName)}/translations/${encodeURIComponent(lang)}/translate-subjects`,
+        `${API_BASE_URL}/categories/${categoryId}/translations/${encodeURIComponent(lang)}/translate-subjects`,
         { method: "POST" }
       );
       const data = await res.json();
       if (!res.ok) throw new ApiError(res.status, data.detail);
       if (data.translated_count > 0) {
         setAutoTranslateResultSubjects(`Translated ${data.translated_count} new subject${data.translated_count === 1 ? "" : "s"}`);
-        const refreshed = await getTranslation(categoryName, lang);
+        const refreshed = await getTranslation(categoryId, lang);
         const itemsBySubject: Record<string, string> = {};
         for (const item of refreshed.items) itemsBySubject[item.subject_name] = item.translated_text;
         setForm((f) => ({ ...f, itemsBySubject }));
@@ -265,14 +265,14 @@ export default function TranslationEditorModal({
     setAutoTranslatingVariations(true);
     try {
       const res = await fetch(
-        `${API_BASE_URL}/categories/${encodeURIComponent(categoryName)}/translations/${encodeURIComponent(lang)}/translate-variations`,
+        `${API_BASE_URL}/categories/${categoryId}/translations/${encodeURIComponent(lang)}/translate-variations`,
         { method: "POST" }
       );
       const data = await res.json();
       if (!res.ok) throw new ApiError(res.status, data.detail);
       if (data.translated_count > 0) {
         setAutoTranslateResultVariations(`Translated ${data.translated_count} new variation${data.translated_count === 1 ? "" : "s"}`);
-        const refreshed = await getTranslation(categoryName, lang);
+        const refreshed = await getTranslation(categoryId, lang);
         const itemsByVariation: Record<string, string> = {};
         for (const item of refreshed.variation_items) itemsByVariation[item.variation_text] = item.translated_text;
         setForm((f) => ({ ...f, itemsByVariation }));

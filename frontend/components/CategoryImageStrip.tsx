@@ -20,8 +20,8 @@ interface CategoryImage {
 
 type StatusKey = "live" | "draft" | "local" | "not_published";
 
-async function getCategoryImages(categoryName: string): Promise<CategoryImage[]> {
-  const res = await fetch(`${API_BASE_URL}/review/images/${encodeURIComponent(categoryName)}`);
+async function getCategoryImages(categoryId: number): Promise<CategoryImage[]> {
+  const res = await fetch(`${API_BASE_URL}/review/images/${categoryId}`);
   return res.json();
 }
 
@@ -29,11 +29,11 @@ async function rejectImage(imageId: number) {
   await fetch(`${API_BASE_URL}/review/image/${imageId}/reject`, { method: "POST" });
 }
 
-async function runPairs(category: string, pairs: { subject: string; variation_text: string }[]) {
+async function runPairs(categoryId: number, pairs: { subject: string; variation_text: string }[]) {
   const res = await fetch(`${API_BASE_URL}/generate/run-pairs`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ category, pairs }),
+    body: JSON.stringify({ category_id: categoryId, pairs }),
   });
   if (!res.ok) throw new Error((await res.json()).detail || "Failed to start generation");
   return res.json() as Promise<{ job_id: number }>;
@@ -62,9 +62,11 @@ function formatDate(iso: string): string {
 }
 
 export default function CategoryImageStrip({
+  categoryId,
   categoryName,
   refreshKey,
 }: {
+  categoryId: number;
   categoryName: string;
   refreshKey: number;
 }) {
@@ -109,7 +111,7 @@ export default function CategoryImageStrip({
 
   function load(scrollToEndAfter = false) {
     setLoading(true);
-    getCategoryImages(categoryName)
+    getCategoryImages(categoryId)
       .then((data) => {
         const approved = data.filter((img) => img.status === "approved");
         setImages(approved);
@@ -139,7 +141,7 @@ export default function CategoryImageStrip({
     const timer = setTimeout(() => load(refreshKey > 0), 0);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [categoryName, refreshKey]);
+  }, [categoryId, refreshKey]);
 
   function scrollByAmount(dir: 1 | -1) {
     scrollElRef.current?.scrollBy({ left: dir * 320, behavior: "smooth" });
@@ -203,7 +205,7 @@ export default function CategoryImageStrip({
     if (!img?.variation_text) return;
     setBusyId(id);
     try {
-      await runPairs(categoryName, [{ subject: img.subject, variation_text: img.variation_text }]);
+      await runPairs(categoryId, [{ subject: img.subject, variation_text: img.variation_text }]);
       setTimeout(() => load(true), 7000);
     } catch {
       setError("Failed to start regeneration");

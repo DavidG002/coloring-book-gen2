@@ -12,24 +12,29 @@ from services.content_variants import (
     ensure_category_description, regenerate_category_description,
 )
 
-router = APIRouter(prefix="/categories/{category_name}/seo", tags=["seo"])
+router = APIRouter(prefix="/categories/{category_id}/seo", tags=["seo"])
 
 
-def _get_translation_or_404(db: Session, category_name: str, lang: str) -> Translation:
-    category = db.query(Category).filter(Category.name == category_name).first()
+def _get_category_or_404(db: Session, category_id: int) -> Category:
+    category = db.query(Category).filter(Category.id == category_id).first()
     if not category:
-        raise HTTPException(status_code=404, detail=f"Category '{category_name}' not found")
+        raise HTTPException(status_code=404, detail=f"Category {category_id} not found")
+    return category
+
+
+def _get_translation_or_404(db: Session, category: Category, lang: str) -> Translation:
     translation = db.query(Translation).filter(Translation.category_id == category.id, Translation.lang == lang).first()
     if not translation:
-        raise HTTPException(status_code=404, detail=f"No '{lang}' translation for '{category_name}' — create it first")
+        raise HTTPException(status_code=404, detail=f"No '{lang}' translation for '{category.name}' — create it first")
     return translation
 
 
 @router.get("/{lang}", response_model=SeoDataResponse)
-def get_seo_data(category_name: str, lang: str, db: Session = Depends(get_db)):
-    translation = _get_translation_or_404(db, category_name, lang)
-    description = ensure_category_description(db, category_name, translation.category_translated, lang)
-    variants = list_content_variants(db, category_name, lang)
+def get_seo_data(category_id: int, lang: str, db: Session = Depends(get_db)):
+    category = _get_category_or_404(db, category_id)
+    translation = _get_translation_or_404(db, category, lang)
+    description = ensure_category_description(db, category.id, translation.category_translated, lang)
+    variants = list_content_variants(db, category.id, lang)
     return SeoDataResponse(
         category_description=description,
         content_variants=[SeoContentVariantRow(**v) for v in variants],
@@ -37,10 +42,11 @@ def get_seo_data(category_name: str, lang: str, db: Session = Depends(get_db)):
 
 
 @router.put("/{lang}/description")
-def update_description(category_name: str, lang: str, payload: CategoryDescriptionUpdate, db: Session = Depends(get_db)):
-    existing = db.query(CategoryDescription).filter(CategoryDescription.category == category_name, CategoryDescription.lang == lang).first()
+def update_description(category_id: int, lang: str, payload: CategoryDescriptionUpdate, db: Session = Depends(get_db)):
+    category = _get_category_or_404(db, category_id)
+    existing = db.query(CategoryDescription).filter(CategoryDescription.category == category.name, CategoryDescription.lang == lang).first()
     if not existing:
-        existing = CategoryDescription(category=category_name, lang=lang, description=payload.description)
+        existing = CategoryDescription(category=category.name, lang=lang, description=payload.description)
         db.add(existing)
     else:
         existing.description = payload.description
@@ -49,20 +55,19 @@ def update_description(category_name: str, lang: str, payload: CategoryDescripti
 
 
 @router.post("/{lang}/description/regenerate")
-def regen_description(category_name: str, lang: str, db: Session = Depends(get_db)):
-    translation = _get_translation_or_404(db, category_name, lang)
+def regen_description(category_id: int, lang: str, db: Session = Depends(get_db)):
+    category = _get_category_or_404(db, category_id)
+    translation = _get_translation_or_404(db, category, lang)
     try:
-        description = regenerate_category_description(db, category_name, translation.category_translated, lang)
+        description = regenerate_category_description(db, category.id, translation.category_translated, lang)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return {"description": description}
 
 
 @router.put("/{lang}/content")
-def update_content_variant(category_name: str, lang: str, payload: SeoContentVariantUpdate, db: Session = Depends(get_db)):
-    category = db.query(Category).filter(Category.name == category_name).first()
-    if not category:
-        raise HTTPException(status_code=404, detail=f"Category '{category_name}' not found")
+def update_content_variant(category_id: int, lang: str, payload: SeoContentVariantUpdate, db: Session = Depends(get_db)):
+    category = _get_category_or_404(db, category_id)
     subject = db.query(Subject).filter(Subject.category_id == category.id, Subject.name == payload.subject_name).first()
     variation = db.query(Variation).filter(Variation.category_id == category.id, Variation.text == payload.variation_text).first()
     if not subject or not variation:
@@ -88,16 +93,14 @@ def update_content_variant(category_name: str, lang: str, payload: SeoContentVar
 
 
 @router.post("/{lang}/content/generate-missing")
-def generate_missing_content(category_name: str, lang: str, db: Session = Depends(get_db)):
-    category = db.query(Category).filter(Category.name == category_name).first()
-    if not category:
-        raise HTTPException(status_code=404, detail=f"Category '{category_name}' not found")
+def generate_missing_content(category_id: int, lang: str, db: Session = Depends(get_db)):
+    category = _get_category_or_404(db, category_id)
 
     generated_count = 0
-    for row in list_content_variants(db, category_name, lang):
+    for row in list_content_variants(db, category.id, lang):
         if not row["generated"]:
             try:
-                ensure_content_variant(db, category_name, row["subject_name"], row["variation_text"], lang)
+                ensure_content_variant(db, category.id, row["subject_name"], row["variation_text"], lang)
                 generated_count += 1
             except Exception:
                 continue
@@ -105,9 +108,10 @@ def generate_missing_content(category_name: str, lang: str, db: Session = Depend
 
 
 @router.post("/{lang}/content/regenerate")
-def regen_one_content(category_name: str, lang: str, payload: SeoRegenerateRequest, db: Session = Depends(get_db)):
+def regen_one_content(category_id: int, lang: str, payload: SeoRegenerateRequest, db: Session = Depends(get_db)):
+    category = _get_category_or_404(db, category_id)
     try:
-        variant = regenerate_content_variant(db, category_name, payload.subject_name, payload.variation_text, lang)
+        variant = regenerate_content_variant(db, category.id, payload.subject_name, payload.variation_text, lang)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return {
@@ -115,4 +119,7 @@ def regen_one_content(category_name: str, lang: str, payload: SeoRegenerateReque
         "seo_alt_text": variant.seo_alt_text,
         "seo_excerpt": variant.seo_excerpt,
         "seo_content": variant.seo_content,
+        "focus_keyphrase": variant.focus_keyphrase,
+        "yoast_title": variant.yoast_title,
+        "yoast_meta_description": variant.yoast_meta_description,
     }

@@ -1,9 +1,10 @@
+// app/categories/[id]/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { getCategory, getTranslations, ApiError, type Category } from "@/lib/api";
-import CategorySequenceShell , { type StepId } from "@/components/CategorySequenceShell";
+import CategorySequenceShell, { type StepId } from "@/components/CategorySequenceShell";
 import LanguageSequencePanel from "@/components/LanguageSequencePanel";
 import GenerateSequencePanel from "@/components/GenerateSequencePanel";
 import PublishSequencePanel from "@/components/PublishSequencePanel";
@@ -11,8 +12,8 @@ import WordPressSequencePanel from "@/components/WordPressSequencePanel";
 
 export default function CategoryDetailPage() {
   const router = useRouter();
-  const params = useParams<{ name: string }>();
-  const categoryName = decodeURIComponent(params.name);
+  const params = useParams<{ id: string }>();
+  const categoryId = parseInt(params.id, 10);
 
   const [category, setCategory] = useState<Category | null>(null);
   const [loading, setLoading] = useState(true);
@@ -24,16 +25,15 @@ export default function CategoryDetailPage() {
   const [languageNeedsAttention, setLanguageNeedsAttention] = useState(false);
   const [languageCheckTrigger, setLanguageCheckTrigger] = useState(0);
 
-  
   useEffect(() => {
     if (!category) return;
     let cancelled = false;
     const timer = setTimeout(async () => {
       try {
-        const translations = await getTranslations(categoryName);
+        const translations = await getTranslations(categoryId);
         if (cancelled) return;
         if (translations.length === 0) {
-          setLanguageNeedsAttention(false); // no languages set up yet — that's Language's own empty state, not a "missing" warning
+          setLanguageNeedsAttention(false);
           return;
         }
         const incomplete = translations.some((t) => {
@@ -49,15 +49,16 @@ export default function CategoryDetailPage() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [category, categoryName, languageCheckTrigger]);
-  
+  }, [category, categoryId, languageCheckTrigger]);
+
   useEffect(() => {
+    if (!category) return;
     let cancelled = false;
     const timer = setTimeout(async () => {
       try {
         const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
         const [historyRes, wpRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/publish/history/${encodeURIComponent(categoryName)}`),
+          fetch(`${API_BASE_URL}/publish/history/${encodeURIComponent(category.name)}`),
           fetch(`${API_BASE_URL}/account/wordpress`),
         ]);
         const history = await historyRes.json();
@@ -76,7 +77,7 @@ export default function CategoryDetailPage() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [categoryName]);
+  }, [category]);
 
   useEffect(() => {
     let cancelled = false;
@@ -85,7 +86,7 @@ export default function CategoryDetailPage() {
       setLoading(true);
       setError(null);
       try {
-        const data = await getCategory(categoryName);
+        const data = await getCategory(categoryId);
         if (cancelled) return;
         setCategory(data);
       } catch (err) {
@@ -104,7 +105,7 @@ export default function CategoryDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [categoryName]);
+  }, [categoryId]);
 
   if (loading) {
     return (
@@ -155,13 +156,13 @@ export default function CategoryDetailPage() {
     <CategorySequenceShell
       bookId={category.book_id}
       bookName={category.book_name}
-      categoryName={categoryName}
+      categoryName={category.name}
       hasAnyPairingSelected={category.subjects.length > 0 && category.variations.length > 0}
       wordPressStepAvailable={wordPressAvailable}
       wordPressSiteLabel={wordPressSiteLabel}
       languageNeedsAttention={languageNeedsAttention}
     >
-       {(activeStep, setActiveStep) => {
+      {(activeStep, setActiveStep) => {
         const goToStep = (step: StepId) => {
           if (step === "generate") setLanguageCheckTrigger((n) => n + 1);
           setActiveStep(step);
@@ -170,7 +171,7 @@ export default function CategoryDetailPage() {
           <>
             {activeStep === "generate" && (
               <GenerateSequencePanel
-                categoryName={categoryName}
+                categoryName={category.name}
                 category={category}
                 onCategoryChanged={setCategory}
                 languageNeedsAttention={languageNeedsAttention}
@@ -178,24 +179,26 @@ export default function CategoryDetailPage() {
               />
             )}
             {activeStep === "language" && (
-              <LanguageSequencePanel
-                categoryName={categoryName}
+            <LanguageSequencePanel
+                categoryId={category.id}
+                categoryName={category.name}
                 bookId={category.book_id}
                 subjects={category.subjects}
                 variations={category.variations}
                 onContinue={() => goToStep("publish")}
                 onTranslationsChanged={() => setLanguageCheckTrigger((n) => n + 1)}
-              />
+            />
             )}
             {activeStep === "publish" && (
               <PublishSequencePanel
-                categoryName={categoryName}
+                categoryId={category.id}
+                categoryName={category.name}
                 onGoToWordPress={() => goToStep("wordpress")}
                 onGoToLanguage={() => goToStep("language")}
               />
             )}
             {activeStep === "wordpress" && (
-              <WordPressSequencePanel categoryName={categoryName} onBackToFiles={goToStep} />
+            <WordPressSequencePanel categoryId={category.id} categoryName={category.name} onBackToFiles={goToStep} />
             )}
           </>
         );

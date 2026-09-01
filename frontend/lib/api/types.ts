@@ -147,7 +147,7 @@ export interface PromptDefaultsUpdateInput {
 // ---------- Generation ----------
 
 export interface GenerationPlanInput {
-  category: string;
+  category_id: number;
   subjects?: string[];
   new_variations_per_subject: number;
   max_images?: number;

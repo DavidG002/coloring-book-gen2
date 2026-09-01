@@ -294,7 +294,7 @@ class BookPreviewRead(BaseModel):
 # ---------- Generation ----------
 
 class GenerationPlanRequest(BaseModel):
-    category: str
+    category_id: int
     subjects: Optional[list[str]] = None   # omit = all subjects in category
     new_variations_per_subject: int = 1
     max_images: Optional[int] = None
@@ -477,7 +477,7 @@ class WordPressTestResult(BaseModel):
 
 
 class WordPressPushRequest(BaseModel):
-    category: str
+    category_id: int
     lang: str
     status: str = "draft"
     only_new: bool = True
@@ -527,7 +527,7 @@ class WordPressPreviewResponse(BaseModel):
 
 
 class WordPressPreviewRequest(BaseModel):
-    category: str
+    category_id: int
     lang: str
 
 
@@ -542,7 +542,7 @@ class WordPressSyncResponse(BaseModel):
     title: str
 
 class WordPressVerifyRequest(BaseModel):
-    category: str
+    category_id: int
     lang: str
 
 
@@ -679,12 +679,12 @@ class SubjectVariationPair(BaseModel):
 
 
 class GenerationPairsPlanRequest(BaseModel):
-    category: str
+    category_id: int
     pairs: list[SubjectVariationPair]
 
 
 class GenerationPairsRunRequest(BaseModel):
-    category: str
+    category_id: int
     pairs: list[SubjectVariationPair]
 
 

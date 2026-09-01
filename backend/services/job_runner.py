@@ -32,7 +32,7 @@ def run_generation_job(job_id: int, tasks: list[dict], settings: dict):
                 _cancel_flags.discard(job_id)
                 return
 
-            category_dir = os.path.join("output", task["category"])
+            category_dir = os.path.join("output", str(task["category_id"]))
             os.makedirs(category_dir, exist_ok=True)
             filename = f"{task['subject'].lower().replace(' ', '_')}_v{task['variation_number']:03d}.png"
             output_path = os.path.join(category_dir, filename)
@@ -42,6 +42,7 @@ def run_generation_job(job_id: int, tasks: list[dict], settings: dict):
                 db.add(GenerationImage(
                     job_id=job_id,
                     category=task["category"],
+                    category_id=task.get("category_id"),
                     subject=task["subject"],
                     variation_number=task["variation_number"],
                     variation_text=task["variation_text"],

@@ -12,13 +12,13 @@ from services.translate import translate_phrases
 from schemas import TranslateCategoryNameResponse
 
 
-router = APIRouter(prefix="/categories/{category_name}/translations", tags=["translations"])
+router = APIRouter(prefix="/categories/{category_id}/translations", tags=["translations"])
 
 
-def _get_category_or_404(category_name: str, db: Session) -> Category:
-    category = db.query(Category).filter(Category.name == category_name).first()
+def _get_category_or_404(category_id: int, db: Session) -> Category:
+    category = db.query(Category).filter(Category.id == category_id).first()
     if not category:
-        raise HTTPException(status_code=404, detail=f"Category '{category_name}' not found")
+        raise HTTPException(status_code=404, detail=f"Category {category_id} not found")
     return category
 
 
@@ -55,17 +55,17 @@ def _to_translation_read(translation: Translation) -> TranslationRead:
 
 
 @router.get("", response_model=list[TranslationRead])
-def list_translations(category_name: str, db: Session = Depends(get_db)):
-    category = _get_category_or_404(category_name, db)
+def list_translations(category_id: int, db: Session = Depends(get_db)):
+    category = _get_category_or_404(category_id, db)
     return [_to_translation_read(t) for t in category.translations]
 
 
 @router.get("/{lang}", response_model=TranslationRead)
-def get_translation(category_name: str, lang: str, db: Session = Depends(get_db)):
-    category = _get_category_or_404(category_name, db)
+def get_translation(category_id: int, lang: str, db: Session = Depends(get_db)):
+    category = _get_category_or_404(category_id, db)
     translation = next((t for t in category.translations if t.lang == lang), None)
     if not translation:
-        raise HTTPException(status_code=404, detail=f"No '{lang}' translation for '{category_name}'")
+        raise HTTPException(status_code=404, detail=f"No '{lang}' translation for '{category.name}'")
     return _to_translation_read(translation)
 
 
@@ -97,14 +97,14 @@ def _resolve_variation_id(category: Category, variation_text: str, db: Session) 
 
 
 @router.post("", response_model=TranslationRead, status_code=201)
-def create_translation(category_name: str, payload: TranslationCreate, db: Session = Depends(get_db)):
-    category = _get_category_or_404(category_name, db)
+def create_translation(category_id: int, payload: TranslationCreate, db: Session = Depends(get_db)):
+    category = _get_category_or_404(category_id, db)
 
     existing = next((t for t in category.translations if t.lang == payload.lang), None)
     if existing:
         raise HTTPException(
             status_code=409,
-            detail=f"Translation '{payload.lang}' already exists for '{category_name}' — use PUT to update it",
+            detail=f"Translation '{payload.lang}' already exists for '{category.name}' — use PUT to update it",
         )
 
     translation = Translation(
@@ -132,11 +132,11 @@ def create_translation(category_name: str, payload: TranslationCreate, db: Sessi
 
 
 @router.put("/{lang}", response_model=TranslationRead)
-def update_translation(category_name: str, lang: str, payload: TranslationUpdate, db: Session = Depends(get_db)):
-    category = _get_category_or_404(category_name, db)
+def update_translation(category_id: int, lang: str, payload: TranslationUpdate, db: Session = Depends(get_db)):
+    category = _get_category_or_404(category_id, db)
     translation = next((t for t in category.translations if t.lang == lang), None)
     if not translation:
-        raise HTTPException(status_code=404, detail=f"No '{lang}' translation for '{category_name}'")
+        raise HTTPException(status_code=404, detail=f"No '{lang}' translation for '{category.name}'")
 
     if payload.category_translated is not None:
         translation.category_translated = payload.category_translated
@@ -148,8 +148,6 @@ def update_translation(category_name: str, lang: str, payload: TranslationUpdate
         translation.title_template = payload.title_template
 
     if payload.items is not None:
-        # Full replace, same reasoning as categories: simplest correct behavior,
-        # avoids diffing logic for a table that's edited as a whole anyway.
         db.query(TranslationItem).filter(TranslationItem.translation_id == translation.id).delete()
         for item in payload.items:
             subject_id = _resolve_subject_id(category, item.subject_name, db)
@@ -167,21 +165,21 @@ def update_translation(category_name: str, lang: str, payload: TranslationUpdate
 
 
 @router.delete("/{lang}", status_code=204)
-def delete_translation(category_name: str, lang: str, db: Session = Depends(get_db)):
-    category = _get_category_or_404(category_name, db)
+def delete_translation(category_id: int, lang: str, db: Session = Depends(get_db)):
+    category = _get_category_or_404(category_id, db)
     translation = next((t for t in category.translations if t.lang == lang), None)
     if not translation:
-        raise HTTPException(status_code=404, detail=f"No '{lang}' translation for '{category_name}'")
+        raise HTTPException(status_code=404, detail=f"No '{lang}' translation for '{category.name}'")
     db.delete(translation)
     db.commit()
 
 
 @router.post("/{lang}/translate-variations", response_model=TranslateVariationsResponse)
-def translate_variations(category_name: str, lang: str, db: Session = Depends(get_db)):
-    category = _get_category_or_404(category_name, db)
+def translate_variations(category_id: int, lang: str, db: Session = Depends(get_db)):
+    category = _get_category_or_404(category_id, db)
     translation = next((t for t in category.translations if t.lang == lang), None)
     if not translation:
-        raise HTTPException(status_code=404, detail=f"No '{lang}' translation for '{category_name}' — create it first")
+        raise HTTPException(status_code=404, detail=f"No '{lang}' translation for '{category.name}' — create it first")
 
     already_translated = {item.variation.text for item in translation.variation_items}
     to_translate = [v.text for v in category.variations if v.text not in already_translated]
@@ -209,12 +207,13 @@ def translate_variations(category_name: str, lang: str, db: Session = Depends(ge
         skipped_count=len(already_translated),
     )
 
+
 @router.post("/{lang}/translate-subjects", response_model=TranslateVariationsResponse)
-def translate_subjects(category_name: str, lang: str, db: Session = Depends(get_db)):
-    category = _get_category_or_404(category_name, db)
+def translate_subjects(category_id: int, lang: str, db: Session = Depends(get_db)):
+    category = _get_category_or_404(category_id, db)
     translation = next((t for t in category.translations if t.lang == lang), None)
     if not translation:
-        raise HTTPException(status_code=404, detail=f"No '{lang}' translation for '{category_name}' — create it first")
+        raise HTTPException(status_code=404, detail=f"No '{lang}' translation for '{category.name}' — create it first")
 
     already_translated = {item.subject.name for item in translation.items}
     to_translate = [s.name for s in category.subjects if s.name not in already_translated]
@@ -242,9 +241,10 @@ def translate_subjects(category_name: str, lang: str, db: Session = Depends(get_
         skipped_count=len(already_translated),
     )
 
+
 @router.post("/{lang}/translate-category-name", response_model=TranslateCategoryNameResponse)
-def translate_category_name(category_name: str, lang: str, db: Session = Depends(get_db)):
-    category = _get_category_or_404(category_name, db)
+def translate_category_name(category_id: int, lang: str, db: Session = Depends(get_db)):
+    category = _get_category_or_404(category_id, db)
     results = translate_phrases([category.name], lang)
     translated = results.get(category.name, "")
     return TranslateCategoryNameResponse(translated_text=translated)
