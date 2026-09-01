@@ -72,7 +72,7 @@ async function planPublishForLang(category: string, lang: string) {
   });
   const data = await res.json();
   if (!res.ok) throw new ApiError(res.status, data.detail);
-  return data as { total_files: number };
+  return data as { total_files: number; skipped_subjects: string[] };
 }
 async function runPublishForLang(category: string, lang: string) {
   const res = await fetch(`${API_BASE_URL}/publish/run`, {
@@ -86,12 +86,14 @@ async function runPublishForLang(category: string, lang: string) {
 }
 
 export default function PublishSequencePanel({
-    categoryName,
-    onGoToWordPress,
-  }: {
-    categoryName: string;
-    onGoToWordPress: () => void;
-  }) {
+  categoryName,
+  onGoToWordPress,
+  onGoToLanguage,
+}: {
+  categoryName: string;
+  onGoToWordPress: () => void;
+  onGoToLanguage: () => void;
+}) {
   const [languages, setLanguages] = useState<string[]>([]);
   const [loadingLangs, setLoadingLangs] = useState(true);
   const [selectedLang, setSelectedLang] = useState("");
@@ -114,6 +116,7 @@ export default function PublishSequencePanel({
   const [missingResult, setMissingResult] = useState<string | null>(null);
 
   const [langFileCounts, setLangFileCounts] = useState<Record<string, number>>({});
+  const [langSkippedSubjects, setLangSkippedSubjects] = useState<Record<string, string[]>>({});
   const [loadingCounts, setLoadingCounts] = useState(false);
   const [building, setBuilding] = useState(false);
   const [builtSummary, setBuiltSummary] = useState<string | null>(null);
@@ -149,16 +152,20 @@ export default function PublishSequencePanel({
     const timer = setTimeout(async () => {
       setLoadingCounts(true);
       const counts: Record<string, number> = {};
+      const skipped: Record<string, string[]> = {};
       for (const lang of languages) {
         try {
           const plan = await planPublishForLang(categoryName, lang);
           counts[lang] = plan.total_files;
+          skipped[lang] = plan.skipped_subjects ?? [];
         } catch {
           counts[lang] = 0;
+          skipped[lang] = [];
         }
       }
       if (!cancelled) {
         setLangFileCounts(counts);
+        setLangSkippedSubjects(skipped);
         setLoadingCounts(false);
       }
     }, 0);
@@ -166,7 +173,6 @@ export default function PublishSequencePanel({
       cancelled = true;
       clearTimeout(timer);
     };
-    
   }, [categoryName, languages]);
 
   async function handleBuildLanguageSets() {
@@ -539,6 +545,72 @@ export default function PublishSequencePanel({
                                 style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
                               />
                             </div>
+
+                            <div className="rounded-md p-2.5 mt-1" style={{ background: "var(--tone-yellow-bg)", border: "1px solid var(--tone-yellow)" }}>
+                              <div className="flex items-center gap-1.5 mb-2">
+                                <span
+                                  className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-black"
+                                  style={{ background: "var(--tone-yellow)", color: "white" }}
+                                >
+                                  Y
+                                </span>
+                                <p className="text-[10px] font-bold uppercase m-0" style={{ color: "var(--tone-yellow)", letterSpacing: "0.06em" }}>
+                                  Yoast SEO
+                                </p>
+                                {!row.focus_keyphrase && !row.yoast_title && !row.yoast_meta_description && (
+                                  <span className="text-[9px] ml-auto" style={{ color: "var(--tone-yellow)" }}>
+                                    Not set yet
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="space-y-2">
+                                <div>
+                                  <label className="block text-[10px] font-medium mb-1" style={{ color: "var(--pencil)" }}>
+                                    Focus keyphrase
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={row.focus_keyphrase}
+                                    onChange={(e) => updateRow(row.subject_name, row.variation_text, "focus_keyphrase", e.target.value)}
+                                    placeholder="e.g. truck coloring page"
+                                    className="w-full px-2 py-1.5 rounded border-[1.5px] outline-none text-[11px]"
+                                    style={{ borderColor: "var(--pencil-light)", background: "var(--paper)" }}
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] font-medium mb-1" style={{ color: "var(--pencil)" }}>
+                                    SEO title <span className="font-normal">({row.yoast_title.length}/60)</span>
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={row.yoast_title}
+                                    onChange={(e) => updateRow(row.subject_name, row.variation_text, "yoast_title", e.target.value)}
+                                    className="w-full px-2 py-1.5 rounded border-[1.5px] outline-none text-[11px]"
+                                    style={{
+                                      borderColor: row.yoast_title.length > 60 ? "var(--coral)" : "var(--pencil-light)",
+                                      background: "var(--paper)",
+                                    }}
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] font-medium mb-1" style={{ color: "var(--pencil)" }}>
+                                    Meta description <span className="font-normal">({row.yoast_meta_description.length}/155)</span>
+                                  </label>
+                                  <textarea
+                                    value={row.yoast_meta_description}
+                                    onChange={(e) => updateRow(row.subject_name, row.variation_text, "yoast_meta_description", e.target.value)}
+                                    rows={2}
+                                    className="w-full px-2 py-1.5 rounded border-[1.5px] outline-none text-[11px]"
+                                    style={{
+                                      borderColor: row.yoast_meta_description.length > 155 ? "var(--coral)" : "var(--pencil-light)",
+                                      background: "var(--paper)",
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
                             <div className="flex items-center gap-3 pt-1">
                               <button
                                 onClick={() => handleSaveRow(row)}
@@ -597,8 +669,10 @@ export default function PublishSequencePanel({
                 <div className="flex flex-col gap-2 shrink-0">
                   {languages.map((lang) => {
                     const count = langFileCounts[lang] ?? 0;
+                    const skipped = langSkippedSubjects[lang] ?? [];
                     return (
-                      <div key={lang} className="flex items-center gap-3">
+                      <div key={lang}>
+                      <div className="flex items-center gap-3">
                         <span
                           className="inline-flex items-center justify-center rounded-md text-[10px] font-black uppercase"
                           style={{ width: 30, height: 22, background: "var(--teal-tint)", color: "var(--teal-dark)" }}
@@ -618,10 +692,20 @@ export default function PublishSequencePanel({
                         >
                           {count > 0 ? "Ready" : "Up to date"}
                         </span>
-                      </div>
+                    </div>
+                    {skipped.length > 0 && (
+                      <p className="text-[10px] mt-1 mb-0" style={{ color: "var(--coral-dark)" }}>
+                        {skipped.length} subject{skipped.length === 1 ? "" : "s"} can&apos;t publish yet — missing{" "}
+                        {lang.toUpperCase()} translation: {skipped.join(", ")}.{" "}
+                        <button onClick={onGoToLanguage} className="underline font-bold">
+                          Fix in Language
+                        </button>
+                      </p>
+                    )}
+                    </div>
                     );
                   })}
-                </div>
+          </div>
               </div>
               <div
                 className="flex items-center justify-between gap-4 px-4 py-3"

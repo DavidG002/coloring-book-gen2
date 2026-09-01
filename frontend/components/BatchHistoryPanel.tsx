@@ -40,7 +40,7 @@ function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
-export default function BatchHistoryPanel({ categoryName }: { categoryName: string }) {
+export default function BatchHistoryPanel({ categoryName, refreshKey }: { categoryName: string; refreshKey?: number }) {
   const [open, setOpen] = useState(false);
   const [jobs, setJobs] = useState<ReviewJob[]>([]);
   const [loading, setLoading] = useState(false);
@@ -49,6 +49,11 @@ export default function BatchHistoryPanel({ categoryName }: { categoryName: stri
   const [jobImages, setJobImages] = useState<Record<number, ReviewImage[]>>({});
   const [loadingJobId, setLoadingJobId] = useState<number | null>(null);
   const [lightbox, setLightbox] = useState<{ jobId: number; index: number } | null>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setLoaded(false), 0);
+    return () => clearTimeout(timer);
+  }, [refreshKey]);
 
   useEffect(() => {
     if (!open || loaded) return;

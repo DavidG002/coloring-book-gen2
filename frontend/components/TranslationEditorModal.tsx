@@ -437,21 +437,24 @@ export default function TranslationEditorModal({
                       </div>
                     </div>
                     <div className="space-y-2">
-                      {subjects.map((s) => (
-                        <div key={s.id} className="flex gap-3 items-center">
-                          <span className="w-32 text-sm shrink-0" style={{ color: "var(--pencil)" }}>
-                            {s.name}
-                          </span>
-                          <input
-                            type="text"
-                            value={form.itemsBySubject[s.name] ?? ""}
-                            onChange={(e) => updateSubjectItem(s.name, e.target.value)}
-                            placeholder="Not translated yet"
-                            className="flex-1 px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
-                            style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
-                          />
-                        </div>
-                      ))}
+                      {subjects.map((s) => {
+                        const isEmpty = !(form.itemsBySubject[s.name] ?? "").trim();
+                        return (
+                          <div key={s.id} className="flex gap-3 items-center">
+                            <span className="w-32 text-sm shrink-0" style={{ color: "var(--pencil)" }}>
+                              {s.name}
+                            </span>
+                            <input
+                              type="text"
+                              value={form.itemsBySubject[s.name] ?? ""}
+                              onChange={(e) => updateSubjectItem(s.name, e.target.value)}
+                              placeholder="Not translated yet"
+                              className="flex-1 px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
+                              style={{ borderColor: isEmpty ? "var(--coral)" : "var(--pencil-light)", background: "var(--canvas)" }}
+                            />
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
 
@@ -488,9 +491,11 @@ export default function TranslationEditorModal({
                       />
                     )}
                     <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
-                      {variations
-                        .filter((v) => !variationFilter || v.text.toLowerCase().includes(variationFilter.toLowerCase()))
-                        .map((v) => (
+                    {variations
+                      .filter((v) => !variationFilter || v.text.toLowerCase().includes(variationFilter.toLowerCase()))
+                      .map((v) => {
+                        const isEmpty = !(form.itemsByVariation[v.text] ?? "").trim();
+                        return (
                           <div key={v.id} className="flex gap-3 items-center">
                             <span className="w-56 text-xs shrink-0" style={{ color: "var(--pencil)" }}>
                               {v.text}
@@ -501,10 +506,11 @@ export default function TranslationEditorModal({
                               onChange={(e) => updateVariationItem(v.text, e.target.value)}
                               placeholder="Not translated yet"
                               className="flex-1 px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
-                              style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+                              style={{ borderColor: isEmpty ? "var(--coral)" : "var(--pencil-light)", background: "var(--canvas)" }}
                             />
                           </div>
-                        ))}
+                        );
+                      })}
                     </div>
                   </div>
                 </>

@@ -1930,6 +1930,12 @@ export interface components {
             seo_excerpt: string;
             /** Seo Content */
             seo_content: string;
+            /** Focus Keyphrase */
+            focus_keyphrase: string;
+            /** Yoast Title */
+            yoast_title: string;
+            /** Yoast Meta Description */
+            yoast_meta_description: string;
             /** Generated */
             generated: boolean;
             /** Sample Image Id */
@@ -1949,6 +1955,12 @@ export interface components {
             seo_excerpt: string;
             /** Seo Content */
             seo_content: string;
+            /** Focus Keyphrase */
+            focus_keyphrase: string;
+            /** Yoast Title */
+            yoast_title: string;
+            /** Yoast Meta Description */
+            yoast_meta_description: string;
         };
         /** SeoDataResponse */
         SeoDataResponse: {

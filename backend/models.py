@@ -343,6 +343,10 @@ class ContentVariant(Base):
     subject = relationship("Subject")
     variation = relationship("Variation")
 
+    yoast_title = Column(String, nullable=True)
+    yoast_meta_description = Column(Text, nullable=True)
+    focus_keyphrase = Column(String, nullable=True)
+
     __table_args__ = (
         UniqueConstraint("subject_id", "variation_id", "lang", name="uq_content_variant"),
     )

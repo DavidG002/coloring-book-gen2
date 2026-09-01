@@ -145,7 +145,16 @@ def create_post(
     slug: str | None = None,
     lang: str | None = None,
     translations_link: dict | None = None,
+    yoast_title: str | None = None,
+    yoast_meta_description: str | None = None,
+    focus_keyphrase: str | None = None,
 ) -> dict:
+    """Note: Yoast SEO's own fields (_yoast_wpseo_title, _yoast_wpseo_metadesc,
+    _yoast_wpseo_focuskw) are NOT writable via the REST API by default — the
+    target WordPress site needs a small one-time snippet registering them
+    with show_in_rest=True (see docs/wordpress-integration.md). If that
+    snippet isn't installed, sending these is harmless — WordPress will
+    silently ignore unknown meta keys rather than erroring."""
     post_rest_base = POST_TYPE_REST_BASE.get(config.post_type, config.post_type)
     url = config.site_url.rstrip("/") + f"/wp-json/wp/v2/{post_rest_base}"
 
@@ -158,22 +167,49 @@ def create_post(
         taxonomy_field: [term_id],
     }
 
+    meta: dict = {}
+    if yoast_title:
+        meta["_yoast_wpseo_title"] = yoast_title
+    if yoast_meta_description:
+        meta["_yoast_wpseo_metadesc"] = yoast_meta_description
+    if focus_keyphrase:
+        meta["_yoast_wpseo_focuskw"] = focus_keyphrase
+    if meta:
+        payload["meta"] = meta
+
     if content:
         payload["content"] = content
     if excerpt:
         payload["excerpt"] = excerpt
     if slug:
         payload["slug"] = slug
-    if lang:
-        payload["lang"] = lang
-    if translations_link:
-        payload["translations"] = translations_link
 
     response = httpx.post(url, auth=_auth(config), json=payload, timeout=20.0)
     if response.status_code not in (200, 201):
         raise RuntimeError(f"Failed to create post '{title}': {response.status_code} {response.text}")
 
-    return response.json()
+    result = response.json()
+
+    # Free-tier Polylang doesn't expose lang/translations via its own REST
+    # fields at all — that native mechanism is Polylang PRO-only. Instead,
+    # we call a custom endpoint (see docs/wordpress-integration.md) that
+    # invokes Polylang's free, core pll_set_post_language() /
+    # pll_save_post_translations() functions directly.
+    if lang or translations_link:
+        post_id = result["id"]
+        custom_url = config.site_url.rstrip("/") + "/wp-json/zuzu/v1/set-post-language"
+        payload_lang: dict = {"post_id": post_id, "lang": lang}
+        if translations_link:
+            payload_lang["translations"] = translations_link
+
+        lang_response = httpx.post(custom_url, auth=_auth(config), json=payload_lang, timeout=20.0)
+        if lang_response.status_code not in (200, 201):
+            raise RuntimeError(
+                f"Post '{title}' was created (id={post_id}) but setting its language/translation "
+                f"link failed: {lang_response.status_code} {lang_response.text}"
+            )
+
+    return result
 
 
 def update_post(config: WordPressIntegration, wp_post_id: int, title: str, content: str, excerpt: str) -> dict:
@@ -250,6 +286,45 @@ def get_already_pushed_paths(db: Session, category: str, lang: str, site_url: st
         .all()
     )
     return {r[0] for r in rows}
+
+def verify_and_clean_stale_pushes(db: Session, category: str, lang: str, site_url: str) -> dict:
+    """Checks every tracked 'already pushed' item against the real
+    WordPress site — if a post was deleted there directly (not through
+    our app), WordPress returns 404 and we clear our stale local record,
+    making that file pushable again. This is the only way our app can
+    find out about a deletion that happened outside it."""
+    config = _get_wp_config(db)
+    post_rest_base = POST_TYPE_REST_BASE.get(config.post_type, config.post_type)
+
+    items = (
+        db.query(WordPressPublishedItem)
+        .filter(
+            WordPressPublishedItem.category == category,
+            WordPressPublishedItem.lang == lang,
+            WordPressPublishedItem.site_url == site_url,
+        )
+        .all()
+    )
+
+    removed_count = 0
+    checked_count = len(items)
+    for item in items:
+        url = config.site_url.rstrip("/") + f"/wp-json/wp/v2/{post_rest_base}/{item.wp_post_id}"
+        try:
+            response = httpx.get(url, auth=_auth(config), timeout=15.0)
+        except Exception:
+            continue  # network hiccup — leave this item alone, don't wrongly clear it
+        if response.status_code == 404:
+            db.delete(item)
+            removed_count += 1
+        elif response.status_code == 200:
+            post_status = response.json().get("status")
+            if post_status == "trash":
+                db.delete(item)
+                removed_count += 1
+
+    db.commit()
+    return {"checked_count": checked_count, "removed_count": removed_count}
 
 
 def get_locally_published_paths(db: Session, category: str, lang: str) -> set[str]:
@@ -478,6 +553,9 @@ def push_batch_to_wordpress(
                 slug=slugify(variant.seo_title),
                 lang=post_lang,
                 translations_link=post_translations,
+                yoast_title=variant.yoast_title,
+                yoast_meta_description=variant.yoast_meta_description,
+                focus_keyphrase=variant.focus_keyphrase,
             )
 
             record_published_item(

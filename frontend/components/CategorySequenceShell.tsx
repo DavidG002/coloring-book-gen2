@@ -20,6 +20,7 @@ export default function CategorySequenceShell({
   hasAnyPairingSelected,
   wordPressStepAvailable,
   wordPressSiteLabel,
+  languageNeedsAttention,
   children,
 }: {
   bookId: number;
@@ -28,6 +29,7 @@ export default function CategorySequenceShell({
   hasAnyPairingSelected: boolean;
   wordPressStepAvailable: boolean;
   wordPressSiteLabel: string;
+  languageNeedsAttention?: boolean;
   children: (activeStep: StepId, setActiveStep: (s: StepId) => void) => React.ReactNode;
 }) {
   const [activeStep, setActiveStep] = useState<StepId>("generate");
@@ -106,6 +108,13 @@ export default function CategorySequenceShell({
                   <span>{step.label}</span>
                   {step.id === "generate" && hasAnyPairingSelected && (
                     <CircleCheck size={15} className="ml-auto" style={{ color: "var(--teal)" }} />
+                  )}
+                  {step.id === "language" && languageNeedsAttention && (
+                    <span
+                      className="ml-auto w-2 h-2 rounded-full shrink-0"
+                      style={{ background: "var(--coral)" }}
+                      title="Some subjects or variations need translation"
+                    />
                   )}
                 </button>
               );

@@ -540,6 +540,15 @@ class WordPressSyncResponse(BaseModel):
     wp_post_id: int
     wp_post_url: str
     title: str
+
+class WordPressVerifyRequest(BaseModel):
+    category: str
+    lang: str
+
+
+class WordPressVerifyResponse(BaseModel):
+    checked_count: int
+    removed_count: int
     
 # ---------- Languages ----------
 
@@ -564,6 +573,9 @@ class SeoContentVariantRow(BaseModel):
     seo_alt_text: str
     seo_excerpt: str
     seo_content: str
+    focus_keyphrase: str
+    yoast_title: str
+    yoast_meta_description: str
     generated: bool
     sample_image_id: int
 
@@ -575,6 +587,9 @@ class SeoContentVariantUpdate(BaseModel):
     seo_alt_text: str
     seo_excerpt: str
     seo_content: str
+    focus_keyphrase: str
+    yoast_title: str
+    yoast_meta_description: str
 
 
 class SeoRegenerateRequest(BaseModel):

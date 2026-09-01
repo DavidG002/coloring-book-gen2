@@ -37,7 +37,10 @@ Respond with EXACTLY this format, one field per line, no extra commentary:
 TITLE: <a short page title>
 ALT: <ONE natural, descriptive alt-text sentence for accessibility and image search>
 EXCERPT: <ONE short, plain sentence, under 20 words, stating what the image shows>
-CONTENT: <ONE to TWO short, plain sentences \u2014 mention the subject and category naturally for search visibility, no overselling>
+CONTENT: <ONE to TWO short, plain sentences — mention the subject and category naturally for search visibility, no overselling>
+KEYPHRASE: <a short 2-4 word search phrase someone would actually type to find this — the real focus keyphrase for SEO, not a sentence>
+YOAST_TITLE: <a search-engine title under 60 characters, starting with the keyphrase, distinct from TITLE which is the on-page heading>
+META_DESC: <a compelling meta description under 155 characters, written to earn clicks in search results, naturally including the keyphrase>
 """
 
     client = get_openai_client()
@@ -48,8 +51,14 @@ CONTENT: <ONE to TWO short, plain sentences \u2014 mention the subject and categ
     )
 
     raw = response.choices[0].message.content or ""
-    result = {"seo_title": "", "seo_alt_text": "", "seo_excerpt": "", "seo_content": ""}
-    field_map = {"TITLE": "seo_title", "ALT": "seo_alt_text", "EXCERPT": "seo_excerpt", "CONTENT": "seo_content"}
+    result = {
+        "seo_title": "", "seo_alt_text": "", "seo_excerpt": "", "seo_content": "",
+        "focus_keyphrase": "", "yoast_title": "", "yoast_meta_description": "",
+    }
+    field_map = {
+        "TITLE": "seo_title", "ALT": "seo_alt_text", "EXCERPT": "seo_excerpt", "CONTENT": "seo_content",
+        "KEYPHRASE": "focus_keyphrase", "YOAST_TITLE": "yoast_title", "META_DESC": "yoast_meta_description",
+    }
 
     for line in raw.strip().splitlines():
         for prefix, key in field_map.items():
@@ -175,6 +184,9 @@ def regenerate_content_variant(
         existing.seo_alt_text = generated["seo_alt_text"]
         existing.seo_excerpt = generated["seo_excerpt"]
         existing.seo_content = generated["seo_content"]
+        existing.focus_keyphrase = generated["focus_keyphrase"]
+        existing.yoast_title = generated["yoast_title"]
+        existing.yoast_meta_description = generated["yoast_meta_description"]
         db.commit()
         db.refresh(existing)
         return existing
@@ -238,6 +250,9 @@ def list_content_variants(db: Session, category_name: str, lang: str) -> list[di
                 "seo_alt_text": existing.seo_alt_text if existing else "",
                 "seo_excerpt": existing.seo_excerpt if existing else "",
                 "seo_content": existing.seo_content if existing else "",
+                "focus_keyphrase": (existing.focus_keyphrase or "") if existing else "",
+                "yoast_title": (existing.yoast_title or "") if existing else "",
+                "yoast_meta_description": (existing.yoast_meta_description or "") if existing else "",
                 "generated": existing is not None,
                 "sample_image_id": representative.id,
             })

@@ -68,12 +68,14 @@ export default function LanguageSequencePanel({
   subjects,
   variations,
   onContinue,
+  onTranslationsChanged,
 }: {
   categoryName: string;
   bookId: number;
   subjects: Subject[];
   variations: Variation[];
   onContinue: () => void;
+  onTranslationsChanged?: () => void;
 }) {
   const [supported, setSupported] = useState<SupportedLanguage[]>([]);
   const [translations, setTranslations] = useState<Record<string, Translation>>({});
@@ -458,6 +460,7 @@ export default function LanguageSequencePanel({
             const refreshed = await getTranslation(categoryName, modalLang).catch(() => null);
             if (refreshed) setTranslations((prev) => ({ ...prev, [modalLang]: refreshed }));
             setModalLang(null);
+            onTranslationsChanged?.();
           }}
           onSaved={() => {}}
           onDeleted={() => setTranslations((prev) => { const next = { ...prev }; delete next[modalLang]; return next; })}

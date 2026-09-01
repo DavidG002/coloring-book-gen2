@@ -4,8 +4,14 @@ from pydantic import BaseModel
 
 from database import get_db
 from models import GenerationImage
-from services.wordpress_publish import push_batch_to_wordpress, preview_wordpress_push, sync_pushed_item_to_wordpress
-from schemas import WordPressPushRequest, WordPressPushResponse, WordPressPreviewRequest, WordPressPreviewResponse, WordPressSyncRequest, WordPressSyncResponse
+from services.wordpress_publish import (
+    push_batch_to_wordpress, preview_wordpress_push, sync_pushed_item_to_wordpress,
+    verify_and_clean_stale_pushes, _get_wp_config,
+)
+from schemas import (
+    WordPressPushRequest, WordPressPushResponse, WordPressPreviewRequest, WordPressPreviewResponse,
+    WordPressSyncRequest, WordPressSyncResponse, WordPressVerifyRequest, WordPressVerifyResponse,
+)
 
 
 class ExcludeRequest(BaseModel):
@@ -57,3 +63,11 @@ def sync_to_wordpress(payload: WordPressSyncRequest, db: Session = Depends(get_d
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e))
     return WordPressSyncResponse(**result)
+
+@router.post("/verify", response_model=WordPressVerifyResponse)
+def verify_push(payload: WordPressVerifyRequest, db: Session = Depends(get_db)):
+    try:
+        result = verify_and_clean_stale_pushes(db, payload.category, payload.lang, _get_wp_config(db).site_url)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return WordPressVerifyResponse(**result)

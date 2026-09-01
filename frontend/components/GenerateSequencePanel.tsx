@@ -70,11 +70,16 @@ export default function GenerateSequencePanel({
   categoryName,
   category,
   onCategoryChanged,
+  languageNeedsAttention,
+  onGoToLanguage,
 }: {
   categoryName: string;
   category: Category;
   onCategoryChanged: (updated: Category) => void;
+  languageNeedsAttention?: boolean;
+  onGoToLanguage?: () => void;
 }) {
+  
   const [subjects, setSubjects] = useState<string[]>(category.subjects.map((s) => s.name));
   const [variations, setVariations] = useState<string[]>(
     category.variations.sort((a, b) => a.order - b.order).map((v) => v.text)
@@ -253,17 +258,46 @@ export default function GenerateSequencePanel({
           <span className="text-[10px]" style={{ color: "var(--pencil)" }}>
             {pairs.length} images ready
           </span>
-          <button
-            onClick={handleGenerate}
-            disabled={pairs.length === 0 || generating}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold text-white disabled:opacity-40"
-            style={{ background: "var(--teal)", boxShadow: "0 5px 14px rgba(91,124,147,0.14)" }}
-          >
-            {generating ? "Generating..." : "Generate pages"} <WandSparkles size={14} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleGenerate}
+              disabled={pairs.length === 0 || generating}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold text-white disabled:opacity-40"
+              style={{ background: "var(--teal)", boxShadow: "0 5px 14px rgba(91,124,147,0.14)" }}
+            >
+              {generating ? "Generating..." : "Generate pages"} <WandSparkles size={14} />
+            </button>
+            {onGoToLanguage && (
+              <button
+                onClick={onGoToLanguage}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-lg text-xs font-bold"
+                style={
+                  languageNeedsAttention
+                    ? { background: "var(--coral)", color: "white" }
+                    : { border: "1px solid var(--pencil-light)", color: "var(--pencil)" }
+                }
+              >
+                Language <ChevronRight size={13} />
+              </button>
+            )}
+          </div>
         </>
       }
     >
+      {languageNeedsAttention && (
+        <div
+          className="mx-6 mt-5 px-4 py-3 rounded-md text-xs flex items-center justify-between gap-3"
+          style={{ background: "var(--coral-light)", color: "var(--coral-dark)", border: "1px solid var(--coral)" }}
+        >
+          <span>Some subjects or variations still need translation before they can be published.</span>
+          {onGoToLanguage && (
+            <button onClick={onGoToLanguage} className="underline font-bold shrink-0">
+              Go to Language
+            </button>
+          )}
+        </div>
+      )}
+
       {error && (
         <div
           className="mx-6 mt-5 px-4 py-3 rounded-md text-sm"
@@ -295,7 +329,7 @@ export default function GenerateSequencePanel({
       )}
 
       <CategoryImageStrip categoryName={categoryName} refreshKey={refreshTrigger} />
-      <BatchHistoryPanel categoryName={categoryName} />
+      <BatchHistoryPanel categoryName={categoryName} refreshKey={refreshTrigger} />
 
       <div className="grid grid-cols-2" style={{ borderTop: "1px solid var(--pencil-light)", background: "var(--paper)" }}>
         <div style={{ padding: 20, borderRight: "1px solid var(--pencil-light)" }}>

@@ -86,6 +86,9 @@ export default function WordPressPushPanel({ categoryName }: { categoryName: str
   const [syncingPath, setSyncingPath] = useState<string | null>(null);
   const [syncedPaths, setSyncedPaths] = useState<Set<string>>(new Set());
 
+  const [verifying, setVerifying] = useState(false);
+  const [verifyResult, setVerifyResult] = useState<string | null>(null);
+
   function loadAll() {
     setLoading(true);
     setError(null);
@@ -136,17 +139,32 @@ export default function WordPressPushPanel({ categoryName }: { categoryName: str
   const publishedCount = allFiles.filter((f) => f.already_pushed).length;
   const languageSetCount = Object.keys(previews).length;
 
-  const batches = useMemo(() => {
+  // Batch numbers must be stable regardless of which language filter is
+  // active — computed once from the full, unfiltered history (oldest
+  // first), so "Batch 3" always means the same real batch whether you're
+  // looking at "All languages" or a single language.
+  const allBatchesChronological = useMemo(() => {
     const groups = new Map<string, LangFile[]>();
-    for (const f of langFilteredFiles) {
+    for (const f of allFiles) {
       const key = `${f.lang}::${f.publish_run_id ?? "unknown"}`;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(f);
     }
     return Array.from(groups.entries())
       .map(([key, files]) => ({ key, lang: files[0].lang, files, createdAt: files[0]?.published_at ?? null }))
-      .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
-  }, [langFilteredFiles]);
+      .sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""));
+  }, [allFiles]);
+
+  const batchNumberByKey = useMemo(() => {
+    const map = new Map<string, number>();
+    allBatchesChronological.forEach((b, i) => map.set(b.key, i + 1));
+    return map;
+  }, [allBatchesChronological]);
+
+  const batches = useMemo(() => {
+    const visible = langFilter === "all" ? allBatchesChronological : allBatchesChronological.filter((b) => b.lang === langFilter);
+    return [...visible].sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
+  }, [allBatchesChronological, langFilter]);
 
   function toggleFile(lang: string, path: string) {
     const key = `${lang}::${path}`;
@@ -257,6 +275,42 @@ export default function WordPressPushPanel({ categoryName }: { categoryName: str
     }
   }
 
+  async function verifyPushes(category: string, lang: string) {
+    const res = await fetch(`${API_BASE_URL}/wordpress/verify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ category, lang }),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.detail || "Failed to verify");
+    }
+    return res.json() as Promise<{ checked_count: number; removed_count: number }>;
+  }
+
+  async function handleVerify() {
+    setVerifying(true);
+    setVerifyResult(null);
+    setError(null);
+    try {
+      let totalRemoved = 0;
+      for (const lang of languages) {
+        const result = await verifyPushes(categoryName, lang);
+        totalRemoved += result.removed_count;
+      }
+      setVerifyResult(
+        totalRemoved > 0
+          ? `Found ${totalRemoved} post${totalRemoved === 1 ? "" : "s"} removed from WordPress — they're pushable again.`
+          : "Everything checks out — no changes on the WordPress side."
+      );
+      loadAll();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to verify against WordPress");
+    } finally {
+      setVerifying(false);
+    }
+  }
+
   if (loading) {
     return <p className="text-sm px-1 py-4" style={{ color: "var(--pencil)" }}>Loading WordPress status...</p>;
   }
@@ -296,6 +350,16 @@ export default function WordPressPushPanel({ categoryName }: { categoryName: str
           <div className="ml-auto flex items-center gap-2">
             <button
               type="button"
+              onClick={handleVerify}
+              disabled={verifying}
+              title="Check WordPress for posts that were deleted or trashed outside this app"
+              className="px-2.5 py-1.5 rounded-md text-[11px] font-bold disabled:opacity-60"
+              style={{ border: "1px solid var(--pencil-light)", color: "var(--pencil)" }}
+            >
+              {verifying ? "Verifying..." : "Verify"}
+            </button>
+            <button
+              type="button"
               onClick={() => setStatus("draft")}
               className="px-2.5 py-1.5 rounded-md text-[11px] font-bold"
               style={status === "draft" ? { background: "var(--teal)", color: "white" } : { border: "1px solid var(--pencil-light)", color: "var(--pencil)" }}
@@ -312,7 +376,11 @@ export default function WordPressPushPanel({ categoryName }: { categoryName: str
             </button>
           </div>
         </div>
-
+        {verifyResult && (
+          <div className="px-5 py-2.5 text-xs" style={{ borderBottom: "1px solid var(--pencil-light)", color: "var(--tone-sage)" }}>
+            {verifyResult}
+          </div>
+        )}
         {/* Language filter pills */}
         <div className="flex items-center gap-2 px-5 py-3" style={{ borderBottom: "1px solid var(--pencil-light)" }}>
           <button
@@ -453,16 +521,32 @@ export default function WordPressPushPanel({ categoryName }: { categoryName: str
                 return (
                   <div key={batch.key} className="rounded-md" style={{ border: "1px solid var(--pencil-light)" }}>
                     <div className="flex items-center justify-between px-3 py-2">
-                      <button onClick={() => toggleBatchExpanded(batch.key)} className="flex items-center gap-2 text-left">
+                      <button onClick={() => toggleBatchExpanded(batch.key)} className="flex items-center gap-2.5 text-left">
                         <span
-                          className="inline-flex items-center gap-2 text-[11px] font-bold"
-                          style={{ color: isFullyPublished ? "var(--tone-sage)" : isPartial ? "var(--tone-yellow)" : "var(--pencil)" }}
-                        >
-                          {isFullyPublished && <Check size={12} />} Batch {i + 1} · {batch.lang.toUpperCase()}
+                          className="w-2 h-2 rounded-full shrink-0"
+                          style={{
+                            background: ["var(--tone-sage)", "var(--tone-blue)", "var(--tone-peach)", "var(--tone-yellow)", "var(--tone-lavender)"][
+                              [...new Set(allFiles.map((f) => f.lang))].indexOf(batch.lang) % 5
+                            ],
+                          }}
+                        />
+                        <span className="inline-flex items-center gap-2 text-[11px] font-bold" style={{ color: "var(--ink)" }}>
+                          Batch {batchNumberByKey.get(batch.key)} · {batch.lang.toUpperCase()}
+                          <span
+                            className="px-1.5 py-0.5 rounded text-[9px] font-bold"
+                            style={
+                              isFullyPublished
+                                ? { background: "var(--tone-sage-bg)", color: "var(--tone-sage)" }
+                                : isPartial
+                                ? { background: "var(--tone-yellow-bg)", color: "var(--tone-yellow)" }
+                                : { background: "var(--pencil-light)", color: "var(--pencil)" }
+                            }
+                          >
+                            {isFullyPublished ? "Published" : isPartial ? "Partial" : "Not sent"}
+                          </span>
                         </span>
                         <span className="text-[10px]" style={{ color: "var(--pencil)" }}>
                           {batch.files.length} files
-                          {publishedInBatch > 0 && `, ${publishedInBatch} of ${batch.files.length} published`}
                           {batch.files.some((f) => f.wp_excluded) && `, ${batch.files.filter((f) => f.wp_excluded).length} excluded`}
                           {" · "}
                           {formatBatchDate(batch.createdAt)}
@@ -505,7 +589,7 @@ export default function WordPressPushPanel({ categoryName }: { categoryName: str
                                   : { background: "var(--pencil-light)", color: "var(--pencil)" }
                               }
                             >
-                              {f.already_pushed ? "Published" : "Not sent"}
+                              {f.already_pushed ? "Published" : allBatchesChronological.some((b) => b.files.some((bf) => bf.source_path === f.source_path)) ? "Re-send" : "Not sent"}
                             </span>
                           </div>
                         ))}

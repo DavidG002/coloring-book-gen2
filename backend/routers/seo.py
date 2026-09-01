@@ -76,11 +76,13 @@ def update_content_variant(category_name: str, lang: str, payload: SeoContentVar
     if not existing:
         existing = ContentVariant(subject_id=subject.id, variation_id=variation.id, lang=lang, seo_title="", seo_alt_text="", seo_excerpt="", seo_content="")
         db.add(existing)
-
     existing.seo_title = payload.seo_title
     existing.seo_alt_text = payload.seo_alt_text
     existing.seo_excerpt = payload.seo_excerpt
     existing.seo_content = payload.seo_content
+    existing.focus_keyphrase = payload.focus_keyphrase
+    existing.yoast_title = payload.yoast_title
+    existing.yoast_meta_description = payload.yoast_meta_description
     db.commit()
     return {"status": "saved"}
 
