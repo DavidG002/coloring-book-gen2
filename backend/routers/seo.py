@@ -5,11 +5,11 @@ from database import get_db
 from models import Category, Translation, Subject, Variation, ContentVariant, CategoryDescription
 from schemas import (
     SeoDataResponse, SeoContentVariantRow, SeoContentVariantUpdate,
-    SeoRegenerateRequest, CategoryDescriptionUpdate,
+    SeoRegenerateRequest, CategoryDescriptionUpdate, SeoFieldRegenerateRequest, SeoFieldRegenerateResponse,
 )
 from services.content_variants import (
     ensure_content_variant, regenerate_content_variant, list_content_variants,
-    ensure_category_description, regenerate_category_description,
+    ensure_category_description, regenerate_category_description, regenerate_single_field,
 )
 
 router = APIRouter(prefix="/categories/{category_id}/seo", tags=["seo"])
@@ -123,3 +123,11 @@ def regen_one_content(category_id: int, lang: str, payload: SeoRegenerateRequest
         "yoast_title": variant.yoast_title,
         "yoast_meta_description": variant.yoast_meta_description,
     }
+
+@router.post("/{lang}/content/regenerate-field", response_model=SeoFieldRegenerateResponse)
+def regen_single_field(category_id: int, lang: str, payload: SeoFieldRegenerateRequest, db: Session = Depends(get_db)):
+    try:
+        value = regenerate_single_field(db, category_id, payload.subject_name, payload.variation_text, lang, payload.field)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return SeoFieldRegenerateResponse(field=payload.field, value=value)

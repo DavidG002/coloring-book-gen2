@@ -143,3 +143,74 @@ def build_full_prompt(base_prompt: str, subject: str, variation_text: str, knobs
     if knob_phrase:
         return f"{base_prompt} {knob_phrase} {subject}. {variation_text}."
     return f"{base_prompt} {subject}. {variation_text}."
+
+# --- App-wide, non-negotiable print rules for the "coloring page" product ---
+# These are constants, not user-editable — they encode what makes a
+# print-ready coloring page a coloring page, regardless of book or knobs.
+PRINT_RULE_INTRO = "Coloring book page. Black outlines on white background."
+PRINT_RULES = "no shading, no gray fill, no color, no text, no watermark, no signature, no extra objects not mentioned above"
+
+
+def _resolve_knob_phrase_list(knobs: dict) -> list[str]:
+    """Same selection logic as resolve_knob_phrases, but returns the
+    individual phrases as a list rather than one joined string — used by
+    the compiler, which places them in their own labeled Style slot
+    instead of splicing them into a flowing sentence."""
+    treatment = knobs.get("subject_treatment", {})
+    treatment_active = treatment.get("enabled", True) and treatment.get("value") == "personified"
+
+    parts = []
+    for name in KNOB_NAMES:
+        entry = knobs.get(name, {})
+        if not entry.get("enabled", True):
+            continue
+        if name == "character_mood" and not treatment_active:
+            continue
+        value = entry.get("value", "")
+        if not value:
+            continue
+        options = KNOB_OPTIONS[name]
+        phrase = options.get(value, value)
+        if phrase:
+            parts.append(phrase)
+    return parts
+
+
+def compile_prompt(framing: str, subject: str, variation_text: str, knobs: dict) -> dict:
+    """The compiler: assembles a final image-generation prompt from four
+    separate, labeled slots — Theme (framing), Draw (subject/variation),
+    Style (knobs), and Rules (fixed print constraints) — so no slot's
+    words can be misread as belonging to another. This replaces flat
+    concatenation, which let a stray word in the framing (e.g. "in
+    color") collide with a contradictory knob phrase (e.g. "thin
+    outlines") with nothing keeping them apart.
+
+    Returns both the flat text actually sent to the image API
+    (compiled['text']) and the structured slots themselves
+    (compiled['slots']) — saved alongside it so a page's real prompt
+    inputs are recoverable later, for regenerating on a different
+    backend or training a future style model from accepted images,
+    without re-parsing a flat string."""
+    style_parts = _resolve_knob_phrase_list(knobs)
+    style_text = "; ".join(style_parts) if style_parts else ""
+
+    lines = [PRINT_RULE_INTRO]
+    if framing.strip():
+        lines.append(f"Theme: {framing.strip()}.")
+    lines.append(f"Draw: {subject}, {variation_text}.")
+    if style_text:
+        lines.append(f"Style: {style_text}.")
+    lines.append(f"Rules: {PRINT_RULES}.")
+
+    text = " ".join(lines)
+
+    return {
+        "text": text,
+        "slots": {
+            "framing": framing.strip(),
+            "subject": subject,
+            "variation": variation_text,
+            "style": style_parts,
+            "rules": PRINT_RULES,
+        },
+    }

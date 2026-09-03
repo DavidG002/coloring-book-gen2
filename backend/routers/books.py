@@ -84,7 +84,8 @@ def preview_book_settings(book_id: int, payload: BookPreviewRequest, db: Session
     }
 
     from services.prompt_knobs import get_book_knobs
-    image_bytes, prompt_used = generate_preview_image(
+    from services.prompt_knobs import get_book_knobs
+    image_bytes, prompt_used, compiled_prompt_json = generate_preview_image(
         book.base_prompt,
         task["subject"],
         task["variation_text"],
@@ -93,10 +94,10 @@ def preview_book_settings(book_id: int, payload: BookPreviewRequest, db: Session
     )
     if image_bytes is None:
         raise HTTPException(status_code=500, detail="Failed to generate preview image")
-
     save_preview_to_history(
         db, book_id, task["category"], task["subject"], task["variation_text"], settings, image_bytes,
         prompt_used=prompt_used,
+        compiled_prompt_json=compiled_prompt_json,
     )
 
     return Response(content=image_bytes, media_type="image/png")

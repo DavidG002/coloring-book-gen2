@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Send } from "lucide-react";
+import { Send, RotateCw } from "lucide-react";
 import SequencePanel from "./SequencePanel";
 import LanguagePills from "@/components/LanguagePills";
 import { getTranslations, ApiError, type Translation } from "@/lib/api";
@@ -60,10 +60,22 @@ async function generateMissing(categoryId: number, lang: string): Promise<number
 }
 async function regenerateOne(categoryId: number, lang: string, subjectName: string, variationText: string): Promise<Partial<ContentVariantRow>> {
   const res = await fetch(`${API_BASE_URL}/categories/${categoryId}/seo/${lang}/content/regenerate`, {
+    method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ subject_name: subjectName, variation_text: variationText }),
   });
   return res.json();
+}
+
+async function regenerateField(categoryId: number, lang: string, subjectName: string, variationText: string, field: string): Promise<string> {
+  const res = await fetch(`${API_BASE_URL}/categories/${categoryId}/seo/${lang}/content/regenerate-field`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ subject_name: subjectName, variation_text: variationText, field }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new ApiError(res.status, data.detail);
+  return data.value as string;
 }
 
 async function planPublishForLang(category: string, lang: string) {
@@ -92,11 +104,13 @@ export default function PublishSequencePanel({
   categoryName,
   onGoToWordPress,
   onGoToLanguage,
+  onSeoChanged,
 }: {
   categoryId: number;
   categoryName: string;
   onGoToWordPress: () => void;
   onGoToLanguage: () => void;
+  onSeoChanged?: () => void;
 }) {
   const [languages, setLanguages] = useState<string[]>([]);
   const [loadingLangs, setLoadingLangs] = useState(true);
@@ -126,6 +140,8 @@ export default function PublishSequencePanel({
   const [builtSummary, setBuiltSummary] = useState<string | null>(null);
   const [filesSectionCollapsed, setFilesSectionCollapsed] = useState(false);
   const [showWordPress, setShowWordPress] = useState(false);
+
+  const [regeneratingField, setRegeneratingField] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -286,6 +302,7 @@ export default function PublishSequencePanel({
           ),
         };
       });
+      onSeoChanged?.();
     } catch {
       setError("Failed to save");
     } finally {
@@ -312,10 +329,32 @@ export default function PublishSequencePanel({
           ),
         };
       });
+      onSeoChanged?.();
     } catch {
       setError("Failed to regenerate");
     } finally {
       setRegeneratingRow(null);
+    }
+  }
+
+  async function handleRegenerateField(row: ContentVariantRow, field: keyof ContentVariantRow) {
+    const key = `${row.subject_name}::${row.variation_text}::${field}`;
+    setRegeneratingField(key);
+    try {
+      const newValue = await regenerateField(categoryId, selectedLang, row.subject_name, row.variation_text, field);
+      updateRow(row.subject_name, row.variation_text, field, newValue);
+      // The field is now saved on the backend already — clear its dirty flag
+      // so the row doesn't show "Unsaved" for a change that's actually persisted.
+      const rowKey = `${row.subject_name}::${row.variation_text}`;
+      setDirtyRows((prev) => {
+        const next = new Set(prev);
+        next.delete(rowKey);
+        return next;
+      });
+    } catch {
+      setError(`Failed to regenerate ${field}`);
+    } finally {
+      setRegeneratingField(null);
     }
   }
 
@@ -328,6 +367,7 @@ export default function PublishSequencePanel({
       const refreshed = await getSeoData(categoryId, selectedLang);
       setSeoData(refreshed);
       setTimeout(() => setMissingResult(null), 4000);
+      if (count > 0) onSeoChanged?.();
     } catch {
       setError("Failed to generate missing content");
     } finally {
@@ -373,7 +413,7 @@ export default function PublishSequencePanel({
       ) : (
         <div className="px-6 pb-6">
           <div className="mb-5">
-            <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--ink)" }}>
+            <label className="block text-xs font-medium mb-3" style={{ color: "var(--ink)" }}>
               Language
             </label>
             <LanguagePills languages={languages} selected={selectedLang} onSelect={setSelectedLang} />
@@ -403,6 +443,7 @@ export default function PublishSequencePanel({
                   </button>
                 </div>
                 <textarea
+                spellCheck={true}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   rows={2}
@@ -453,6 +494,7 @@ export default function PublishSequencePanel({
               {seoData.content_variants.length > 8 && (
                 <input
                   type="text"
+                spellCheck={true}
                   value={filter}
                   onChange={(e) => setFilter(e.target.value)}
                   placeholder={`Filter ${seoData.content_variants.length} rows...`}
@@ -502,11 +544,23 @@ export default function PublishSequencePanel({
                         {isExpanded && (
                           <div className="px-3 pb-3 space-y-2" style={{ borderTop: "1px solid var(--pencil-light)" }}>
                             <div className="pt-2.5">
-                              <label className="block text-[10px] font-medium mb-1" style={{ color: "var(--pencil)" }}>
-                                Title
-                              </label>
+                              <div className="flex items-center justify-between mb-1">
+                                <label className="block text-[10px] font-medium" style={{ color: "var(--pencil)" }}>
+                                  Title
+                                </label>
+                                <button
+                                  onClick={() => handleRegenerateField(row, "seo_title")}
+                                  disabled={regeneratingField === `${row.subject_name}::${row.variation_text}::seo_title`}
+                                  title="Regenerate just this field"
+                                  className="disabled:opacity-40"
+                                  style={{ color: "var(--teal)" }}
+                                >
+                                  <RotateCw size={11} className={regeneratingField === `${row.subject_name}::${row.variation_text}::seo_title` ? "animate-spin" : ""} />
+                                </button>
+                              </div>
                               <input
                                 type="text"
+                spellCheck={true}
                                 value={row.seo_title}
                                 onChange={(e) => updateRow(row.subject_name, row.variation_text, "seo_title", e.target.value)}
                                 className="w-full px-2 py-1.5 rounded border-[1.5px] outline-none text-[11px]"
@@ -514,11 +568,23 @@ export default function PublishSequencePanel({
                               />
                             </div>
                             <div>
-                              <label className="block text-[10px] font-medium mb-1" style={{ color: "var(--pencil)" }}>
-                                Alt text
-                              </label>
+                              <div className="flex items-center justify-between mb-1">
+                                <label className="block text-[10px] font-medium" style={{ color: "var(--pencil)" }}>
+                                  Alt text
+                                </label>
+                                <button
+                                  onClick={() => handleRegenerateField(row, "seo_alt_text")}
+                                  disabled={regeneratingField === `${row.subject_name}::${row.variation_text}::seo_alt_text`}
+                                  title="Regenerate just this field"
+                                  className="disabled:opacity-40"
+                                  style={{ color: "var(--teal)" }}
+                                >
+                                  <RotateCw size={11} className={regeneratingField === `${row.subject_name}::${row.variation_text}::seo_alt_text` ? "animate-spin" : ""} />
+                                </button>
+                              </div>
                               <input
                                 type="text"
+                spellCheck={true}
                                 value={row.seo_alt_text}
                                 onChange={(e) => updateRow(row.subject_name, row.variation_text, "seo_alt_text", e.target.value)}
                                 className="w-full px-2 py-1.5 rounded border-[1.5px] outline-none text-[11px]"
@@ -526,11 +592,23 @@ export default function PublishSequencePanel({
                               />
                             </div>
                             <div>
-                              <label className="block text-[10px] font-medium mb-1" style={{ color: "var(--pencil)" }}>
-                                Excerpt
-                              </label>
+                              <div className="flex items-center justify-between mb-1">
+                                <label className="block text-[10px] font-medium" style={{ color: "var(--pencil)" }}>
+                                  Excerpt
+                                </label>
+                                <button
+                                  onClick={() => handleRegenerateField(row, "seo_excerpt")}
+                                  disabled={regeneratingField === `${row.subject_name}::${row.variation_text}::seo_excerpt`}
+                                  title="Regenerate just this field"
+                                  className="disabled:opacity-40"
+                                  style={{ color: "var(--teal)" }}
+                                >
+                                  <RotateCw size={11} className={regeneratingField === `${row.subject_name}::${row.variation_text}::seo_excerpt` ? "animate-spin" : ""} />
+                                </button>
+                              </div>
                               <input
                                 type="text"
+                spellCheck={true}
                                 value={row.seo_excerpt}
                                 onChange={(e) => updateRow(row.subject_name, row.variation_text, "seo_excerpt", e.target.value)}
                                 className="w-full px-2 py-1.5 rounded border-[1.5px] outline-none text-[11px]"
@@ -538,10 +616,22 @@ export default function PublishSequencePanel({
                               />
                             </div>
                             <div>
-                              <label className="block text-[10px] font-medium mb-1" style={{ color: "var(--pencil)" }}>
-                                Content
-                              </label>
+                              <div className="flex items-center justify-between mb-1">
+                                <label className="block text-[10px] font-medium" style={{ color: "var(--pencil)" }}>
+                                  Content
+                                </label>
+                                <button
+                                  onClick={() => handleRegenerateField(row, "seo_content")}
+                                  disabled={regeneratingField === `${row.subject_name}::${row.variation_text}::seo_content`}
+                                  title="Regenerate just this field"
+                                  className="disabled:opacity-40"
+                                  style={{ color: "var(--teal)" }}
+                                >
+                                  <RotateCw size={11} className={regeneratingField === `${row.subject_name}::${row.variation_text}::seo_content` ? "animate-spin" : ""} />
+                                </button>
+                              </div>
                               <textarea
+                spellCheck={true}
                                 value={row.seo_content}
                                 onChange={(e) => updateRow(row.subject_name, row.variation_text, "seo_content", e.target.value)}
                                 rows={2}
@@ -549,7 +639,6 @@ export default function PublishSequencePanel({
                                 style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
                               />
                             </div>
-
                             <div className="rounded-md p-2.5 mt-1" style={{ background: "var(--tone-yellow-bg)", border: "1px solid var(--tone-yellow)" }}>
                               <div className="flex items-center gap-1.5 mb-2">
                                 <span
@@ -570,11 +659,23 @@ export default function PublishSequencePanel({
 
                               <div className="space-y-2">
                                 <div>
-                                  <label className="block text-[10px] font-medium mb-1" style={{ color: "var(--pencil)" }}>
-                                    Focus keyphrase
-                                  </label>
+                                  <div className="flex items-center justify-between mb-1">
+                                    <label className="block text-[10px] font-medium" style={{ color: "var(--pencil)" }}>
+                                      Focus keyphrase
+                                    </label>
+                                    <button
+                                      onClick={() => handleRegenerateField(row, "focus_keyphrase")}
+                                      disabled={regeneratingField === `${row.subject_name}::${row.variation_text}::focus_keyphrase`}
+                                      title="Regenerate just this field"
+                                      className="disabled:opacity-40"
+                                      style={{ color: "var(--teal)" }}
+                                    >
+                                      <RotateCw size={11} className={regeneratingField === `${row.subject_name}::${row.variation_text}::focus_keyphrase` ? "animate-spin" : ""} />
+                                    </button>
+                                  </div>
                                   <input
                                     type="text"
+                spellCheck={true}
                                     value={row.focus_keyphrase}
                                     onChange={(e) => updateRow(row.subject_name, row.variation_text, "focus_keyphrase", e.target.value)}
                                     placeholder="e.g. truck coloring page"
@@ -583,11 +684,23 @@ export default function PublishSequencePanel({
                                   />
                                 </div>
                                 <div>
-                                  <label className="block text-[10px] font-medium mb-1" style={{ color: "var(--pencil)" }}>
-                                    SEO title <span className="font-normal">({row.yoast_title.length}/60)</span>
-                                  </label>
+                                  <div className="flex items-center justify-between mb-1">
+                                    <label className="block text-[10px] font-medium" style={{ color: "var(--pencil)" }}>
+                                      SEO title <span className="font-normal">({row.yoast_title.length}/60)</span>
+                                    </label>
+                                    <button
+                                      onClick={() => handleRegenerateField(row, "yoast_title")}
+                                      disabled={regeneratingField === `${row.subject_name}::${row.variation_text}::yoast_title`}
+                                      title="Regenerate just this field"
+                                      className="disabled:opacity-40"
+                                      style={{ color: "var(--teal)" }}
+                                    >
+                                      <RotateCw size={11} className={regeneratingField === `${row.subject_name}::${row.variation_text}::yoast_title` ? "animate-spin" : ""} />
+                                    </button>
+                                  </div>
                                   <input
                                     type="text"
+                spellCheck={true}
                                     value={row.yoast_title}
                                     onChange={(e) => updateRow(row.subject_name, row.variation_text, "yoast_title", e.target.value)}
                                     className="w-full px-2 py-1.5 rounded border-[1.5px] outline-none text-[11px]"
@@ -598,10 +711,22 @@ export default function PublishSequencePanel({
                                   />
                                 </div>
                                 <div>
-                                  <label className="block text-[10px] font-medium mb-1" style={{ color: "var(--pencil)" }}>
-                                    Meta description <span className="font-normal">({row.yoast_meta_description.length}/155)</span>
-                                  </label>
+                                  <div className="flex items-center justify-between mb-1">
+                                    <label className="block text-[10px] font-medium" style={{ color: "var(--pencil)" }}>
+                                      Meta description <span className="font-normal">({row.yoast_meta_description.length}/155)</span>
+                                    </label>
+                                    <button
+                                      onClick={() => handleRegenerateField(row, "yoast_meta_description")}
+                                      disabled={regeneratingField === `${row.subject_name}::${row.variation_text}::yoast_meta_description`}
+                                      title="Regenerate just this field"
+                                      className="disabled:opacity-40"
+                                      style={{ color: "var(--teal)" }}
+                                    >
+                                      <RotateCw size={11} className={regeneratingField === `${row.subject_name}::${row.variation_text}::yoast_meta_description` ? "animate-spin" : ""} />
+                                    </button>
+                                  </div>
                                   <textarea
+                spellCheck={true}
                                     value={row.yoast_meta_description}
                                     onChange={(e) => updateRow(row.subject_name, row.variation_text, "yoast_meta_description", e.target.value)}
                                     rows={2}

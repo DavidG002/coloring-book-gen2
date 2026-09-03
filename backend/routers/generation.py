@@ -8,8 +8,12 @@ from schemas import (
     GenerationPlanRequest, GenerationPlanResponse, PlannedTask,
     GenerationRunRequest, GenerationRunResponse, GenerationStatusResponse,
     GenerationPairsPlanRequest, GenerationPairsRunRequest, PairGenerationCounts,
+    RegenerateSameSlotsResponse,
 )
-from services.generation import build_task_list, build_task_list_from_pairs, get_pair_generation_counts, COST_PER_IMAGE_USD
+from services.generation import (
+    build_task_list, build_task_list_from_pairs, get_pair_generation_counts,
+    build_regenerate_task, COST_PER_IMAGE_USD,
+)
 from services.job_runner import run_generation_job, request_cancel
 from routers.settings import get_settings as get_settings_route, DEFAULTS
 
@@ -179,3 +183,29 @@ def run_generation_pairs(payload: GenerationPairsRunRequest, background_tasks: B
 def pair_counts(category_id: int, db: Session = Depends(get_db)):
     category = _get_category_or_404(db, category_id)
     return PairGenerationCounts(counts=get_pair_generation_counts(db, category.name))
+
+
+@router.post("/regenerate-same-slots/{image_id}", response_model=RegenerateSameSlotsResponse)
+def regenerate_same_slots(image_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    try:
+        task = build_regenerate_task(db, image_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    category = _get_category_or_404(db, task["category_id"])
+
+    job = GenerationJob(
+        category=task["category"],
+        params_json=json.dumps({"regenerate_same_slots_for_image_id": image_id}),
+        status="pending",
+        total_images=1,
+        completed_images=0,
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+
+    settings = _load_settings_dict(db, category)
+    background_tasks.add_task(run_generation_job, job.id, [task], settings)
+
+    return RegenerateSameSlotsResponse(job_id=job.id, status=job.status, total_images=job.total_images)

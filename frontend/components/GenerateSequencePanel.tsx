@@ -6,6 +6,7 @@ import SequencePanel from "./SequencePanel";
 import type { Category } from "@/lib/api";
 import CategoryImageStrip from "./CategoryImageStrip";
 import BatchHistoryPanel from "./BatchHistoryPanel";
+import EditListModal from "./EditListModal";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -72,12 +73,16 @@ export default function GenerateSequencePanel({
   onCategoryChanged,
   languageNeedsAttention,
   onGoToLanguage,
+  publishNeedsAttention,
+  onGoToPublish,
 }: {
   categoryName: string;
   category: Category;
   onCategoryChanged: (updated: Category) => void;
   languageNeedsAttention?: boolean;
   onGoToLanguage?: () => void;
+  publishNeedsAttention?: boolean;
+  onGoToPublish?: () => void;
 }) {
   
   const [subjects, setSubjects] = useState<string[]>(category.subjects.map((s) => s.name));
@@ -97,6 +102,8 @@ export default function GenerateSequencePanel({
   const [etaLabel, setEtaLabel] = useState<string | null>(null);
   const lastCompletionRef = useRef<{ time: number; count: number } | null>(null);
   const recentPaceRef = useRef<number[]>([]);
+
+  const [editModalKind, setEditModalKind] = useState<"subjects" | "variations" | null>(null);
 
 
   useEffect(() => {
@@ -132,29 +139,22 @@ export default function GenerateSequencePanel({
     });
   }
 
-  async function handleAddSubject() {
-    const name = window.prompt("New subject name:");
-    if (!name?.trim()) return;
-    const next = [...subjects, name.trim()];
+  function handleListSaved(updated: Category) {
+    setSubjects(updated.subjects.map((s) => s.name));
+    setVariations(updated.variations.sort((a, b) => a.order - b.order).map((v) => v.text));
+    onCategoryChanged(updated);
+  }
+
+  async function handleRemoveSubject(subject: string) {
+    const next = subjects.filter((s) => s !== subject);
     setSubjects(next);
+    setPairs((prev) => prev.filter((p) => p.subject !== subject));
+    if (selectedSubject === subject) setSelectedSubject(next[0] ?? "");
     try {
       const updated = await updateCategoryLists(category.id, { subjects: next });
       onCategoryChanged(updated);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to add subject");
-    }
-  }
-
-  async function handleAddVariation() {
-    const text = window.prompt("New variation:");
-    if (!text?.trim()) return;
-    const next = [...variations, text.trim()];
-    setVariations(next);
-    try {
-      const updated = await updateCategoryLists(category.id, { variations: next });
-      onCategoryChanged(updated);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to add variation");
+      setError(err instanceof Error ? err.message : "Failed to remove subject");
     }
   }
 
@@ -254,19 +254,19 @@ export default function GenerateSequencePanel({
       icon={<WandSparkles size={25} className={generating ? "animate-spin" : ""} />}
       headerBorder={!generating}
       footer={
-        <>
-          <span className="text-[10px]" style={{ color: "var(--pencil)" }}>
+        <div className="grid items-center w-full" style={{ gridTemplateColumns: "1fr auto 1fr" }}>
+          <span className="text-[10px] justify-self-start" style={{ color: "var(--pencil)" }}>
             {pairs.length} images ready
           </span>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleGenerate}
-              disabled={pairs.length === 0 || generating}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold text-white disabled:opacity-40"
-              style={{ background: "var(--teal)", boxShadow: "0 5px 14px rgba(91,124,147,0.14)" }}
-            >
-              {generating ? "Generating..." : "Generate pages"} <WandSparkles size={14} />
-            </button>
+          <button
+            onClick={handleGenerate}
+            disabled={pairs.length === 0 || generating}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold text-white disabled:opacity-40 justify-self-center"
+            style={{ background: "var(--teal)", boxShadow: "0 5px 14px rgba(91,124,147,0.14)" }}
+          >
+            {generating ? "Generating..." : "Generate pages"} <WandSparkles size={14} />
+          </button>
+          <div className="flex items-center gap-2 justify-self-end">
             {onGoToLanguage && (
               <button
                 onClick={onGoToLanguage}
@@ -280,8 +280,21 @@ export default function GenerateSequencePanel({
                 Language <ChevronRight size={13} />
               </button>
             )}
+            {onGoToPublish && (
+              <button
+                onClick={onGoToPublish}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-lg text-xs font-bold"
+                style={
+                  publishNeedsAttention
+                    ? { background: "var(--coral)", color: "white" }
+                    : { border: "1px solid var(--pencil-light)", color: "var(--pencil)" }
+                }
+              >
+                Publish <ChevronRight size={13} />
+              </button>
+            )}
           </div>
-        </>
+        </div>
       }
     >
       {languageNeedsAttention && (
@@ -293,6 +306,19 @@ export default function GenerateSequencePanel({
           {onGoToLanguage && (
             <button onClick={onGoToLanguage} className="underline font-bold shrink-0">
               Go to Language
+            </button>
+          )}
+        </div>
+      )}
+      {publishNeedsAttention && (
+        <div
+          className="mx-6 mt-5 px-4 py-3 rounded-md text-xs flex items-center justify-between gap-3"
+          style={{ background: "var(--coral-light)", color: "var(--coral-dark)", border: "1px solid var(--coral)" }}
+        >
+          <span>Some generated pairings still need SEO content before they can be published.</span>
+          {onGoToPublish && (
+            <button onClick={onGoToPublish} className="underline font-bold shrink-0">
+              Go to Publish
             </button>
           )}
         </div>
@@ -343,7 +369,7 @@ export default function GenerateSequencePanel({
               </p>
             </div>
             <button
-              onClick={handleAddSubject}
+              onClick={() => setEditModalKind("subjects")}
               className="inline-flex items-center gap-1 px-2 py-1.5 rounded-md text-[10px] font-bold"
               style={{ border: "1px solid var(--pencil-light)", color: "var(--teal)" }}
             >
@@ -354,22 +380,36 @@ export default function GenerateSequencePanel({
             const count = pairs.filter((p) => p.subject === subject).length;
             const active = selectedSubject === subject;
             return (
-              <button
+              <div
                 key={subject}
-                onClick={() => setSelectedSubject(subject)}
-                className="w-full flex items-center justify-between mt-1.5 rounded-lg text-left text-xs"
+                className="flex items-center gap-1.5 mt-1.5 rounded-lg"
                 style={{
-                  padding: "11px 10px",
                   border: `1px solid ${active ? "#c9ddd2" : "transparent"}`,
-                  color: active ? "var(--teal-dark)" : "var(--ink)",
                   background: active ? "var(--teal-tint)" : "transparent",
                 }}
               >
-                <span>{subject}</span>
-                <span className="inline-flex items-center gap-1 text-[10px]" style={{ color: active ? "var(--teal)" : "var(--pencil)" }}>
-                  {count} matched <ChevronRight size={13} />
-                </span>
-              </button>
+                <button
+                  onClick={() => handleRemoveSubject(subject)}
+                  className="shrink-0 flex items-center justify-center"
+                  style={{ width: 28, height: 28, marginLeft: 6, color: "var(--pencil)" }}
+                  title={`Remove ${subject}`}
+                >
+                  <Trash2 size={13} />
+                </button>
+                <button
+                  onClick={() => setSelectedSubject(subject)}
+                  className="flex-1 flex items-center justify-between text-left text-xs"
+                  style={{
+                    padding: "11px 10px 11px 0",
+                    color: active ? "var(--teal-dark)" : "var(--ink)",
+                  }}
+                >
+                  <span>{subject}</span>
+                  <span className="inline-flex items-center gap-1 text-[10px]" style={{ color: active ? "var(--teal)" : "var(--pencil)" }}>
+                    {count} matched <ChevronRight size={13} />
+                  </span>
+                </button>
+              </div>
             );
           })}
         </div>
@@ -393,7 +433,7 @@ export default function GenerateSequencePanel({
                 Pair all
               </button>
               <button
-                onClick={handleAddVariation}
+                onClick={() => setEditModalKind("variations")}
                 className="inline-flex items-center gap-1 px-2 py-1.5 rounded-md text-[10px] font-bold"
                 style={{ border: "1px solid var(--pencil-light)", color: "var(--teal)" }}
               >
@@ -477,6 +517,16 @@ export default function GenerateSequencePanel({
           </div>
         )}
       </div>
+
+      {editModalKind && (
+        <EditListModal
+          categoryId={category.id}
+          kind={editModalKind}
+          currentItems={editModalKind === "subjects" ? subjects : variations}
+          onClose={() => setEditModalKind(null)}
+          onSaved={handleListSaved}
+        />
+      )}
     </SequencePanel>
   );
 }

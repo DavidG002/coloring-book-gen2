@@ -80,23 +80,29 @@ def get_jobs_for_category(db: Session, category: str) -> list[GenerationJob]:
     )
 
 
-def reject_image(db: Session, image_id: int) -> GenerationImage:
+def reject_image(db: Session, image_id: int, reason: str | None = None) -> GenerationImage:
+    """reason is a real, structured signal about the PRODUCT (this specific
+    image), not the prompt — e.g. 'gray_busy', 'wrong_subject',
+    'broken_line'. Stored alongside the image's own compiled_prompt_json,
+    so future review-driven work (quality classifier, etc.) can learn
+    from real (image, outcome) pairs, not just prompts in isolation."""
     image = db.query(GenerationImage).filter(GenerationImage.id == image_id).first()
     if not image:
         raise ValueError(f"Generation image {image_id} not found")
     if image.status == "rejected":
-        return image  # already rejected, no-op
-
+        if reason:
+            image.reject_reason = reason
+            db.commit()
+            db.refresh(image)
+        return image  # already rejected, no-op beyond updating the reason
     rejected_dir = os.path.join(OUTPUT_DIR, image.category, REJECTED_SUBDIR)
     os.makedirs(rejected_dir, exist_ok=True)
-
     filename = os.path.basename(image.file_path)
     new_path = os.path.join(rejected_dir, filename)
-
     if os.path.exists(image.file_path):
         shutil.move(image.file_path, new_path)
-
     image.status = "rejected"
+    image.reject_reason = reason
     db.commit()
     db.refresh(image)
     return image

@@ -88,6 +88,7 @@ export default function NewBookModal({
             </label>
             <input
               type="text"
+                spellCheck={true}
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Coloring Books — Ages 3-10"
@@ -119,6 +120,7 @@ export default function NewBookModal({
             </div>
             <input
               type="text"
+                spellCheck={true}
               value={productNoun}
               onChange={(e) => setProductNoun(e.target.value)}
               placeholder="Or type a custom term..."
@@ -132,6 +134,7 @@ export default function NewBookModal({
               Base prompt
             </label>
             <textarea
+                spellCheck={true}
               value={basePrompt}
               onChange={(e) => setBasePrompt(e.target.value)}
               rows={5}

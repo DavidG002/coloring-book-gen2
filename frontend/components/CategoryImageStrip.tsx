@@ -39,8 +39,16 @@ async function runPairs(categoryId: number, pairs: { subject: string; variation_
   return res.json() as Promise<{ job_id: number }>;
 }
 
-function imageFileUrl(imageId: number): string {
-  return `${API_BASE_URL}/review/image/${imageId}/file`;
+async function getJobStatus(jobId: number): Promise<{ status: string; completed_images: number; total_images: number }> {
+  const res = await fetch(`${API_BASE_URL}/generate/status/${jobId}`);
+  return res.json();
+}
+
+
+
+function imageFileUrl(imageId: number, createdAt?: string): string {
+  const cacheBuster = createdAt ? `?v=${encodeURIComponent(createdAt)}` : "";
+  return `${API_BASE_URL}/review/image/${imageId}/file${cacheBuster}`;
 }
 
 function statusKeyFor(img: CategoryImage): StatusKey {
@@ -200,18 +208,32 @@ export default function CategoryImageStrip({
     }
   }
 
-  async function doRegenerate(id: number) {
-    const img = images.find((i) => i.id === id);
-    if (!img?.variation_text) return;
-    setBusyId(id);
-    try {
-      await runPairs(categoryId, [{ subject: img.subject, variation_text: img.variation_text }]);
-      setTimeout(() => load(true), 7000);
-    } catch {
-      setError("Failed to start regeneration");
-      setBusyId(null);
-    }
+async function doRegenerate(id: number) {
+  const img = images.find((i) => i.id === id);
+  if (!img?.variation_text) return;
+  setBusyId(id);
+  try {
+    const result = await runPairs(categoryId, [{ subject: img.subject, variation_text: img.variation_text }]);
+
+    const poll = async () => {
+      try {
+        const status = await getJobStatus(result.job_id);
+        if (status.status === "done" || status.status === "failed" || status.status === "cancelled") {
+          load(true);
+          setBusyId(null);
+          return;
+        }
+      } catch {
+        // transient poll failure — keep trying, don't give up on one hiccup
+      }
+      setTimeout(poll, 1500);
+    };
+    setTimeout(poll, 1500);
+  } catch {
+    setError("Failed to start regeneration");
+    setBusyId(null);
   }
+}
 
   const batchIds = Array.from(new Set(images.map((img) => img.job_id))).sort((a, b) => b - a);
 
@@ -364,7 +386,7 @@ export default function CategoryImageStrip({
 
                   <button onClick={() => setLightboxIndex(sortedImages.indexOf(img))} className="block w-full">
                     <img
-                      src={imageFileUrl(img.id)}
+                      src={imageFileUrl(img.id, img.created_at)}
                       alt={`${img.subject} — ${img.variation_text ?? ""}`}
                       className="w-full object-cover"
                       style={{ height: 140, background: "var(--tone-sage-bg)" }}
@@ -500,7 +522,7 @@ export default function CategoryImageStrip({
             style={{ width: "min(680px, 100%)", padding: 40, border: "1px solid var(--pencil-light)", background: "var(--canvas)", boxShadow: "0 18px 55px rgba(28,27,26,0.1)" }}
           >
             <img
-              src={imageFileUrl(sortedImages[lightboxIndex].id)}
+              src={imageFileUrl(sortedImages[lightboxIndex].id, sortedImages[lightboxIndex].created_at)}
               alt={sortedImages[lightboxIndex].subject}
               style={{ maxWidth: "100%", maxHeight: "50vh", borderRadius: 6 }}
             />

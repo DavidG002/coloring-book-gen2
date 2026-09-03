@@ -65,6 +65,105 @@ META_DESC: <a compelling meta description under 155 characters, written to earn 
 
     return result
 
+FIELD_PROMPTS = {
+    "seo_title": ("a short page title", "TITLE"),
+    "seo_alt_text": ("ONE natural, descriptive alt-text sentence for accessibility and image search", "ALT"),
+    "seo_excerpt": ("ONE short, plain sentence, under 20 words, stating what the image shows", "EXCERPT"),
+    "seo_content": ("ONE to TWO short, plain sentences — mention the subject and category naturally for search visibility, no overselling", "CONTENT"),
+    "focus_keyphrase": ("a short 2-4 word search phrase someone would actually type to find this — the real focus keyphrase for SEO, not a sentence", "KEYPHRASE"),
+    "yoast_title": ("a search-engine title under 60 characters, starting with the keyphrase, distinct from the on-page heading", "YOAST_TITLE"),
+    "yoast_meta_description": ("a compelling meta description under 155 characters, written to earn clicks in search results, naturally including the keyphrase", "META_DESC"),
+}
+
+
+def generate_single_field(
+    book_base_prompt: str,
+    product_noun: str,
+    category_name: str,
+    subject_name: str,
+    variation_text: str,
+    lang: str,
+    field: str,
+) -> str:
+    """Regenerates exactly ONE SEO field, leaving every other field on the
+    row completely untouched — the fix for 'one field has a mistake, but
+    I don't want to risk changing the others, especially ones already
+    live on WordPress.'"""
+    if field not in FIELD_PROMPTS:
+        raise ValueError(f"Unknown field '{field}'")
+
+    description, response_prefix = FIELD_PROMPTS[field]
+    language_name = LANGUAGE_NAMES.get(lang.lower(), lang)
+
+    prompt = f"""You are writing ONE piece of SEO metadata for an image on a website.
+The site/product is described as:
+"{book_base_prompt}"
+The product type is: {product_noun}
+
+Subject: {subject_name}
+Pose/scene description: {variation_text}
+Category: {category_name}
+
+Write natural, grammatically correct {language_name}, matching the style and
+audience described above, and consistently referring to this as a
+"{product_noun}". Do not just concatenate the subject and pose — write a
+real sentence a native speaker would use. Keep it short, plain, and
+concrete. Avoid vague or overselling marketing language.
+
+Write {description}.
+
+Respond with EXACTLY this format, no extra commentary:
+{response_prefix}: <your answer>
+"""
+
+    client = get_openai_client()
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.5,
+    )
+
+    raw = (response.choices[0].message.content or "").strip()
+    prefix = f"{response_prefix}:"
+    for line in raw.splitlines():
+        if line.strip().startswith(prefix):
+            return line.split(":", 1)[1].strip()
+    return raw  # fallback: model didn't follow the format, use what it gave us
+
+def regenerate_single_field(
+    db: Session,
+    category_id: int,
+    subject_name: str,
+    variation_text: str,
+    lang: str,
+    field: str,
+) -> str:
+    """Regenerates one field via the LLM, saves it, and returns the new
+    value — every other field on this ContentVariant row is untouched."""
+    category = _get_category_or_raise(db, category_id)
+
+    subject = db.query(Subject).filter(Subject.category_id == category.id, Subject.name == subject_name).first()
+    variation = db.query(Variation).filter(Variation.category_id == category.id, Variation.text == variation_text).first()
+    if not subject or not variation:
+        raise ValueError("Subject or variation not found")
+
+    new_value = generate_single_field(
+        category.book.base_prompt, category.book.product_noun, category.name,
+        subject_name, variation_text, lang, field,
+    )
+
+    existing = (
+        db.query(ContentVariant)
+        .filter(ContentVariant.subject_id == subject.id, ContentVariant.variation_id == variation.id, ContentVariant.lang == lang)
+        .first()
+    )
+    if not existing:
+        raise ValueError("No existing content for this row — use the full Regenerate first.")
+
+    setattr(existing, field, new_value)
+    db.commit()
+    return new_value
+
 
 def _get_category_or_raise(db: Session, category_id: int) -> Category:
     category = db.query(Category).filter(Category.id == category_id).first()

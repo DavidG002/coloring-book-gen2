@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { ArrowLeft, Sparkles, CircleCheck, CornerDownRight, BookOpen } from "lucide-react";
+import BookStyleSidebar from "./BookStyleSidebar";
 
 const STEPS = [
   { id: "generate", label: "Generate", eyebrow: "01" },
@@ -21,6 +22,7 @@ export default function CategorySequenceShell({
   wordPressStepAvailable,
   wordPressSiteLabel,
   languageNeedsAttention,
+  publishNeedsAttention,
   children,
 }: {
   bookId: number;
@@ -30,12 +32,29 @@ export default function CategorySequenceShell({
   wordPressStepAvailable: boolean;
   wordPressSiteLabel: string;
   languageNeedsAttention?: boolean;
+  publishNeedsAttention?: boolean;
   children: (activeStep: StepId, setActiveStep: (s: StepId) => void) => React.ReactNode;
 }) {
-  const [activeStep, setActiveStep] = useState<StepId>("generate");
-  const mainStepIndex = STEPS.findIndex((s) => s.id === activeStep);
-  const stepIndex = activeStep === "wordpress" ? STEPS.length - 1 : mainStepIndex;
 
+const [activeStep, setActiveStepRaw] = useState<StepId>("generate");
+const mainStepIndex = STEPS.findIndex((s) => s.id === activeStep);
+const stepIndex = activeStep === "wordpress" ? STEPS.length - 1 : mainStepIndex;
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const saved = window.localStorage.getItem(`category-active-step-${categoryName}`);
+      if (saved === "generate" || saved === "language" || saved === "publish" || saved === "wordpress") {
+        setActiveStepRaw(saved);
+      }
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [categoryName]);
+
+  function setActiveStep(step: StepId) {
+    setActiveStepRaw(step);
+    window.localStorage.setItem(`category-active-step-${categoryName}`, step);
+  }
+  
   return (
     <div style={{ minHeight: "100vh", background: "var(--paper)" }}>
       <header
@@ -116,6 +135,13 @@ export default function CategorySequenceShell({
                       title="Some subjects or variations need translation"
                     />
                   )}
+                  {step.id === "publish" && publishNeedsAttention && (
+                    <span
+                      className="ml-auto w-2 h-2 rounded-full shrink-0"
+                      style={{ background: "var(--coral)" }}
+                      title="Some pairings still need SEO content"
+                    />
+                  )}
                 </button>
               );
             })}
@@ -143,6 +169,8 @@ export default function CategorySequenceShell({
               Thoughtful pairings create more consistent coloring pages.
             </p>
           </div>
+
+          {activeStep === "generate" && <BookStyleSidebar bookId={bookId} />}
         </aside>
 
         <section className="min-w-0">

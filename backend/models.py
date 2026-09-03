@@ -22,6 +22,7 @@ class BookPreview(Base):
     black_clean_threshold = Column(Integer, nullable=False)
     palette_colors = Column(Integer, nullable=False)
     prompt_used = Column(Text, nullable=True)
+    compiled_prompt_json = Column(Text, nullable=True)
     file_path = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -200,6 +201,8 @@ class GenerationImage(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     wp_excluded = Column(Boolean, nullable=False, default=False)
     prompt_used = Column(Text, nullable=True)
+    compiled_prompt_json = Column(Text, nullable=True)
+    reject_reason = Column(String, nullable=True)
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
 
     job = relationship("GenerationJob", back_populates="images")

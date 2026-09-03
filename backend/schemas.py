@@ -331,6 +331,8 @@ class GenerationStatusResponse(BaseModel):
     error_message: Optional[str] = None
     current_task: Optional[str] = None
 
+
+
 # ---------- Book / Catagory Deletion ----------
 
 
@@ -606,6 +608,17 @@ class SeoDataResponse(BaseModel):
     content_variants: list[SeoContentVariantRow]
 
 
+class SeoFieldRegenerateRequest(BaseModel):
+    subject_name: str
+    variation_text: str
+    field: str
+
+
+class SeoFieldRegenerateResponse(BaseModel):
+    field: str
+    value: str
+
+
 #--------- watermark settings -----------
 
 class WatermarkSettings(BaseModel):
@@ -690,3 +703,15 @@ class GenerationPairsRunRequest(BaseModel):
 
 class PairGenerationCounts(BaseModel):
     counts: dict[str, int]
+
+
+
+## ---------- Review / Rejection ----------
+
+class RejectImageRequest(BaseModel):
+    reason: str | None = None
+
+class RegenerateSameSlotsResponse(BaseModel):
+    job_id: int
+    status: str
+    total_images: int

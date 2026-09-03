@@ -1,15 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getCategory, updateCategory, ApiError, type CategorySummary } from "@/lib/api";
-import { SaveRow } from "./SettingsUI";
-
-function parseLines(text: string): string[] {
-  return text
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean);
-}
+import { Trash2, Plus } from "lucide-react";
+import { getCategory, updateCategory, type CategorySummary, type Category } from "@/lib/api";
+import EditListModal from "./EditListModal";
 
 export default function PrepareCategoryPanel({
   categories,
@@ -19,55 +13,64 @@ export default function PrepareCategoryPanel({
   defaultCategoryId?: number;
 }) {
   const [selected, setSelected] = useState<number | undefined>(defaultCategoryId ?? categories[0]?.id);
-  const [subjectsText, setSubjectsText] = useState("");
-  const [variationsText, setVariationsText] = useState("");
+  const [subjects, setSubjects] = useState<string[]>([]);
+  const [variations, setVariations] = useState<string[]>([]);
+  const [selectedSubject, setSelectedSubject] = useState<string>("");
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editModalKind, setEditModalKind] = useState<"subjects" | "variations" | null>(null);
 
   useEffect(() => {
-    if (defaultCategoryId) setSelected(defaultCategoryId);
+    if (!defaultCategoryId) return;
+    const timer = setTimeout(() => setSelected(defaultCategoryId), 0);
+    return () => clearTimeout(timer);
   }, [defaultCategoryId]);
 
-  useEffect(() => {
-    if (!selected) return;
-    let cancelled = false;
+  function loadCategory(id: number) {
     setLoading(true);
-    getCategory(selected)
+    getCategory(id)
       .then((cat) => {
-        if (cancelled) return;
-        setSubjectsText(cat.subjects.map((s) => s.name).join("\n"));
-        setVariationsText(cat.variations.sort((a, b) => a.order - b.order).map((v) => v.text).join("\n"));
+        const subjNames = cat.subjects.map((s) => s.name);
+        const varTexts = cat.variations.sort((a, b) => a.order - b.order).map((v) => v.text);
+        setSubjects(subjNames);
+        setVariations(varTexts);
+        setSelectedSubject(subjNames[0] ?? "");
       })
       .catch(() => {})
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    if (!selected) return;
+    const timer = setTimeout(() => loadCategory(selected), 0);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected]);
 
-  async function handleSave() {
+  function handleListSaved(updated: Category) {
+    setSubjects(updated.subjects.map((s) => s.name));
+    setVariations(updated.variations.sort((a, b) => a.order - b.order).map((v) => v.text));
+  }
+
+  async function handleRemoveSubject(subject: string) {
     if (!selected) return;
-    setError(null);
-    setSaving(true);
+    const next = subjects.filter((s) => s !== subject);
+    setSubjects(next);
     try {
-      const subjects = parseLines(subjectsText);
-      const variations = parseLines(variationsText);
-      if (subjects.length === 0 || variations.length === 0) {
-        setError("Add at least one subject and one variation.");
-        setSaving(false);
-        return;
-      }
-      await updateCategory(selected, { subjects, variations });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      await updateCategory(selected, { subjects: next });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to save category setup");
-    } finally {
-      setSaving(false);
+      setError(err instanceof Error ? err.message : "Failed to remove subject");
+    }
+  }
+
+  async function handleRemoveVariation(variation: string) {
+    if (!selected) return;
+    const next = variations.filter((v) => v !== variation);
+    setVariations(next);
+    try {
+      await updateCategory(selected, { variations: next });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to remove variation");
     }
   }
 
@@ -117,43 +120,115 @@ export default function PrepareCategoryPanel({
           Loading...
         </p>
       ) : (
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--ink)" }}>
-              Subjects
-            </label>
-            <textarea
-              value={subjectsText}
-              onChange={(e) => setSubjectsText(e.target.value)}
-              rows={6}
-              placeholder={"Car\nTruck\nAirplane"}
-              className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm leading-relaxed"
-              style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
-            />
-            <p className="mt-1 text-[10px]" style={{ color: "var(--pencil)" }}>
-              One subject per line.
-            </p>
+        <div className="grid grid-cols-2 rounded-lg overflow-hidden" style={{ border: "1px solid var(--pencil-light)" }}>
+          <div style={{ padding: 16, borderRight: "1px solid var(--pencil-light)" }}>
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h4 className="font-display font-normal m-0" style={{ fontSize: 15, color: "var(--ink)" }}>
+                  Subjects
+                </h4>
+                <p className="text-[10px] m-0 mt-0.5" style={{ color: "var(--pencil)" }}>
+                  {subjects.length} available
+                </p>
+              </div>
+              <button
+                onClick={() => setEditModalKind("subjects")}
+                className="inline-flex items-center gap-1 px-2 py-1.5 rounded-md text-[10px] font-bold"
+                style={{ border: "1px solid var(--pencil-light)", color: "var(--teal)" }}
+              >
+                <Plus size={12} /> Add
+              </button>
+            </div>
+            {subjects.length === 0 ? (
+              <p className="text-xs" style={{ color: "var(--pencil)" }}>
+                No subjects yet.
+              </p>
+            ) : (
+              subjects.map((subject) => {
+                const active = selectedSubject === subject;
+                return (
+                  <div
+                    key={subject}
+                    className="flex items-center gap-1 mt-1.5 rounded-lg"
+                    style={{
+                      border: `1px solid ${active ? "#c9ddd2" : "transparent"}`,
+                      background: active ? "var(--teal-tint)" : "transparent",
+                    }}
+                  >
+                    <button
+                      onClick={() => handleRemoveSubject(subject)}
+                      className="shrink-0 flex items-center justify-center"
+                      style={{ width: 26, height: 26, marginLeft: 4, color: "var(--pencil)" }}
+                      title={`Remove ${subject}`}
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                    <button
+                      onClick={() => setSelectedSubject(subject)}
+                      className="flex-1 flex items-center justify-between text-left text-xs"
+                      style={{ padding: "9px 8px 9px 0", color: active ? "var(--teal-dark)" : "var(--ink)" }}
+                    >
+                      <span className="capitalize">{subject}</span>
+                    </button>
+                  </div>
+                );
+              })
+            )}
           </div>
-          <div>
-            <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--ink)" }}>
-              Variations
-            </label>
-            <textarea
-              value={variationsText}
-              onChange={(e) => setVariationsText(e.target.value)}
-              rows={6}
-              placeholder={"side view on a road\nfront three-quarter view"}
-              className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm leading-relaxed"
-              style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
-            />
-            <p className="mt-1 text-[10px]" style={{ color: "var(--pencil)" }}>
-              One pose/variation per line.
-            </p>
+
+          <div style={{ padding: 16 }}>
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h4 className="font-display font-normal m-0" style={{ fontSize: 15, color: "var(--ink)" }}>
+                  Variations
+                </h4>
+                <p className="text-[10px] m-0 mt-0.5" style={{ color: "var(--pencil)" }}>
+                  {variations.length} available
+                </p>
+              </div>
+              <button
+                onClick={() => setEditModalKind("variations")}
+                className="inline-flex items-center gap-1 px-2 py-1.5 rounded-md text-[10px] font-bold"
+                style={{ border: "1px solid var(--pencil-light)", color: "var(--teal)" }}
+              >
+                <Plus size={12} /> Add
+              </button>
+            </div>
+            {variations.length === 0 ? (
+              <p className="text-xs" style={{ color: "var(--pencil)" }}>
+                No variations yet.
+              </p>
+            ) : (
+              variations.map((variation) => (
+                <div
+                  key={variation}
+                  className="flex items-center gap-2 py-2 text-xs"
+                  style={{ borderBottom: "1px solid var(--pencil-light)", color: "var(--pencil)" }}
+                >
+                  <span className="flex-1">{variation}</span>
+                  <button
+                    onClick={() => handleRemoveVariation(variation)}
+                    className="shrink-0"
+                    style={{ color: "var(--pencil)", padding: 3 }}
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}
 
-      <SaveRow onClick={handleSave} saving={saving} saved={saved} label="Save category setup" />
+      {editModalKind && selected && (
+        <EditListModal
+          categoryId={selected}
+          kind={editModalKind}
+          currentItems={editModalKind === "subjects" ? subjects : variations}
+          onClose={() => setEditModalKind(null)}
+          onSaved={handleListSaved}
+        />
+      )}
     </div>
   );
 }

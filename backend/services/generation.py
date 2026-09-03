@@ -263,17 +263,33 @@ def _process_raw_image(image_bytes: bytes, settings: dict):
 
     return final
 
-def generate_image_file(task: dict, settings: dict, output_path: str) -> tuple[bool, str | None]:
-    """Returns (success, prompt_used) — the caller needs the real prompt to
-    persist it on GenerationImage, so a future user can see exactly what
-    produced this specific file."""
-    from services.prompt_knobs import build_full_prompt
-    prompt = build_full_prompt(
-        task["base_prompt"],
-        task["subject"],
-        task["variation_text"],
-        task["knobs"],
-    )
+def generate_image_file(task: dict, settings: dict, output_path: str) -> tuple[bool, str | None, str | None]:
+    """Returns (success, prompt_used, compiled_prompt_json) — the caller
+    needs the real prompt to persist it on GenerationImage. Stage 2 of
+    the compiler rollout: the compiled, slot-separated prompt (Theme /
+    Draw / Style / Rules) is now what's actually sent to the image API,
+    replacing the old flat concatenation — confirmed via real side-by-
+    side comparison to correctly prevent framing text from overriding
+    fixed constraints like 'no color' on a coloring-page product.
+
+    If task carries 'override_compiled' (a dict already in compile_prompt's
+    shape), it's used as-is instead of recompiling from the book's
+    CURRENT knobs — this is what lets Review's 'Regenerate' reuse the
+    exact instructions that produced a specific rejected image, even if
+    the book's knobs have since changed."""
+    import json
+    from services.prompt_knobs import compile_prompt
+    if task.get("override_compiled"):
+        compiled = task["override_compiled"]
+    else:
+        compiled = compile_prompt(
+            task["base_prompt"],
+            task["subject"],
+            task["variation_text"],
+            task["knobs"],
+        )
+    prompt = compiled["text"]
+    compiled_json = json.dumps(compiled)
 
     try:
         client = get_openai_client()
@@ -286,13 +302,48 @@ def generate_image_file(task: dict, settings: dict, output_path: str) -> tuple[b
         image_bytes = base64.b64decode(response.data[0].b64_json)
         final = _process_raw_image(image_bytes, settings)
         final.save(output_path, "PNG", optimize=True, compress_level=9)
-        return True, prompt
-
+        return True, prompt, compiled_json
     except Exception as e:
         import traceback
         print(f"Error generating image: {e}")
         traceback.print_exc()
-        return False, None
+        return False, None, None
+
+def build_regenerate_task(db: Session, image_id: int) -> dict:
+    """Builds a single task for regenerating a rejected image using its
+    OWN real, stored compiled slots — not a fresh compile from the
+    book's current knobs. This is what makes Review's 'Regenerate' give
+    the model the exact same instructions that produced the original
+    image, so a reject/retry is a genuine second attempt at the same
+    product, not a different request in disguise."""
+    import json
+    from models import GenerationImage
+
+    image = db.query(GenerationImage).filter(GenerationImage.id == image_id).first()
+    if not image:
+        raise ValueError(f"Generation image {image_id} not found")
+    if not image.compiled_prompt_json:
+        raise ValueError("This image predates compiled-prompt tracking — use a normal regenerate instead.")
+    if not image.category_id:
+        raise ValueError("This image has no category_id on record — cannot safely regenerate.")
+
+    category = db.query(Category).filter(Category.id == image.category_id).first()
+    if not category:
+        raise ValueError(f"Category {image.category_id} not found")
+
+    compiled = json.loads(image.compiled_prompt_json)
+    next_variation = _get_existing_max_variation(category.id, image.subject) + 1
+
+    return {
+        "category": category.name,
+        "category_id": category.id,
+        "subject": image.subject,
+        "variation_number": next_variation,
+        "variation_text": image.variation_text,
+        "base_prompt": category.book.base_prompt,  # unused when override_compiled is set, kept for shape consistency
+        "knobs": {},  # same — override_compiled takes precedence in generate_image_file
+        "override_compiled": compiled,
+    }
 
 
 PREVIEW_DIR = "preview_cache"
@@ -304,15 +355,22 @@ def generate_preview_image(
     variation_text: str,
     settings: dict,
     knobs: dict,
-) -> tuple[bytes, str] | tuple[None, None]:
+) -> tuple[bytes, str, str] | tuple[None, None, None]:
     """Runs a real, billed generation call using an actual subject + variation
     from the book's categories, so the preview matches genuine output exactly.
-    Returns (raw PNG bytes, the exact prompt used) — the caller needs the
-    prompt too, for accurate history tracking, and this is the one place
-    that knows the real, final resolved string. Saving to disk + history is
-    handled separately by the caller (save_preview_to_history)."""
-    from services.prompt_knobs import build_full_prompt
-    prompt = build_full_prompt(base_prompt, subject, variation_text, knobs)
+    Returns (raw PNG bytes, the exact prompt used, compiled_prompt_json) —
+    the caller needs the prompt too, for accurate history tracking, and
+    this is the one place that knows the real, final resolved string.
+    Saving to disk + history is handled separately by the caller
+    (save_preview_to_history). Stage 1 of the compiler rollout: the
+    compiled, slot-separated prompt is built and recorded alongside the
+    real prompt actually sent, for later comparison — see
+    generate_image_file for the same pattern on real generation."""
+    import json
+    from services.prompt_knobs import compile_prompt
+    compiled = compile_prompt(base_prompt, subject, variation_text, knobs)
+    prompt = compiled["text"]
+    compiled_json = json.dumps(compiled)
 
     try:
         client = get_openai_client()
@@ -327,13 +385,12 @@ def generate_preview_image(
 
         buf = io.BytesIO()
         final.save(buf, "PNG")
-        return buf.getvalue(), prompt
-
+        return buf.getvalue(), prompt, compiled_json
     except Exception as e:
         import traceback
         print(f"Error generating preview: {e}")
         traceback.print_exc()
-        return None, None
+        return None, None, None
 
 
 def save_preview_to_history(
@@ -345,6 +402,7 @@ def save_preview_to_history(
     settings: dict,
     image_bytes: bytes,
     prompt_used: str | None = None,
+    compiled_prompt_json: str | None = None,
 ) -> "BookPreview":
     """Writes a generated preview image to disk and records it in history,
     so paid-for previews are never silently discarded."""
@@ -371,8 +429,8 @@ def save_preview_to_history(
         black_clean_threshold=settings["black_clean_threshold"],
         palette_colors=settings["palette_colors"],
         prompt_used=prompt_used,
+        compiled_prompt_json=compiled_prompt_json,
         file_path=file_path,
-
     )
     db.add(record)
     db.commit()

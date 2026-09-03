@@ -9,8 +9,8 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 type CategoryDeletionInfo = components["schemas"]["CategoryDeletionInfo"];
 
-async function getDeletionInfo(categoryName: string): Promise<CategoryDeletionInfo> {
-  const res = await fetch(`${API_BASE_URL}/categories/${encodeURIComponent(categoryName)}/deletion-info`);
+async function getDeletionInfo(categoryId: number): Promise<CategoryDeletionInfo> {
+  const res = await fetch(`${API_BASE_URL}/categories/${categoryId}/deletion-info`);
   if (!res.ok) {
     const data = await res.json();
     throw new ApiError(res.status, data.detail);
@@ -18,9 +18,9 @@ async function getDeletionInfo(categoryName: string): Promise<CategoryDeletionIn
   return res.json();
 }
 
-async function deleteCategoryWithFiles(categoryName: string, deleteFiles: boolean): Promise<void> {
+async function deleteCategoryWithFiles(categoryId: number, deleteFiles: boolean): Promise<void> {
   const res = await fetch(
-    `${API_BASE_URL}/categories/${encodeURIComponent(categoryName)}?delete_files=${deleteFiles}`,
+    `${API_BASE_URL}/categories/${categoryId}?delete_files=${deleteFiles}`,
     { method: "DELETE" }
   );
   if (!res.ok) {
@@ -30,10 +30,12 @@ async function deleteCategoryWithFiles(categoryName: string, deleteFiles: boolea
 }
 
 export default function DeleteCategoryModal({
+  categoryId,
   categoryName,
   bookId,
   onClose,
 }: {
+  categoryId: number;
   categoryName: string;
   bookId: number;
   onClose: () => void;
@@ -48,7 +50,7 @@ export default function DeleteCategoryModal({
 
   useEffect(() => {
     let cancelled = false;
-    getDeletionInfo(categoryName)
+    getDeletionInfo(categoryId)
       .then((data) => {
         if (!cancelled) setInfo(data);
       })
@@ -61,21 +63,20 @@ export default function DeleteCategoryModal({
     return () => {
       cancelled = true;
     };
-  }, [categoryName]);
+  }, [categoryId]);
 
   async function handleConfirmDelete() {
     if (!info) return;
     setError(null);
     setDeleting(true);
     try {
-      await deleteCategoryWithFiles(categoryName, mode === "delete-files");
-      router.push(`/books/${bookId}`);
+      await deleteCategoryWithFiles(categoryId, mode === "delete-files");
+      onClose();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to delete category");
       setDeleting(false);
     }
   }
-
   const nameMatches = info ? confirmText.trim().toLowerCase() === info.category_name.toLowerCase() : false;
 
   return (

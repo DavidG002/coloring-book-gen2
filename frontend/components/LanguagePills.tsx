@@ -1,5 +1,4 @@
 "use client";
-
 export default function LanguagePills({
   languages,
   selected,
@@ -11,21 +10,26 @@ export default function LanguagePills({
 }) {
   return (
     <div className="flex gap-2 flex-wrap">
-      {languages.map((lang) => (
-        <button
-          key={lang}
-          type="button"
-          onClick={() => onSelect(selected === lang ? "" : lang)}
-          className="px-4 py-1.5 rounded-full text-sm font-medium border-[1.5px] uppercase"
-          style={
-            selected === lang
-              ? { background: "var(--teal)", borderColor: "var(--teal)", color: "white" }
-              : { borderColor: "var(--pencil-light)", color: "var(--pencil)" }
-          }
-        >
-          {lang}
-        </button>
-      ))}
+      {languages.map((lang) => {
+        const active = selected === lang;
+        return (
+          <button
+            key={lang}
+            type="button"
+            onClick={() => onSelect(active ? "" : lang)}
+            className="inline-flex items-center justify-center rounded-md text-[10px] font-black uppercase"
+            style={{
+              width: 36,
+              height: 28,
+              background: active ? "var(--teal)" : "var(--teal-tint)",
+              color: active ? "white" : "var(--teal-dark)",
+              transition: "background 0.15s ease, color 0.15s ease",
+            }}
+          >
+            {lang}
+          </button>
+        );
+      })}
     </div>
   );
 }

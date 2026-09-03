@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { createCategory, ApiError } from "@/lib/api";
 
 export default function NewCategoryModal({
@@ -13,7 +12,6 @@ export default function NewCategoryModal({
   bookName: string;
   onClose: () => void;
 }) {
-  const router = useRouter();
   const [name, setName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,13 +27,13 @@ export default function NewCategoryModal({
 
     setSubmitting(true);
     try {
-      const category = await createCategory({
+      await createCategory({
         name: name.trim().toLowerCase(),
         book_id: bookId,
         subjects: [],
         variations: [],
       });
-      router.push(`/categories/${category.id}`);
+      onClose();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to create category");
       setSubmitting(false);
@@ -72,6 +70,7 @@ export default function NewCategoryModal({
         <form onSubmit={handleSubmit}>
           <input
             type="text"
+                spellCheck={true}
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. dinosaurs"

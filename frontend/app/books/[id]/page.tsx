@@ -12,6 +12,7 @@ import BookPreviewSection from "@/components/BookPreviewSection";
 import PrepareCategoryPanel from "@/components/PrepareCategoryPanel";
 import { Panel, PanelSection } from "@/components/SettingsUI";
 import AppShell from "@/components/AppShell";
+import DeleteCategoryModal from "@/components/DeleteCategoryModal";
 
 const TONES = [
   { bg: "var(--tone-sage-bg)", fg: "var(--tone-sage)" },
@@ -34,7 +35,23 @@ export default function BookDetailPage() {
   const [showNewCategoryModal, setShowNewCategoryModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [lastCreatedCategoryId, setLastCreatedCategoryId] = useState<number | undefined>(undefined);
+  const [deletingCategory, setDeletingCategory] = useState<CategorySummary | null>(null);
+  const [highlightedCategoryId, setHighlightedCategoryId] = useState<number | null>(null);
+  const [prepareCategoryOpen, setPrepareCategoryOpen] = useState(true);
 
+  
+  useEffect(() => {
+  const timer = setTimeout(() => {
+    const saved = window.localStorage.getItem(`prepare-category-open-${bookId}`);
+    if (saved !== null) setPrepareCategoryOpen(saved === "1");
+  }, 0);
+  return () => clearTimeout(timer);
+}, [bookId]);
+
+useEffect(() => {
+  window.localStorage.setItem(`prepare-category-open-${bookId}`, prepareCategoryOpen ? "1" : "0");
+}, [prepareCategoryOpen, bookId]);
+  
   useEffect(() => {
     let cancelled = false;
 
@@ -73,6 +90,8 @@ export default function BookDetailPage() {
       if (mine.length > 0) {
         const newest = mine.reduce((a, b) => (b.id > a.id ? b : a));
         setLastCreatedCategoryId(newest.id);
+        setHighlightedCategoryId(newest.id);
+        setTimeout(() => setHighlightedCategoryId(null), 3000);
       }
     } catch {
       // silent
@@ -197,28 +216,45 @@ export default function BookDetailPage() {
                 {categories.map((cat, i) => {
                   const tone = TONES[i % TONES.length];
                   return (
-                    <Link
+                    <div
                       key={cat.id}
-                      href={`/categories/${cat.id}`}
-                      className="lift-hover flex items-center gap-3"
-                      style={{ padding: "11px 10px", border: "1px solid var(--pencil-light)", borderRadius: 9 }}
+                      className="flex items-center gap-1.5"
+                      style={{
+                        border: `1px solid ${highlightedCategoryId === cat.id ? "var(--teal)" : "var(--pencil-light)"}`,
+                        background: highlightedCategoryId === cat.id ? "var(--teal-tint)" : "transparent",
+                        borderRadius: 9,
+                        transition: "background 0.4s ease, border-color 0.4s ease",
+                      }}
                     >
-                      <div
-                        className="w-[34px] h-[34px] rounded-lg flex items-center justify-center shrink-0"
-                        style={{ background: tone.bg, color: tone.fg }}
+                      <Link
+                        href={`/categories/${cat.id}`}
+                        className="lift-hover flex items-center gap-3 flex-1 min-w-0"
+                        style={{ padding: "11px 10px" }}
                       >
-                        <ImageIcon size={16} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold m-0 capitalize" style={{ color: "var(--ink)" }}>
-                          {cat.name}
-                        </p>
-                        <p className="text-[10px] m-0 mt-1" style={{ color: "var(--pencil)" }}>
-                          {cat.subject_count} subjects, {cat.variation_count} variations
-                        </p>
-                      </div>
-                      <MoreHorizontal size={16} style={{ color: "var(--pencil)" }} />
-                    </Link>
+                        <div
+                          className="w-[34px] h-[34px] rounded-lg flex items-center justify-center shrink-0"
+                          style={{ background: tone.bg, color: tone.fg }}
+                        >
+                          <ImageIcon size={16} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold m-0 capitalize" style={{ color: "var(--ink)" }}>
+                            {cat.name}
+                          </p>
+                          <p className="text-[10px] m-0 mt-1" style={{ color: "var(--pencil)" }}>
+                            {cat.subject_count} subjects, {cat.variation_count} variations
+                          </p>
+                        </div>
+                      </Link>
+                      <button
+                        onClick={() => setDeletingCategory(cat)}
+                        className="shrink-0 flex items-center justify-center"
+                        style={{ width: 34, height: 34, marginRight: 8, color: "var(--pencil)" }}
+                        title={`Delete ${cat.name}`}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
                   );
                 })}
               </div>
@@ -235,7 +271,11 @@ export default function BookDetailPage() {
               <ArrowUpRight size={14} />
             </button>
 
-            <PanelSection label="Prepare a category">
+              <PanelSection
+                label="Prepare a category"
+                open={prepareCategoryOpen}
+                onToggle={() => setPrepareCategoryOpen((v) => !v)}
+              >
               <PrepareCategoryPanel categories={categories} defaultCategoryId={lastCreatedCategoryId} />
             </PanelSection>
           </Panel>
@@ -255,6 +295,17 @@ export default function BookDetailPage() {
       )}
       {showDeleteModal && (
         <DeleteBookModal bookId={bookId} onClose={() => setShowDeleteModal(false)} />
+      )}
+      {deletingCategory && (
+        <DeleteCategoryModal
+          categoryId={deletingCategory.id}
+          categoryName={deletingCategory.name}
+          bookId={bookId}
+          onClose={() => {
+            setDeletingCategory(null);
+            getCategories().then((all) => setCategories(all.filter((c) => c.book_id === bookId))).catch(() => {});
+          }}
+        />
       )}
     </AppShell>
   );

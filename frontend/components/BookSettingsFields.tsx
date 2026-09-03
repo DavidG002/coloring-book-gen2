@@ -6,6 +6,7 @@ import { getBook, updateBook, ApiError, type Book } from "@/lib/api";
 import { Panel, PanelSection, SaveRow, Field, PAPER_PRESETS } from "./SettingsUI";
 import KnobsPanel from "./KnobsPanel";
 import { useSearchParams } from "next/navigation";
+import ExpandableTextModal from "./ExpandableTextModal";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -80,6 +81,18 @@ export default function BookSettingsFields({
   const [activeSection, setActiveSectionState] = useState<SectionKey>(isNewBook ? "image" : "basics");
   const [sectionRestored, setSectionRestored] = useState(false);
 
+  const [editingName, setEditingName] = useState(false);
+  const [editingProductNoun, setEditingProductNoun] = useState(false);
+
+  const [imageSettingsSnapshot, setImageSettingsSnapshot] = useState<{
+  canvas_width: number;
+  canvas_height: number;
+  subject_size_ratio: number;
+  white_clean_threshold: number;
+  black_clean_threshold: number;
+  palette_colors: number;
+} | null>(null);
+
 function setActiveSection(key: SectionKey) {
   setActiveSectionState(key);
   if (typeof window !== "undefined") {
@@ -107,22 +120,29 @@ function setActiveSection(key: SectionKey) {
         const data = await getBook(bookId);
         if (cancelled) return;
         setBook(data);
+        setName(data.name);
+        setBasePrompt(data.base_prompt);
+        setProductNoun(data.product_noun);
         if (!isNewBook && typeof window !== "undefined") {
           const saved = localStorage.getItem(`book-settings-section-${bookId}`) as SectionKey | null;
           if (saved && SECTION_ORDER.includes(saved)) {
             setActiveSectionState(saved);
           }
         }
-        setSectionRestored(true);
-        setName(data.name);
-        setBasePrompt(data.base_prompt);
-        setProductNoun(data.product_noun);
         setCanvasWidth(data.canvas_width);
         setCanvasHeight(data.canvas_height);
         setSubjectSizeRatio(data.subject_size_ratio);
         setWhiteThreshold(data.white_clean_threshold);
         setBlackThreshold(data.black_clean_threshold);
         setPaletteColors(data.palette_colors);
+        setImageSettingsSnapshot({
+          canvas_width: data.canvas_width,
+          canvas_height: data.canvas_height,
+          subject_size_ratio: data.subject_size_ratio,
+          white_clean_threshold: data.white_clean_threshold,
+          black_clean_threshold: data.black_clean_threshold,
+          palette_colors: data.palette_colors,
+        });
         onBookLoaded?.(data);
 
         const watermark = await getWatermarkSettings(bookId);
@@ -196,9 +216,9 @@ function setActiveSection(key: SectionKey) {
     }
   }
 
-  async function handleSavePrompt() {
+  async function handleSavePrompt(value?: string) {
     setError(null);
-    const trimmed = basePrompt.trim();
+    const trimmed = (value ?? basePrompt).trim();
     if (!trimmed) {
       setError("Creative direction cannot be empty.");
       return;
@@ -206,6 +226,7 @@ function setActiveSection(key: SectionKey) {
     setSavingPrompt(true);
     try {
       const updated = await updateBook(bookId, { base_prompt: trimmed });
+      setBasePrompt(updated.base_prompt);
       setBook(updated);
       onBookLoaded?.(updated);
       setPromptSaved(true);
@@ -231,6 +252,14 @@ function setActiveSection(key: SectionKey) {
       });
       setBook(updated);
       onBookLoaded?.(updated);
+      setImageSettingsSnapshot({
+        canvas_width: canvasWidth,
+        canvas_height: canvasHeight,
+        subject_size_ratio: subjectSizeRatio,
+        white_clean_threshold: whiteThreshold,
+        black_clean_threshold: blackThreshold,
+        palette_colors: paletteColors,
+      });
       setSettingsSaved(true);
       setTimeout(() => setSettingsSaved(false), 2000);
     } catch (err) {
@@ -276,6 +305,15 @@ function setActiveSection(key: SectionKey) {
     return <p className="text-sm" style={{ color: "var(--pencil)" }}>Loading...</p>;
   }
 
+  const imageSettingsDirty = imageSettingsSnapshot !== null && (
+    canvasWidth !== imageSettingsSnapshot.canvas_width ||
+    canvasHeight !== imageSettingsSnapshot.canvas_height ||
+    subjectSizeRatio !== imageSettingsSnapshot.subject_size_ratio ||
+    whiteThreshold !== imageSettingsSnapshot.white_clean_threshold ||
+    blackThreshold !== imageSettingsSnapshot.black_clean_threshold ||
+    paletteColors !== imageSettingsSnapshot.palette_colors
+  ); 
+
   return (
       <Panel
         compact
@@ -297,49 +335,126 @@ function setActiveSection(key: SectionKey) {
 
         {/* Accordion: only one open at a time; closing one advances to the next */}
         <div>
-          <label className="block text-[10px] uppercase font-bold mb-1.5" style={{ color: "var(--pencil)", letterSpacing: "0.08em" }}>
-            Creative direction
-          </label>
-          <textarea
-            value={basePrompt}
-            onChange={(e) => setBasePrompt(e.target.value)}
-            rows={4}
-            className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-xs leading-relaxed"
-            style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
-          />
-          <SaveRow onClick={handleSavePrompt} saving={savingPrompt} saved={promptSaved} label="Save prompt" />
-        </div>
-
-        <PanelSection label="Book basics" open={activeSection === "basics"} onToggle={() => toggleSection("basics")}>
-          <div>
-            <label className="block text-[10px] uppercase font-bold mb-1.5" style={{ color: "var(--pencil)", letterSpacing: "0.08em" }}>
-              Book title
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="block text-[10px] uppercase font-bold" style={{ color: "var(--pencil)", letterSpacing: "0.08em" }}>
+              Creative direction
             </label>
+            <ExpandableTextModal
+              label="Creative direction"
+              value={basePrompt}
+              onChange={setBasePrompt}
+              onSave={handleSavePrompt}
+              saving={savingPrompt}
+              saved={promptSaved}
+              placeholder="Describe the shared style for every category in this book."
+            />
+          </div>
+          <textarea
+            spellCheck={true}
+            value={basePrompt}
+            readOnly
+            rows={4}
+            className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-xs leading-relaxed cursor-default"
+            style={{ borderColor: "var(--pencil-light)", background: "var(--paper)" }}
+          />
+          </div>
+          <PanelSection label="Book basics" open={activeSection === "basics"} onToggle={() => toggleSection("basics")}>
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-[10px] uppercase font-bold" style={{ color: "var(--pencil)", letterSpacing: "0.08em" }}>
+                Book title
+              </label>
+              {!editingName && (
+                <button
+                  onClick={() => setEditingName(true)}
+                  className="text-[10px] font-bold"
+                  style={{ color: "var(--teal)" }}
+                >
+                  Edit
+                </button>
+              )}
+            </div>
             <input
               type="text"
+              spellCheck={true}
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-xs"
-              style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+              disabled={!editingName}
+              className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-xs disabled:opacity-60"
+              style={{ borderColor: "var(--pencil-light)", background: editingName ? "var(--canvas)" : "var(--paper)" }}
             />
-            <SaveRow onClick={handleSaveName} saving={savingName} saved={nameSaved} />
+            {editingName && (
+              <div className="flex items-center gap-3 mt-2">
+                <button
+                  onClick={async () => {
+                    await handleSaveName();
+                    setEditingName(false);
+                  }}
+                  disabled={savingName}
+                  className="px-3.5 py-1.5 rounded-md text-[11px] font-bold text-white disabled:opacity-60"
+                  style={{ background: "var(--teal)" }}
+                >
+                  {savingName ? "Saving..." : "Save"}
+                </button>
+                <button
+                  onClick={() => setEditingName(false)}
+                  className="text-[11px] font-medium"
+                  style={{ color: "var(--pencil)" }}
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
           </div>
-
           <div className="mt-5">
-            <label className="block text-[10px] uppercase font-bold mb-1.5" style={{ color: "var(--pencil)", letterSpacing: "0.08em" }}>
-              Book type
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-[10px] uppercase font-bold" style={{ color: "var(--pencil)", letterSpacing: "0.08em" }}>
+                Book type
+              </label>
+              {!editingProductNoun && (
+                <button
+                  onClick={() => setEditingProductNoun(true)}
+                  className="text-[10px] font-bold"
+                  style={{ color: "var(--teal)" }}
+                >
+                  Edit
+                </button>
+              )}
+            </div>
             <p className="text-[11px] mb-1.5" style={{ color: "var(--pencil)" }}>
               The word used consistently across generated titles, descriptions, and SEO content.
             </p>
             <input
               type="text"
+              spellCheck={true}
               value={productNoun}
               onChange={(e) => setProductNoun(e.target.value)}
-              className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-xs"
-              style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+              disabled={!editingProductNoun}
+              className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-xs disabled:opacity-60"
+              style={{ borderColor: "var(--pencil-light)", background: editingProductNoun ? "var(--canvas)" : "var(--paper)" }}
             />
-            <SaveRow onClick={handleSaveProductNoun} saving={savingProductNoun} saved={productNounSaved} />
+            {editingProductNoun && (
+              <div className="flex items-center gap-3 mt-2">
+                <button
+                  onClick={async () => {
+                    await handleSaveProductNoun();
+                    setEditingProductNoun(false);
+                  }}
+                  disabled={savingProductNoun}
+                  className="px-3.5 py-1.5 rounded-md text-[11px] font-bold text-white disabled:opacity-60"
+                  style={{ background: "var(--teal)" }}
+                >
+                  {savingProductNoun ? "Saving..." : "Save"}
+                </button>
+                <button
+                  onClick={() => setEditingProductNoun(false)}
+                  className="text-[11px] font-medium"
+                  style={{ color: "var(--pencil)" }}
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
           </div>
         </PanelSection>
 
@@ -384,7 +499,21 @@ function setActiveSection(key: SectionKey) {
           <Field label="Palette colors" hint="Smaller = smaller file" value={paletteColors} onChange={setPaletteColors} min={2} max={256} />
         </div>
 
-        <SaveRow onClick={handleSaveSettings} saving={savingSettings} saved={settingsSaved} label="Save settings" />
+        <div className="flex items-center gap-3 mt-4">
+          <button
+            onClick={handleSaveSettings}
+            disabled={savingSettings}
+            className="px-3.5 py-1.5 rounded-md text-[11px] font-bold text-white disabled:opacity-60"
+            style={{ background: imageSettingsDirty ? "var(--coral)" : "var(--teal)" }}
+          >
+            {savingSettings ? "Saving..." : imageSettingsDirty ? "Save changes" : "Save settings"}
+          </button>
+          {settingsSaved && (
+            <span className="text-[11px] font-medium" style={{ color: "var(--teal)" }}>
+              Saved
+            </span>
+          )}
+        </div>
       </PanelSection>
 
       <PanelSection label="Style knobs" open={activeSection === "knobs"} onToggle={() => toggleSection("knobs")}>

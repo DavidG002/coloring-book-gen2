@@ -4,7 +4,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from database import get_db
-from schemas import ReviewJob, ReviewImage, CategoryImageStatus
+from schemas import ReviewJob, ReviewImage, CategoryImageStatus, RejectImageRequest
 from services.review import get_images_for_job, get_jobs_for_category, reject_image, restore_image, get_current_file_path, get_images_for_category
 
 router = APIRouter(prefix="/review", tags=["review"])
@@ -55,12 +55,13 @@ def serve_image_file(image_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/image/{image_id}/reject")
-def reject(image_id: int, db: Session = Depends(get_db)):
+def reject(image_id: int, payload: RejectImageRequest | None = None, db: Session = Depends(get_db)):
     try:
-        image = reject_image(db, image_id)
+        reason = payload.reason if payload else None
+        image = reject_image(db, image_id, reason)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    return {"id": image.id, "status": image.status}
+    return {"id": image.id, "status": image.status, "reject_reason": image.reject_reason}
 
 
 @router.post("/image/{image_id}/restore")

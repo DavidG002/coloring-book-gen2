@@ -342,6 +342,7 @@ export default function TranslationEditorModal({
                 </div>
                 <input
                   type="text"
+                spellCheck={true}
                   value={form.categoryTranslated}
                   onChange={(e) => setForm((f) => ({ ...f, categoryTranslated: e.target.value }))}
                   className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
@@ -446,6 +447,7 @@ export default function TranslationEditorModal({
                             </span>
                             <input
                               type="text"
+                spellCheck={true}
                               value={form.itemsBySubject[s.name] ?? ""}
                               onChange={(e) => updateSubjectItem(s.name, e.target.value)}
                               placeholder="Not translated yet"
@@ -483,6 +485,7 @@ export default function TranslationEditorModal({
                     {variations.length > 8 && (
                       <input
                         type="text"
+                spellCheck={true}
                         value={variationFilter}
                         onChange={(e) => setVariationFilter(e.target.value)}
                         placeholder={`Filter ${variations.length} variations...`}
@@ -502,6 +505,7 @@ export default function TranslationEditorModal({
                             </span>
                             <input
                               type="text"
+                spellCheck={true}
                               value={form.itemsByVariation[v.text] ?? ""}
                               onChange={(e) => updateVariationItem(v.text, e.target.value)}
                               placeholder="Not translated yet"

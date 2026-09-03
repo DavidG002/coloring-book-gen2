@@ -1,4 +1,3 @@
-// app/categories/[id]/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -24,6 +23,8 @@ export default function CategoryDetailPage() {
   const [wordPressSiteLabel, setWordPressSiteLabel] = useState("WordPress");
   const [languageNeedsAttention, setLanguageNeedsAttention] = useState(false);
   const [languageCheckTrigger, setLanguageCheckTrigger] = useState(0);
+  const [publishNeedsAttention, setPublishNeedsAttention] = useState(false);
+  const [publishCheckTrigger, setPublishCheckTrigger] = useState(0);
 
   useEffect(() => {
     if (!category) return;
@@ -50,6 +51,41 @@ export default function CategoryDetailPage() {
       clearTimeout(timer);
     };
   }, [category, categoryId, languageCheckTrigger]);
+
+  useEffect(() => {
+    if (!category) return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+        const translations = await getTranslations(categoryId);
+        if (translations.length === 0) {
+          if (!cancelled) setPublishNeedsAttention(false);
+          return;
+        }
+        // A pairing "needs attention" if ANY language shows it as not yet
+        // generated — mirrors the SEO panel's own "generated: false" rows,
+        // so the warning means exactly what the SEO list itself shows.
+        let incomplete = false;
+        for (const t of translations) {
+          const res = await fetch(`${API_BASE_URL}/categories/${categoryId}/seo/${t.lang}`);
+          if (!res.ok) continue;
+          const data = await res.json();
+          if (data.content_variants?.some((v: { generated: boolean }) => !v.generated)) {
+            incomplete = true;
+            break;
+          }
+        }
+        if (!cancelled) setPublishNeedsAttention(incomplete);
+      } catch {
+        // silent — worst case, the nudge just doesn't show this time
+      }
+    }, 0);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [category, categoryId, publishCheckTrigger]);
 
   useEffect(() => {
     if (!category) return;
@@ -161,10 +197,14 @@ export default function CategoryDetailPage() {
       wordPressStepAvailable={wordPressAvailable}
       wordPressSiteLabel={wordPressSiteLabel}
       languageNeedsAttention={languageNeedsAttention}
+      publishNeedsAttention={publishNeedsAttention}
     >
       {(activeStep, setActiveStep) => {
         const goToStep = (step: StepId) => {
-          if (step === "generate") setLanguageCheckTrigger((n) => n + 1);
+          if (step === "generate") {
+            setLanguageCheckTrigger((n) => n + 1);
+            setPublishCheckTrigger((n) => n + 1);
+          }
           setActiveStep(step);
         };
         return (
@@ -176,6 +216,8 @@ export default function CategoryDetailPage() {
                 onCategoryChanged={setCategory}
                 languageNeedsAttention={languageNeedsAttention}
                 onGoToLanguage={() => goToStep("language")}
+                publishNeedsAttention={publishNeedsAttention}
+                onGoToPublish={() => goToStep("publish")}
               />
             )}
             {activeStep === "language" && (
@@ -195,6 +237,7 @@ export default function CategoryDetailPage() {
                 categoryName={category.name}
                 onGoToWordPress={() => goToStep("wordpress")}
                 onGoToLanguage={() => goToStep("language")}
+                onSeoChanged={() => setPublishCheckTrigger((n) => n + 1)}
               />
             )}
             {activeStep === "wordpress" && (
