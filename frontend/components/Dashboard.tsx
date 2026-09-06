@@ -5,6 +5,7 @@ import Link from "next/link";
 import { BookOpen, FolderOpen, Layers, Search, ChevronDown, ArrowUpRight, Plus, MoreHorizontal } from "lucide-react";
 import { getBooks, getCategories, type BookSummary, type CategorySummary } from "@/lib/api";
 import AppShell from "./AppShell";
+import NewBookModal from "./NewBookModal";
 
 const TONES = [
   { bg: "var(--tone-sage-bg)", fg: "var(--tone-sage)" },
@@ -18,6 +19,7 @@ export default function Dashboard() {
   const [books, setBooks] = useState<BookSummary[]>([]);
   const [categories, setCategories] = useState<CategorySummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
   const [query, setQuery] = useState("");
   const [todayLabel, setTodayLabel] = useState("");
 
@@ -82,13 +84,13 @@ export default function Dashboard() {
             A quiet place to turn ideas into pages worth keeping.
           </p>
         </div>
-        <Link
-          href="/books/new"
+        <button
+          onClick={() => setShowCreate(true)}
           className="lift-hover inline-flex items-center gap-2 rounded-lg text-white text-xs font-bold shrink-0"
           style={{ padding: "11px 15px", background: "var(--teal)", boxShadow: "0 5px 14px rgba(91,124,147,0.14)" }}
         >
           <Plus size={16} /> New book
-        </Link>
+        </button>
       </div>
 
       <div className="grid grid-cols-3 gap-3.5 mb-12">
@@ -174,9 +176,9 @@ export default function Dashboard() {
             );
           })}
 
-          <Link
-            href="/books/new"
-            className="lift-hover rounded-xl flex items-center gap-3"
+          <button
+            onClick={() => setShowCreate(true)}
+            className="lift-hover rounded-xl flex items-center gap-3 text-left"
             style={{ minHeight: 216, padding: 18, border: "1.5px dashed var(--pencil-light)" }}
           >
             <div
@@ -193,7 +195,7 @@ export default function Dashboard() {
                 Start with a style and a prompt.
               </p>
             </div>
-          </Link>
+          </button>
 
           {filteredBooks.length === 0 && (
             <p className="text-sm col-span-full" style={{ color: "var(--pencil)" }}>
@@ -247,6 +249,14 @@ export default function Dashboard() {
             </p>
           )}
         </div>
+      )}
+      {showCreate && (
+        <NewBookModal
+          onClose={() => setShowCreate(false)}
+          onCreated={() => {
+            getBooks().then(setBooks).catch(() => {});
+          }}
+        />
       )}
     </AppShell>
   );

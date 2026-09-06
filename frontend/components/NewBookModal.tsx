@@ -1,10 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { X, Sparkles, ArrowUpRight } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { X, Sparkles, ArrowUpRight, Check } from "lucide-react";
 import { createBook, ApiError, type Book } from "@/lib/api";
-
-const PRODUCT_NOUN_PRESETS = ["coloring page", "stencil", "icon", "sticker", "logo", "print"];
 
 export default function NewBookModal({
   onClose,
@@ -13,11 +12,11 @@ export default function NewBookModal({
   onClose: () => void;
   onCreated: (book: Book) => void;
 }) {
+  const router = useRouter();
   const [name, setName] = useState("");
-  const [productNoun, setProductNoun] = useState("");
-  const [basePrompt, setBasePrompt] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [created, setCreated] = useState<Book | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -27,35 +26,62 @@ export default function NewBookModal({
       setError("Book name is required.");
       return;
     }
-    if (!productNoun.trim()) {
-      setError("Product type is required — choose a preset or type your own.");
-      return;
-    }
-    if (!basePrompt.trim()) {
-      setError("Base prompt is required.");
-      return;
-    }
 
     setSubmitting(true);
     try {
-      const book = await createBook({
-        name: name.trim(),
-        base_prompt: basePrompt.trim(),
-        product_noun: productNoun.trim(),
-      });
+      const book = await createBook({ name: name.trim() });
       onCreated(book);
-      onClose();
+      setCreated(book);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to create book");
+    } finally {
       setSubmitting(false);
     }
+  }
+
+  if (created) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-5" style={{ background: "rgba(28,27,26,0.5)" }} onClick={onClose}>
+        <div
+          className="relative rounded-xl p-7"
+          style={{ width: "min(440px, 100%)", background: "var(--canvas)", border: "1px solid var(--pencil-light)", boxShadow: "0 20px 60px rgba(28,27,26,0.2)" }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="w-9 h-9 rounded-lg flex items-center justify-center mb-4" style={{ background: "var(--tone-sage-bg)", color: "var(--tone-sage)" }}>
+            <Check size={17} />
+          </div>
+          <h2 className="font-display font-normal m-0 mb-2" style={{ fontSize: 24, letterSpacing: "-0.03em", color: "var(--ink)" }}>
+            &quot;{created.name}&quot; is ready
+          </h2>
+          <p className="text-xs m-0 mb-5" style={{ color: "var(--pencil)" }}>
+            Set its style and first category now with a quick setup, or find it later in your books list — clicking it will always pick up right where you left off.
+          </p>
+          <div className="flex flex-col gap-2.5">
+            <button
+              onClick={() => router.push(`/books/${created.id}`)}
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-md text-sm font-bold text-white"
+              style={{ background: "var(--teal)" }}
+            >
+              Start setup <ArrowUpRight size={14} />
+            </button>
+            <button
+              onClick={onClose}
+              className="px-4 py-2.5 rounded-md text-sm font-medium"
+              style={{ color: "var(--pencil)" }}
+            >
+              I&apos;ll do this later
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-5" style={{ background: "rgba(28,27,26,0.5)" }} onClick={onClose}>
       <div
-        className="relative rounded-xl p-7 overflow-y-auto"
-        style={{ width: "min(560px, 100%)", maxHeight: "88vh", background: "var(--canvas)", border: "1px solid var(--pencil-light)", boxShadow: "0 20px 60px rgba(28,27,26,0.2)" }}
+        className="relative rounded-xl p-7"
+        style={{ width: "min(440px, 100%)", background: "var(--canvas)", border: "1px solid var(--pencil-light)", boxShadow: "0 20px 60px rgba(28,27,26,0.2)" }}
         onClick={(e) => e.stopPropagation()}
       >
         <button onClick={onClose} className="absolute top-5 right-5" style={{ color: "var(--pencil)" }}>
@@ -72,7 +98,7 @@ export default function NewBookModal({
           Create a new book
         </h2>
         <p className="text-xs m-0 mb-5" style={{ color: "var(--pencil)" }}>
-          Categories inside it will inherit these — image size and cleanup settings can be fine-tuned right after creating it.
+          Give it a name — you can set its style, categories, and everything else right after.
         </p>
 
         {error && (
@@ -88,58 +114,12 @@ export default function NewBookModal({
             </label>
             <input
               type="text"
-                spellCheck={true}
+              spellCheck={true}
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Coloring Books — Ages 3-10"
+              autoFocus
               className="w-full px-3 py-2.5 rounded-md border-[1.5px] outline-none text-sm"
-              style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
-            />
-          </div>
-
-          <div>
-            <label className="block text-[10px] font-bold uppercase mb-1.5" style={{ color: "var(--pencil)", letterSpacing: "0.08em" }}>
-              Product type
-            </label>
-            <div className="flex gap-2 mb-2 flex-wrap">
-              {PRODUCT_NOUN_PRESETS.map((preset) => (
-                <button
-                  key={preset}
-                  type="button"
-                  onClick={() => setProductNoun(preset)}
-                  className="px-2.5 py-1 rounded-full text-xs border-[1.5px]"
-                  style={
-                    productNoun === preset
-                      ? { background: "var(--teal)", borderColor: "var(--teal)", color: "white" }
-                      : { borderColor: "var(--pencil-light)", color: "var(--pencil)" }
-                  }
-                >
-                  {preset}
-                </button>
-              ))}
-            </div>
-            <input
-              type="text"
-                spellCheck={true}
-              value={productNoun}
-              onChange={(e) => setProductNoun(e.target.value)}
-              placeholder="Or type a custom term..."
-              className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
-              style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
-            />
-          </div>
-
-          <div>
-            <label className="block text-[10px] font-bold uppercase mb-1.5" style={{ color: "var(--pencil)", letterSpacing: "0.08em" }}>
-              Base prompt
-            </label>
-            <textarea
-                spellCheck={true}
-              value={basePrompt}
-              onChange={(e) => setBasePrompt(e.target.value)}
-              rows={5}
-              placeholder="Describe the shared style for every category in this book."
-              className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm leading-relaxed"
               style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
             />
           </div>

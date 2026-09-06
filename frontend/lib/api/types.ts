@@ -10,8 +10,8 @@ export interface BookSummary {
   category_count: number;
 }
 
-export type BookCreateInput = Pick<components["schemas"]["BookCreate"], "name" | "base_prompt"> &
-  Partial<Omit<components["schemas"]["BookCreate"], "name" | "base_prompt">>;
+export type BookCreateInput = Pick<components["schemas"]["BookCreate"], "name"> &
+  Partial<Omit<components["schemas"]["BookCreate"], "name">>;
 
 export type BookUpdateInput = components["schemas"]["BookUpdate"];
 

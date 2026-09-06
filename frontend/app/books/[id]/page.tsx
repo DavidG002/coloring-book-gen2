@@ -13,6 +13,7 @@ import PrepareCategoryPanel from "@/components/PrepareCategoryPanel";
 import { Panel, PanelSection } from "@/components/SettingsUI";
 import AppShell from "@/components/AppShell";
 import DeleteCategoryModal from "@/components/DeleteCategoryModal";
+import NewBookWizard from "@/components/NewBookWizard";
 
 const TONES = [
   { bg: "var(--tone-sage-bg)", fg: "var(--tone-sage)" },
@@ -38,6 +39,19 @@ export default function BookDetailPage() {
   const [deletingCategory, setDeletingCategory] = useState<CategorySummary | null>(null);
   const [highlightedCategoryId, setHighlightedCategoryId] = useState<number | null>(null);
   const [prepareCategoryOpen, setPrepareCategoryOpen] = useState(true);
+  const [justFinishedWizard, setJustFinishedWizard] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (typeof window === "undefined") return;
+      const key = `just-finished-wizard-${bookId}`;
+      if (window.sessionStorage.getItem(key) === "1") {
+        setJustFinishedWizard(true);
+        window.sessionStorage.removeItem(key);
+      }
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [bookId]);
 
   
   useEffect(() => {
@@ -125,6 +139,18 @@ useEffect(() => {
 
   const totalSubjects = categories.reduce((sum, c) => sum + c.subject_count, 0);
 
+  if (!book.wizard_completed) {
+    return (
+      <NewBookWizard
+        book={book}
+        onFinished={(updated) => {
+          setBook(updated);
+          setJustFinishedWizard(true);
+          getCategories().then((all) => setCategories(all.filter((c) => c.book_id === bookId))).catch(() => {});
+        }}
+      />
+    );
+  }
   return (
     <AppShell active="Books" breadcrumb={book.name}>
       <div className="flex items-center justify-between mb-6 pb-4" style={{ borderBottom: "1px solid var(--pencil-light)" }}>
@@ -221,7 +247,7 @@ useEffect(() => {
                       className="flex items-center gap-1.5"
                       style={{
                         border: `1px solid ${highlightedCategoryId === cat.id ? "var(--teal)" : "var(--pencil-light)"}`,
-                        background: highlightedCategoryId === cat.id ? "var(--teal-tint)" : "transparent",
+                        background: highlightedCategoryId === cat.id ? "var(--teal-tint)" : "var(--paper)",
                         borderRadius: 9,
                         transition: "background 0.4s ease, border-color 0.4s ease",
                       }}
@@ -282,7 +308,7 @@ useEffect(() => {
         </div>
 
         <div className="space-y-6">
-          <BookSettingsFields bookId={bookId} onBookLoaded={setBook} />
+          <BookSettingsFields bookId={bookId} onBookLoaded={setBook} defaultSection={justFinishedWizard ? "knobs" : undefined} />
         </div>
       </div>
 

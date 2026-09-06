@@ -15,6 +15,7 @@ export default function NewCategoryModal({
   const [name, setName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -70,7 +71,7 @@ export default function NewCategoryModal({
         <form onSubmit={handleSubmit}>
           <input
             type="text"
-                spellCheck={true}
+            spellCheck={true}
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. dinosaurs"

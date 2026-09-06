@@ -176,7 +176,7 @@ export default function KnobsPanel({
           <div
             key={def.key}
             className="rounded-md border-[1.5px] p-3"
-            style={{ borderColor: "var(--pencil-light)", opacity: knobEnabled ? 1 : 0.5 }}
+            style={{ borderColor: "var(--pencil-light)", background: "var(--paper)", opacity: knobEnabled ? 1 : 0.5 }}
           >
             <div className="flex items-center justify-between mb-2">
               <label className="text-sm font-medium" style={{ color: "var(--ink)" }}>
@@ -233,7 +233,7 @@ export default function KnobsPanel({
                     onChange={(e) => setValue(def.key, e.target.value)}
                     placeholder="Describe it yourself..."
                     className="w-full px-2.5 py-1.5 rounded-md border-[1.5px] outline-none text-sm"
-                    style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+                    style={{ borderColor: "var(--pencil-light)", background: "var(--paper)" }}
                   />
                 )}
               </>

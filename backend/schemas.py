@@ -38,8 +38,9 @@ class VariationRead(VariationBase):
 
 class BookBase(BaseModel):
     name: str
-    base_prompt: str
+    base_prompt: str = ""
     product_noun: str = "coloring page"
+    book_type: str = "coloring_book"
     canvas_width: int = 595
     canvas_height: int = 842
     subject_size_ratio: float = 0.50
@@ -70,6 +71,8 @@ class BookUpdate(BaseModel):
     name: Optional[str] = None
     base_prompt: Optional[str] = None
     product_noun: Optional[str] = None
+    book_type: Optional[str] = None
+    wizard_completed: Optional[bool] = None
     canvas_width: Optional[int] = None
     canvas_height: Optional[int] = None
     subject_size_ratio: Optional[float] = None
@@ -96,6 +99,7 @@ class BookRead(BookBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     category_count: int = 0
+    wizard_completed: bool = False
     line_weight: str = "medium"
     detail_density: str = "moderate"
     style_tone: str = "balanced"
@@ -152,6 +156,7 @@ class CategoryImageStatus(BaseModel):
     subject: str
     variation_text: Optional[str] = None
     status: str
+    reject_reason: Optional[str] = None
     wp_excluded: bool
     created_at: datetime
     locally_published: bool

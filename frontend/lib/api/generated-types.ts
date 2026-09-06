@@ -283,6 +283,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/generate/regenerate-same-slots/{image_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Regenerate Same Slots */
+        post: operations["regenerate_same_slots_generate_regenerate_same_slots__image_id__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/defaults/prompt-template": {
         parameters: {
             query?: never;
@@ -523,7 +540,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/review/images/{category_name}": {
+    "/review/images/{category_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -531,7 +548,7 @@ export interface paths {
             cookie?: never;
         };
         /** List Category Images */
-        get: operations["list_category_images_review_images__category_name__get"];
+        get: operations["list_category_images_review_images__category_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -990,6 +1007,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/categories/{category_id}/seo/{lang}/content/regenerate-field": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Regen Single Field */
+        post: operations["regen_single_field_categories__category_id__seo__lang__content_regenerate_field_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/backup/settings": {
         parameters: {
             query?: never;
@@ -1133,13 +1167,21 @@ export interface components {
         BookCreate: {
             /** Name */
             name: string;
-            /** Base Prompt */
+            /**
+             * Base Prompt
+             * @default
+             */
             base_prompt: string;
             /**
              * Product Noun
              * @default coloring page
              */
             product_noun: string;
+            /**
+             * Book Type
+             * @default coloring_book
+             */
+            book_type: string;
             /**
              * Canvas Width
              * @default 595
@@ -1350,13 +1392,21 @@ export interface components {
         BookRead: {
             /** Name */
             name: string;
-            /** Base Prompt */
+            /**
+             * Base Prompt
+             * @default
+             */
             base_prompt: string;
             /**
              * Product Noun
              * @default coloring page
              */
             product_noun: string;
+            /**
+             * Book Type
+             * @default coloring_book
+             */
+            book_type: string;
             /**
              * Canvas Width
              * @default 595
@@ -1464,6 +1514,11 @@ export interface components {
              * @default 0
              */
             category_count: number;
+            /**
+             * Wizard Completed
+             * @default false
+             */
+            wizard_completed: boolean;
         };
         /** BookSummary */
         BookSummary: {
@@ -1482,6 +1537,10 @@ export interface components {
             base_prompt?: string | null;
             /** Product Noun */
             product_noun?: string | null;
+            /** Book Type */
+            book_type?: string | null;
+            /** Wizard Completed */
+            wizard_completed?: boolean | null;
             /** Canvas Width */
             canvas_width?: number | null;
             /** Canvas Height */
@@ -1577,6 +1636,8 @@ export interface components {
             variation_text?: string | null;
             /** Status */
             status: string;
+            /** Reject Reason */
+            reject_reason?: string | null;
             /** Wp Excluded */
             wp_excluded: boolean;
             /**
@@ -1904,6 +1965,20 @@ export interface components {
             /** Is New */
             is_new: boolean;
         };
+        /** RegenerateSameSlotsResponse */
+        RegenerateSameSlotsResponse: {
+            /** Job Id */
+            job_id: number;
+            /** Status */
+            status: string;
+            /** Total Images */
+            total_images: number;
+        };
+        /** RejectImageRequest */
+        RejectImageRequest: {
+            /** Reason */
+            reason?: string | null;
+        };
         /** ReviewImage */
         ReviewImage: {
             /** Id */
@@ -1985,6 +2060,22 @@ export interface components {
             category_description: string;
             /** Content Variants */
             content_variants: components["schemas"]["SeoContentVariantRow"][];
+        };
+        /** SeoFieldRegenerateRequest */
+        SeoFieldRegenerateRequest: {
+            /** Subject Name */
+            subject_name: string;
+            /** Variation Text */
+            variation_text: string;
+            /** Field */
+            field: string;
+        };
+        /** SeoFieldRegenerateResponse */
+        SeoFieldRegenerateResponse: {
+            /** Field */
+            field: string;
+            /** Value */
+            value: string;
         };
         /** SeoRegenerateRequest */
         SeoRegenerateRequest: {
@@ -2372,8 +2463,8 @@ export interface components {
         };
         /** WordPressVerifyRequest */
         WordPressVerifyRequest: {
-            /** Category */
-            category: string;
+            /** Category Id */
+            category_id: number;
             /** Lang */
             lang: string;
         };
@@ -3114,6 +3205,37 @@ export interface operations {
             };
         };
     };
+    regenerate_same_slots_generate_regenerate_same_slots__image_id__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                image_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegenerateSameSlotsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_prompt_defaults_defaults_prompt_template_get: {
         parameters: {
             query?: never;
@@ -3564,7 +3686,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RejectImageRequest"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -3617,12 +3743,12 @@ export interface operations {
             };
         };
     };
-    list_category_images_review_images__category_name__get: {
+    list_category_images_review_images__category_id__get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                category_name: string;
+                category_id: number;
             };
             cookie?: never;
         };
@@ -4685,6 +4811,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    regen_single_field_categories__category_id__seo__lang__content_regenerate_field_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                category_id: number;
+                lang: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SeoFieldRegenerateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeoFieldRegenerateResponse"];
                 };
             };
             /** @description Validation Error */

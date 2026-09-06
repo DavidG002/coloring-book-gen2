@@ -11,22 +11,38 @@ interface CategoryImage {
   subject: string;
   variation_text: string | null;
   status: string;
+  reject_reason: string | null;
   wp_excluded: boolean;
   created_at: string;
   locally_published: boolean;
   wordpress_status: string | null;
   prompt_used: string | null;
 }
-
-type StatusKey = "live" | "draft" | "local" | "not_published";
-
+type StatusKey = "live" | "draft" | "local" | "not_published" | "rejected";
+const REJECT_REASONS = [
+  { key: "gray_busy", label: "Gray / busy" },
+  { key: "wrong_subject", label: "Wrong subject" },
+  { key: "broken_line", label: "Broken line" },
+  { key: "other", label: "Other" },
+];
 async function getCategoryImages(categoryId: number): Promise<CategoryImage[]> {
   const res = await fetch(`${API_BASE_URL}/review/images/${categoryId}`);
   return res.json();
 }
-
-async function rejectImage(imageId: number) {
-  await fetch(`${API_BASE_URL}/review/image/${imageId}/reject`, { method: "POST" });
+async function rejectImage(imageId: number, reason: string) {
+  await fetch(`${API_BASE_URL}/review/image/${imageId}/reject`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reason }),
+  });
+}
+async function restoreImage(imageId: number) {
+  await fetch(`${API_BASE_URL}/review/image/${imageId}/restore`, { method: "POST" });
+}
+async function regenerateSameSlots(imageId: number) {
+  const res = await fetch(`${API_BASE_URL}/generate/regenerate-same-slots/${imageId}`, { method: "POST" });
+  if (!res.ok) throw new Error((await res.json()).detail || "Failed to regenerate");
+  return res.json() as Promise<{ job_id: number }>;
 }
 
 async function runPairs(categoryId: number, pairs: { subject: string; variation_text: string }[]) {
@@ -52,6 +68,7 @@ function imageFileUrl(imageId: number, createdAt?: string): string {
 }
 
 function statusKeyFor(img: CategoryImage): StatusKey {
+  if (img.status === "rejected") return "rejected";
   if (img.wordpress_status === "publish") return "live";
   if (img.wordpress_status === "draft") return "draft";
   if (img.locally_published) return "local";
@@ -63,6 +80,7 @@ const STATUS_META: Record<StatusKey, { label: string; bg: string; fg: string }> 
   draft: { label: "Draft on site", bg: "var(--tone-yellow-bg)", fg: "var(--tone-yellow)" },
   local: { label: "Published locally", bg: "var(--tone-blue-bg)", fg: "var(--tone-blue)" },
   not_published: { label: "Not published", bg: "var(--coral-light)", fg: "var(--coral-dark)" },
+  rejected: { label: "Rejected", bg: "var(--pencil-light)", fg: "var(--pencil)" },
 };
 
 function formatDate(iso: string): string {
@@ -97,6 +115,9 @@ export default function CategoryImageStrip({
   const prevCountRef = useRef(0);
   const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const [rejectingId, setRejectingId] = useState<number | null>(null);
+  const [bulkRejectPicker, setBulkRejectPicker] = useState(false);
+
   // Callback ref: attaches a native, non-passive wheel listener directly to
   // whatever DOM node currently exists, with no dependency-array timing to
   // get wrong — more robust than a useEffect keyed on unrelated state.
@@ -121,8 +142,8 @@ export default function CategoryImageStrip({
     setLoading(true);
     getCategoryImages(categoryId)
       .then((data) => {
+        setImages(data);
         const approved = data.filter((img) => img.status === "approved");
-        setImages(approved);
         if (scrollToEndAfter && approved.length > prevCountRef.current) {
           const newest = approved[approved.length - 1];
           setFlashId(newest.id);
@@ -164,12 +185,11 @@ export default function CategoryImageStrip({
     });
   }
 
-  function requestConfirm(id: number, action: "reject" | "regenerate") {
+  function requestConfirm(id: number, action: "regenerate") {
     if (confirming?.id === id && confirming.action === action) {
       if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
       setConfirming(null);
-      if (action === "reject") doReject(id);
-      else doRegenerate(id);
+      doRegenerate(id);
       return;
     }
     setConfirming({ id, action });
@@ -177,11 +197,13 @@ export default function CategoryImageStrip({
     confirmTimerRef.current = setTimeout(() => setConfirming(null), 4000);
   }
 
-  async function doReject(id: number) {
+   async function doReject(id: number, reason: string) {
     setBusyId(id);
     try {
-      await rejectImage(id);
-      setImages((prev) => prev.filter((img) => img.id !== id));
+      await rejectImage(id, reason);
+      setImages((prev) =>
+        prev.map((img) => (img.id === id ? { ...img, status: "rejected", reject_reason: reason } : img))
+      );
       setSelected((prev) => {
         const next = new Set(prev);
         next.delete(id);
@@ -193,18 +215,56 @@ export default function CategoryImageStrip({
       setBusyId(null);
     }
   }
-
-  async function handleBulkReject() {
+  async function handleBulkReject(reason: string) {
     if (selected.size === 0) return;
     setBulkRejecting(true);
     try {
-      await Promise.all(Array.from(selected).map((id) => rejectImage(id)));
-      setImages((prev) => prev.filter((img) => !selected.has(img.id)));
+      const ids = Array.from(selected);
+      await Promise.all(ids.map((id) => rejectImage(id, reason)));
+      setImages((prev) =>
+        prev.map((img) => (ids.includes(img.id) ? { ...img, status: "rejected", reject_reason: reason } : img))
+      );
       setSelected(new Set());
     } catch {
       setError("Failed to reject selected images");
     } finally {
       setBulkRejecting(false);
+    }
+  }
+  async function doRestore(id: number) {
+    setBusyId(id);
+    try {
+      await restoreImage(id);
+      setImages((prev) =>
+        prev.map((img) => (img.id === id ? { ...img, status: "approved", reject_reason: null } : img))
+      );
+    } catch {
+      setError("Failed to restore image");
+    } finally {
+      setBusyId(null);
+    }
+  }
+  async function doRegenerateSameSlots(id: number) {
+    setBusyId(id);
+    try {
+      const result = await regenerateSameSlots(id);
+      const poll = async () => {
+        try {
+          const status = await getJobStatus(result.job_id);
+          if (status.status === "done" || status.status === "failed" || status.status === "cancelled") {
+            load(true);
+            setBusyId(null);
+            return;
+          }
+        } catch {
+          // transient poll failure — keep trying
+        }
+        setTimeout(poll, 1500);
+      };
+      setTimeout(poll, 1500);
+    } catch {
+      setError("Failed to start regeneration");
+      setBusyId(null);
     }
   }
 
@@ -277,15 +337,42 @@ async function doRegenerate(id: number) {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {selected.size > 0 && (
+          {selected.size > 0 && !bulkRejectPicker && (
             <button
-              onClick={handleBulkReject}
+              onClick={() => setBulkRejectPicker(true)}
               disabled={bulkRejecting}
               className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-md text-[10px] font-bold disabled:opacity-60"
               style={{ border: "1px solid var(--coral)", color: "var(--coral-dark)" }}
             >
               <Trash2 size={13} /> {bulkRejecting ? "Rejecting..." : `Reject ${selected.size} selected`}
             </button>
+          )}
+          {selected.size > 0 && bulkRejectPicker && (
+            <div className="flex items-center gap-1 flex-wrap">
+              <span className="text-[10px] font-bold mr-1" style={{ color: "var(--coral-dark)" }}>
+                Why?
+              </span>
+              {REJECT_REASONS.map((r) => (
+                <button
+                  key={r.key}
+                  onClick={() => {
+                    handleBulkReject(r.key);
+                    setBulkRejectPicker(false);
+                  }}
+                  className="px-2 py-1 rounded-full text-[9px] font-bold"
+                  style={{ background: "var(--coral-light)", color: "var(--coral-dark)" }}
+                >
+                  {r.label}
+                </button>
+              ))}
+              <button
+                onClick={() => setBulkRejectPicker(false)}
+                className="text-[9px] font-medium ml-1"
+                style={{ color: "var(--pencil)" }}
+              >
+                Cancel
+              </button>
+            </div>
           )}
           <select
             value={filterStatus}
@@ -298,6 +385,7 @@ async function doRegenerate(id: number) {
             <option value="local">Published locally</option>
             <option value="draft">Draft on site</option>
             <option value="live">Live on site</option>
+            <option value="rejected">Rejected</option>
           </select>
           <select
             value={filterBatch}
@@ -359,9 +447,9 @@ async function doRegenerate(id: number) {
               const isSelected = selected.has(img.id);
               const isBusy = busyId === img.id;
               const isFlashing = flashId === img.id;
-              const confirmingReject = confirming?.id === img.id && confirming.action === "reject";
+              const isRejected = img.status === "rejected";
               const confirmingRegen = confirming?.id === img.id && confirming.action === "regenerate";
-
+              const isPickingReason = rejectingId === img.id;
               return (
                 <div
                   key={img.id}
@@ -370,7 +458,9 @@ async function doRegenerate(id: number) {
                     width: 200,
                     border: `1.5px solid ${isSelected ? "var(--teal)" : "var(--pencil-light)"}`,
                     boxShadow: isFlashing ? "0 0 0 3px var(--teal)" : "none",
-                    transition: "box-shadow 0.4s ease",
+                    opacity: isRejected ? 0.55 : 1,
+                    filter: isRejected ? "grayscale(0.6)" : "none",
+                    transition: "box-shadow 0.4s ease, opacity 0.3s ease",
                   }}
                 >
                   <button
@@ -412,27 +502,60 @@ async function doRegenerate(id: number) {
                       Batch #{img.job_id} · {formatDate(img.created_at)}
                     </p>
 
-                    {confirmingReject ? (
-                      <div className="rounded-md" style={{ background: "var(--coral-light)", padding: 6 }}>
-                        <p className="text-[10px] font-medium m-0 mb-1.5" style={{ color: "var(--coral-dark)" }}>
-                          Reject this page?
+                     {isRejected ? (
+                      <div>
+                        <p className="text-[10px] font-bold m-0 mb-1.5" style={{ color: "var(--coral-dark)" }}>
+                          Rejected{img.reject_reason ? ` — ${REJECT_REASONS.find((r) => r.key === img.reject_reason)?.label ?? img.reject_reason}` : ""}
                         </p>
-                        <div className="flex gap-1.5">
+                        <div className="flex items-center gap-1.5">
                           <button
-                            onClick={() => requestConfirm(img.id, "reject")}
-                            className="flex-1 py-1.5 rounded text-[10px] font-bold text-white"
-                            style={{ background: "var(--coral)" }}
+                            onClick={() => doRegenerateSameSlots(img.id)}
+                            disabled={isBusy}
+                            title="Regenerate using the exact same instructions as the original"
+                            className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 rounded-md text-[10px] font-bold disabled:opacity-30"
+                            style={{ border: "1px solid var(--teal)", color: "var(--teal)" }}
                           >
-                            Yes, reject
+                            <RotateCw size={11} className={isBusy ? "animate-spin" : ""} />
+                            {isBusy ? "Working..." : "Regenerate original"}
                           </button>
                           <button
-                            onClick={() => setConfirming(null)}
-                            className="px-2 py-1.5 rounded text-[10px] font-bold"
-                            style={{ color: "var(--pencil)" }}
+                            onClick={() => doRestore(img.id)}
+                            disabled={isBusy}
+                            title="Restore this image"
+                            className="w-7 h-7 flex items-center justify-center rounded-md disabled:opacity-30 shrink-0"
+                            style={{ border: "1px solid var(--pencil-light)", color: "var(--pencil)" }}
                           >
-                            Cancel
+                            <Check size={12} />
                           </button>
                         </div>
+                      </div>
+                    ) : isPickingReason ? (
+                      <div className="rounded-md" style={{ background: "var(--coral-light)", padding: 6 }}>
+                        <p className="text-[10px] font-medium m-0 mb-1.5" style={{ color: "var(--coral-dark)" }}>
+                          Why reject?
+                        </p>
+                        <div className="flex gap-1 flex-wrap mb-1">
+                          {REJECT_REASONS.map((r) => (
+                            <button
+                              key={r.key}
+                              onClick={() => {
+                                doReject(img.id, r.key);
+                                setRejectingId(null);
+                              }}
+                              className="px-2 py-1 rounded-full text-[9px] font-bold"
+                              style={{ background: "var(--canvas)", color: "var(--coral-dark)", border: "1px solid var(--coral)" }}
+                            >
+                              {r.label}
+                            </button>
+                          ))}
+                        </div>
+                        <button
+                          onClick={() => setRejectingId(null)}
+                          className="text-[9px] font-medium"
+                          style={{ color: "var(--pencil)" }}
+                        >
+                          Cancel
+                        </button>
                       </div>
                     ) : confirmingRegen ? (
                       <div className="rounded-md" style={{ background: "var(--teal-tint)", padding: 6 }}>
@@ -469,7 +592,7 @@ async function doRegenerate(id: number) {
                           {isBusy ? "Working..." : "Regenerate"}
                         </button>
                         <button
-                          onClick={() => requestConfirm(img.id, "reject")}
+                          onClick={() => setRejectingId(img.id)}
                           disabled={isBusy}
                           title="Reject this image"
                           className="w-7 h-7 flex items-center justify-center rounded-md disabled:opacity-30 shrink-0"

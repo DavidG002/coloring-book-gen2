@@ -10,7 +10,7 @@ import ExpandableTextModal from "./ExpandableTextModal";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-type SectionKey = "basics" | "image" | "knobs" | "watermark";
+export type SectionKey = "basics" | "image" | "knobs" | "watermark";
 const SECTION_ORDER: SectionKey[] = ["basics", "image", "knobs", "watermark"];
 
 async function getWatermarkSettings(bookId: number) {
@@ -40,9 +40,11 @@ async function uploadWatermarkFile(bookId: number, file: File) {
 export default function BookSettingsFields({
   bookId,
   onBookLoaded,
+  defaultSection,
 }: {
   bookId: number;
   onBookLoaded?: (book: Book) => void;
+  defaultSection?: SectionKey;
 }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -62,8 +64,6 @@ export default function BookSettingsFields({
   const [savingProductNoun, setSavingProductNoun] = useState(false);
   const [savingPrompt, setSavingPrompt] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
-  const [nameSaved, setNameSaved] = useState(false);
-  const [productNounSaved, setProductNounSaved] = useState(false);
   const [promptSaved, setPromptSaved] = useState(false);
   const [settingsSaved, setSettingsSaved] = useState(false);
 
@@ -78,8 +78,7 @@ export default function BookSettingsFields({
 
   const searchParams = useSearchParams();
   const isNewBook = searchParams.get("new") === "1";
-  const [activeSection, setActiveSectionState] = useState<SectionKey>(isNewBook ? "image" : "basics");
-  const [sectionRestored, setSectionRestored] = useState(false);
+  const [activeSection, setActiveSectionState] = useState<SectionKey>(defaultSection ?? (isNewBook ? "image" : "basics"));
 
   const [editingName, setEditingName] = useState(false);
   const [editingProductNoun, setEditingProductNoun] = useState(false);
@@ -186,8 +185,6 @@ function setActiveSection(key: SectionKey) {
       const updated = await updateBook(bookId, { name: trimmed });
       setBook(updated);
       onBookLoaded?.(updated);
-      setNameSaved(true);
-      setTimeout(() => setNameSaved(false), 2000);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to save name");
     } finally {
@@ -207,8 +204,6 @@ function setActiveSection(key: SectionKey) {
       const updated = await updateBook(bookId, { product_noun: trimmed });
       setBook(updated);
       onBookLoaded?.(updated);
-      setProductNounSaved(true);
-      setTimeout(() => setProductNounSaved(false), 2000);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to save book type");
     } finally {
@@ -381,7 +376,7 @@ function setActiveSection(key: SectionKey) {
               onChange={(e) => setName(e.target.value)}
               disabled={!editingName}
               className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-xs disabled:opacity-60"
-              style={{ borderColor: "var(--pencil-light)", background: editingName ? "var(--canvas)" : "var(--paper)" }}
+              style={{ borderColor: "var(--pencil-light)", background: "var(--paper)" }}
             />
             {editingName && (
               <div className="flex items-center gap-3 mt-2">
@@ -431,7 +426,7 @@ function setActiveSection(key: SectionKey) {
               onChange={(e) => setProductNoun(e.target.value)}
               disabled={!editingProductNoun}
               className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-xs disabled:opacity-60"
-              style={{ borderColor: "var(--pencil-light)", background: editingProductNoun ? "var(--canvas)" : "var(--paper)" }}
+              style={{ borderColor: "var(--pencil-light)", background: "var(--paper)" }}
             />
             {editingProductNoun && (
               <div className="flex items-center gap-3 mt-2">
@@ -467,7 +462,7 @@ function setActiveSection(key: SectionKey) {
             value={PAPER_PRESETS.find((p) => p.width === canvasWidth && p.height === canvasHeight)?.label ?? "custom"}
             onChange={(e) => e.target.value !== "custom" && applyPreset(e.target.value)}
             className="w-full px-2.5 py-1.5 rounded-md border-[1.5px] outline-none text-xs"
-            style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+            style={{ borderColor: "var(--pencil-light)", background: "var(--paper)" }}
           >
             <option value="custom" disabled>
               {PAPER_PRESETS.some((p) => p.width === canvasWidth && p.height === canvasHeight)
@@ -533,7 +528,7 @@ function setActiveSection(key: SectionKey) {
         <div className="flex items-center gap-3 mb-4">
           <label
             className="px-3 py-1.5 rounded-md text-sm font-medium cursor-pointer border-[1.5px]"
-            style={{ borderColor: "var(--pencil-light)", color: "var(--pencil)" }}
+            style={{ borderColor: "var(--pencil-light)", background: "var(--paper)" }}
           >
             {uploadingWatermark ? "Uploading..." : hasWatermarkFile ? "Replace logo" : "Upload logo"}
             <input type="file" accept="image/*" onChange={handleWatermarkFileChange} className="hidden" />

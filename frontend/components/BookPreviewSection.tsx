@@ -256,15 +256,7 @@ export default function BookPreviewSection({ bookId }: { bookId: number }) {
     return <p className="text-sm" style={{ color: "var(--pencil)" }}>Loading...</p>;
   }
 
-  if (!previewAvailable) {
-    return (
-      <Panel kicker="PREVIEW CANVAS" title="Bring the story to life">
-        <p className="text-sm" style={{ color: "var(--pencil)" }}>
-          Add at least one subject and one pose variation to a category in this book to enable a real preview.
-        </p>
-      </Panel>
-    );
-  }
+  
 
   return (
     <div className="space-y-6">
@@ -321,8 +313,10 @@ export default function BookPreviewSection({ bookId }: { bookId: number }) {
               <p className="font-display m-0 mt-2.5" style={{ fontSize: 20, color: "var(--teal-dark)" }}>
                 No preview yet
               </p>
-              <p className="text-[10px] m-0 mt-1" style={{ color: "var(--teal-dark)", opacity: 0.75 }}>
-                Choose a subject below and generate one
+              <p className="text-[10px] m-0 mt-1 px-4" style={{ color: "var(--teal-dark)", opacity: 0.75 }}>
+                {previewAvailable
+                  ? "Choose a subject below and generate one"
+                  : "Add a subject and a pose variation to any category to enable a preview"}
               </p>
             </div>
           )}
@@ -375,7 +369,7 @@ export default function BookPreviewSection({ bookId }: { bookId: number }) {
               value={selectedPreviewCategory}
               onChange={(e) => handlePreviewCategoryChange(e.target.value)}
               className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm capitalize"
-              style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+              style={{ borderColor: "var(--pencil-light)", background: "var(--paper)" }}
             >
               {allCategories.map((cat) => (
                 <option key={cat} value={cat} className="capitalize">
@@ -397,7 +391,7 @@ export default function BookPreviewSection({ bookId }: { bookId: number }) {
               }}
               disabled={loadingOptions || categorySubjects.length === 0}
               className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm disabled:opacity-50"
-              style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+              style={{ borderColor: "var(--pencil-light)", background: "var(--paper)" }}
             >
               {categorySubjects.map((s) => (
                 <option key={s} value={s}>
@@ -419,7 +413,7 @@ export default function BookPreviewSection({ bookId }: { bookId: number }) {
               }}
               disabled={loadingOptions || categoryVariations.length === 0}
               className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm disabled:opacity-50"
-              style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+              style={{ borderColor: "var(--pencil-light)", background: "var(--paper)" }}
             >
               {categoryVariations.map((v) => (
                 <option key={v} value={v}>

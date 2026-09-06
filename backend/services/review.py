@@ -61,6 +61,7 @@ def get_images_for_category(db: Session, category_id: int) -> list[dict]:
             "subject": img.subject,
             "variation_text": img.variation_text,
             "status": img.status,
+            "reject_reason": img.reject_reason,
             "wp_excluded": img.wp_excluded,
             "created_at": img.created_at,
             "locally_published": img.file_path in published_paths,

@@ -105,7 +105,7 @@ export default function PrepareCategoryPanel({
           value={selected ?? ""}
           onChange={(e) => setSelected(parseInt(e.target.value, 10))}
           className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm capitalize"
-          style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+          style={{ borderColor: "var(--pencil-light)", background: "var(--paper)" }}
         >
           {categories.map((c) => (
             <option key={c.id} value={c.id} className="capitalize">
@@ -121,7 +121,7 @@ export default function PrepareCategoryPanel({
         </p>
       ) : (
         <div className="grid grid-cols-2 rounded-lg overflow-hidden" style={{ border: "1px solid var(--pencil-light)" }}>
-          <div style={{ padding: 16, borderRight: "1px solid var(--pencil-light)" }}>
+          <div style={{ padding: 16, borderRight: "1px solid var(--pencil-light)", background: "var(--paper)" }}>
             <div className="flex items-center justify-between mb-3">
               <div>
                 <h4 className="font-display font-normal m-0" style={{ fontSize: 15, color: "var(--ink)" }}>
@@ -176,7 +176,7 @@ export default function PrepareCategoryPanel({
             )}
           </div>
 
-          <div style={{ padding: 16 }}>
+          <div style={{ padding: 16, background: "var(--paper)" }}>
             <div className="flex items-center justify-between mb-3">
               <div>
                 <h4 className="font-display font-normal m-0" style={{ fontSize: 15, color: "var(--ink)" }}>

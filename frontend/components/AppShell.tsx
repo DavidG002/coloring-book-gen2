@@ -6,6 +6,7 @@ import {
   BookOpen, LayoutDashboard, Library, Grid2X2, Settings, Sparkles, ArrowUpRight, ChevronDown, ChevronLeft,
 } from "lucide-react";
 import { getBooks } from "@/lib/api";
+import NewBookModal from "./NewBookModal";
 
 export default function AppShell({
   active,
@@ -19,6 +20,7 @@ export default function AppShell({
   const [bookCount, setBookCount] = useState<number | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [ready, setReady] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -200,9 +202,9 @@ export default function AppShell({
                 <p className="text-[11px] leading-relaxed mt-1 mb-2.5" style={{ color: "var(--pencil)" }}>
                   Your next book is just a prompt away.
                 </p>
-                <Link href="/books/new" className="inline-flex items-center gap-1 text-[11px] font-bold" style={{ color: "var(--teal)" }}>
+                <button onClick={() => setShowCreate(true)} className="inline-flex items-center gap-1 text-[11px] font-bold" style={{ color: "var(--teal)" }}>
                   Start a book <ArrowUpRight size={12} />
-                </Link>
+                </button>
               </div>
 
               <p className="mt-4 px-2.5 text-[10px] whitespace-nowrap" style={{ color: "var(--pencil)" }}>
@@ -236,6 +238,14 @@ export default function AppShell({
           {children}
         </div>
       </main>
+      {showCreate && (
+        <NewBookModal
+          onClose={() => setShowCreate(false)}
+          onCreated={() => {
+            getBooks().then((books) => setBookCount(books.length)).catch(() => {});
+          }}
+        />
+      )}
     </div>
   );
 }

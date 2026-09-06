@@ -4,10 +4,10 @@ import { useState } from "react";
 import { ChevronUp } from "lucide-react";
 
 export const PAPER_PRESETS: { label: string; width: number; height: number }[] = [
-  { label: "A4 (595 × 842)", width: 595, height: 842 },
-  { label: "US Letter (612 × 792)", width: 612, height: 792 },
-  { label: "A5 (420 × 595)", width: 420, height: 595 },
-  { label: "Square (800 × 800)", width: 800, height: 800 },
+  { label: "A4 (595 × 842 px)", width: 595, height: 842 },
+  { label: "US Letter (612 × 792 px)", width: 612, height: 792 },
+  { label: "A5 (420 × 595 px)", width: 420, height: 595 },
+  { label: "Square (800 × 800 px)", width: 800, height: 800 },
 ];
 
 export const PRODUCT_NOUN_PRESETS = ["coloring page", "stencil", "icon", "sticker", "logo", "print"];
@@ -45,7 +45,7 @@ export function Field({
         max={max}
         onChange={(e) => onChange(parseFloat(e.target.value))}
         className="w-full px-2.5 py-1.5 rounded-md border-[1.5px] outline-none text-xs"
-        style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+        style={{ borderColor: "var(--pencil-light)", background: "var(--paper)" }}
       />
     </div>
   );

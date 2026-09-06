@@ -134,7 +134,7 @@ export default function EditListModal({
                     onChange={(e) => updateRow(i, e.target.value)}
                     placeholder={`${label.slice(0, -1)} ${i + 1}`}
                     className="flex-1 px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
-                    style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+                    style={{ borderColor: "var(--pencil-light)", background: "var(--paper)" }}
                   />
                   <button
                     onClick={() => removeRow(i)}
@@ -163,7 +163,7 @@ export default function EditListModal({
                 rows={10}
                 placeholder={kind === "subjects" ? "Car\nTruck\nAirplane" : "side view on a road\nfront three-quarter view"}
                 className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm leading-relaxed"
-                style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+                style={{ borderColor: "var(--pencil-light)", background: "var(--paper)" }}
               />
               <p className="mt-1.5 text-[10px]" style={{ color: "var(--pencil)" }}>
                 One {singular} per line.
