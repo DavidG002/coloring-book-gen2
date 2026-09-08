@@ -7,6 +7,8 @@
  * Requires PHP: 7.4
  * Author: David
  * License: GPL-2.0-or-later
+ * License URI: https://www.gnu.org/licenses/gpl-2.0.html
+ * Text Domain: zuzuplug
  */
 
 if (!defined('ABSPATH')) {
@@ -59,26 +61,32 @@ add_action('rest_api_init', function () {
 
 /**
  * Forces Yoast to rebuild a specific indexable (post or term) right now,
- * using the same internal builder class Yoast's own WP-CLI reindex
- * command uses. Uses the ->classes-> access surface, which Yoast has
- * flagged for eventual deprecation — no equally precise, sanctioned
- * alternative exists as of this writing (Yoast SEO 28.x). If this stops
- * working after a future Yoast update, the "Reindex everything now"
- * button on this plugin's settings page is the fallback.
+ * using the same internal builder/repository classes Yoast's own
+ * WP-CLI reindex command uses. Two real things this handles that a
+ * naive rebuild misses:
+ *
+ * 1. Uses the ->classes-> access surface, which Yoast has flagged for
+ *    eventual deprecation — no equally precise, sanctioned alternative
+ *    exists as of this writing (Yoast SEO 28.x). If this stops working
+ *    after a future Yoast update, the "Reindex everything now" button
+ *    on this plugin's settings page is the fallback.
+ * 2. Explicitly clears the indexable's ancestor/hierarchy chain before
+ *    rebuilding — Yoast's Indexable_Hierarchy_Builder silently skips
+ *    rebuilding breadcrumb ancestor data if it thinks a hierarchy is
+ *    already built, even if that existing hierarchy is stale. This is
+ *    the real reason breadcrumbs can show "Uncategorized" for content
+ *    published via the REST API even when the actual category
+ *    assignment is correct.
  */
 function zuzuplug_rebuild_indexable($object_id, $object_type) {
     if (!function_exists('YoastSEO')) {
-        return 'YoastSEO() function not found';
+        return false;
     }
     try {
         $repository = YoastSEO()->classes->get('Yoast\WP\SEO\Repositories\Indexable_Repository');
         $indexable = $repository->find_by_id_and_type($object_id, $object_type);
 
         if ($indexable) {
-            // The hierarchy builder skips rebuilding ancestor/breadcrumb
-            // chains if it thinks they're already built — even if they
-            // were built with stale data. Explicitly clear them first so
-            // the rebuild below is forced to regenerate the real chain.
             $hierarchy_repository = YoastSEO()->classes->get('Yoast\WP\SEO\Repositories\Indexable_Hierarchy_Repository');
             $hierarchy_repository->clear_ancestors($indexable->id);
         }
@@ -89,29 +97,15 @@ function zuzuplug_rebuild_indexable($object_id, $object_type) {
             $indexable->save();
             return true;
         }
-        return 'build_for_id_and_type returned nothing';
+        return false;
     } catch (\Throwable $e) {
-        return 'Exception: ' . $e->getMessage();
+        return false;
     }
 }
 
-add_action('rest_api_init', function () {
-    register_rest_route('zuzuplug/v1', '/debug-reindex', [
-        'methods' => 'POST',
-        'callback' => function ($request) {
-            $post_id = (int) $request->get_param('post_id');
-            $result = zuzuplug_rebuild_indexable($post_id, 'post');
-            return ['result' => $result];
-        },
-        'permission_callback' => function () {
-            return current_user_can('edit_posts');
-        },
-    ]);
-});
-
 function zuzuplug_set_post_language($request) {
     if (!function_exists('pll_set_post_language')) {
-        return new WP_Error('polylang_missing', 'Polylang is not active on this site.', ['status' => 400]);
+        return new WP_Error('polylang_missing', __('Polylang is not active on this site.', 'zuzuplug'), ['status' => 400]);
     }
 
     $post_id = (int) $request->get_param('post_id');
@@ -121,12 +115,14 @@ function zuzuplug_set_post_language($request) {
     pll_set_post_language($post_id, $lang);
 
     if (is_array($translations)) {
-        $translations[$lang] = $post_id;
-        pll_save_post_translations($translations);
+        $clean_translations = [];
+        foreach ($translations as $translation_lang => $translation_id) {
+            $clean_translations[sanitize_text_field($translation_lang)] = (int) $translation_id;
+        }
+        $clean_translations[$lang] = $post_id;
+        pll_save_post_translations($clean_translations);
     }
 
-    // This post's indexable was originally built at creation time,
-    // before its language was set here — rebuild now that it's complete.
     zuzuplug_rebuild_indexable($post_id, 'post');
 
     return ['success' => true, 'post_id' => $post_id, 'lang' => $lang];
@@ -134,7 +130,7 @@ function zuzuplug_set_post_language($request) {
 
 function zuzuplug_set_term_language($request) {
     if (!function_exists('pll_set_term_language')) {
-        return new WP_Error('polylang_missing', 'Polylang is not active on this site.', ['status' => 400]);
+        return new WP_Error('polylang_missing', __('Polylang is not active on this site.', 'zuzuplug'), ['status' => 400]);
     }
 
     $term_id = (int) $request->get_param('term_id');
@@ -144,8 +140,12 @@ function zuzuplug_set_term_language($request) {
     pll_set_term_language($term_id, $lang);
 
     if (is_array($translations)) {
-        $translations[$lang] = $term_id;
-        pll_save_term_translations($translations);
+        $clean_translations = [];
+        foreach ($translations as $translation_lang => $translation_id) {
+            $clean_translations[sanitize_text_field($translation_lang)] = (int) $translation_id;
+        }
+        $clean_translations[$lang] = $term_id;
+        pll_save_term_translations($clean_translations);
     }
 
     zuzuplug_rebuild_indexable($term_id, 'term');
@@ -157,12 +157,12 @@ function zuzuplug_set_term_language($request) {
  * Piece 3: Admin settings page — status dashboard and a manual
  * "reindex everything" fallback, in case the automatic per-call
  * rebuild above ever stops working (e.g. a future Yoast update removes
- * the internal class it depends on).
+ * the internal classes it depends on).
  */
 add_action('admin_menu', function () {
     add_options_page(
-        'ZuzuPlug',
-        'ZuzuPlug',
+        __('ZuzuPlug', 'zuzuplug'),
+        __('ZuzuPlug', 'zuzuplug'),
         'manage_options',
         'zuzuplug',
         'zuzuplug_render_settings_page'
@@ -175,49 +175,44 @@ function zuzuplug_render_settings_page() {
     $reindexed = isset($_GET['reindexed']);
     ?>
     <div class="wrap">
-        <h1>ZuzuPlug</h1>
-        <p>Publishing bridge for Yoast SEO field support and free-tier Polylang language linking.</p>
+        <h1><?php esc_html_e('ZuzuPlug', 'zuzuplug'); ?></h1>
+        <p><?php esc_html_e('Publishing bridge for Yoast SEO field support and free-tier Polylang language linking.', 'zuzuplug'); ?></p>
 
         <?php if ($reindexed): ?>
-            <div class="notice notice-success"><p>Reindex complete.</p></div>
+            <div class="notice notice-success"><p><?php esc_html_e('Reindex complete.', 'zuzuplug'); ?></p></div>
         <?php endif; ?>
 
-        <h2>Status</h2>
+        <h2><?php esc_html_e('Status', 'zuzuplug'); ?></h2>
         <table class="widefat" style="max-width: 500px;">
             <tbody>
                 <tr>
-                    <td>Polylang</td>
-                    <td><?php echo $polylang_active ? '✅ Active' : '❌ Not detected'; ?></td>
+                    <td><?php esc_html_e('Polylang', 'zuzuplug'); ?></td>
+                    <td><?php echo $polylang_active ? '✅ ' . esc_html__('Active', 'zuzuplug') : '❌ ' . esc_html__('Not detected', 'zuzuplug'); ?></td>
                 </tr>
                 <tr>
-                    <td>Yoast SEO</td>
-                    <td><?php echo $yoast_active ? '✅ Active' : '❌ Not detected'; ?></td>
+                    <td><?php esc_html_e('Yoast SEO', 'zuzuplug'); ?></td>
+                    <td><?php echo $yoast_active ? '✅ ' . esc_html__('Active', 'zuzuplug') : '❌ ' . esc_html__('Not detected', 'zuzuplug'); ?></td>
                 </tr>
                 <tr>
-                    <td>REST namespace</td>
+                    <td><?php esc_html_e('REST namespace', 'zuzuplug'); ?></td>
                     <td><code>/wp-json/zuzuplug/v1/</code></td>
                 </tr>
                 <tr>
-                    <td>Version</td>
+                    <td><?php esc_html_e('Version', 'zuzuplug'); ?></td>
                     <td>1.1.0</td>
                 </tr>
             </tbody>
         </table>
 
-        <h2 style="margin-top: 30px;">Reindex</h2>
+        <h2 style="margin-top: 30px;"><?php esc_html_e('Reindex', 'zuzuplug'); ?></h2>
         <p>
-            Posts and terms created via the REST API automatically get their
-            Yoast indexable data rebuilt right after their language is set.
-            If breadcrumbs or SEO data still look stale for any content,
-            use this as a manual fallback — it reindexes every post and
-            term on the site, the same as Yoast's own <code>wp yoast index</code>
-            command.
+            <?php esc_html_e('Posts and terms created via the REST API automatically get their Yoast indexable data rebuilt right after their language is set. If breadcrumbs or SEO data still look stale for any content, use this as a manual fallback — it reindexes every post and term on the site, the same as Yoast\'s own wp yoast index command.', 'zuzuplug'); ?>
         </p>
         <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
             <?php wp_nonce_field('zuzuplug_reindex_all'); ?>
             <input type="hidden" name="action" value="zuzuplug_reindex_all">
             <button type="submit" class="button button-primary" <?php echo $yoast_active ? '' : 'disabled'; ?>>
-                Reindex everything now
+                <?php esc_html_e('Reindex everything now', 'zuzuplug'); ?>
             </button>
         </form>
     </div>
@@ -226,7 +221,7 @@ function zuzuplug_render_settings_page() {
 
 add_action('admin_post_zuzuplug_reindex_all', function () {
     if (!current_user_can('manage_options')) {
-        wp_die('Not allowed');
+        wp_die(esc_html__('Not allowed', 'zuzuplug'));
     }
     check_admin_referer('zuzuplug_reindex_all');
 
@@ -262,6 +257,9 @@ add_action('admin_notices', function () {
     }
     if (!empty($missing)) {
         $list = implode(' and ', $missing);
-        echo '<div class="notice notice-warning"><p><strong>ZuzuPlug:</strong> ' . esc_html($list) . ' not detected — some features will not work until ' . (count($missing) > 1 ? 'they are' : 'it is') . ' installed and active.</p></div>';
+        echo '<div class="notice notice-warning"><p><strong>ZuzuPlug:</strong> ' . esc_html(
+            /* translators: %s: name(s) of missing required plugin(s) */
+            sprintf(__('%s not detected — some features will not work until it is installed and active.', 'zuzuplug'), $list)
+        ) . '</p></div>';
     }
 });
