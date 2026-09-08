@@ -300,6 +300,23 @@ class WordPressCategoryTerm(Base):
         UniqueConstraint("category", "lang", "site_url", name="uq_wp_term_per_category_lang_site"),
     )
 
+class WordPressSubjectTerm(Base):
+    """Tracks the WP taxonomy term ID created for a given (category, subject,
+    language) triple — a real WordPress subcategory nested under the
+    category's own term. Created once, reused for every image of this
+    subject ever published under it."""
+    __tablename__ = "wordpress_subject_terms"
+
+    id = Column(Integer, primary_key=True)
+    category = Column(String, nullable=False)
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
+    subject = Column(String, nullable=False)
+    subject_id = Column(Integer, ForeignKey("subjects.id"), nullable=True)
+    lang = Column(String, nullable=False)
+    wp_term_id = Column(Integer, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    site_url = Column(String, nullable=False, default="")
+
 
 class WordPressPublishedItem(Base):
     """Tracks each (image, language) pair that has been pushed to WordPress —

@@ -1,12 +1,12 @@
 import os
 import httpx
 from sqlalchemy.orm import Session
-from models import Category, Translation
+from models import Category, Translation, Subject
 from services.publish import build_publish_plan, slugify
 from services.content_variants import ensure_content_variant, ensure_category_description
 
 from models import (
-    WordPressIntegration, WordPressCategoryTerm, WordPressPublishedItem,
+    WordPressIntegration, WordPressCategoryTerm, WordPressSubjectTerm, WordPressPublishedItem,
     GenerationImage, PublishedFile, PublishRun,
 )
 
@@ -55,6 +55,53 @@ def get_sibling_term_translations(db: Session, category_id: int, exclude_lang: s
     )
     return {lang: term_id for lang, term_id in rows}
 
+def _set_term_language_and_translations(
+    db: Session, config: WordPressIntegration, term_id: int, lang: str,
+    linking_key: int, is_subject: bool,
+) -> None:
+    """Free-tier Polylang doesn't expose term language/translations via its
+    own REST fields — same Pro-gated limitation we found for posts.
+    Calls our custom endpoint instead, which invokes Polylang's free,
+    core pll_set_term_language()/pll_save_term_translations() functions
+    directly."""
+    if is_subject:
+        siblings = {
+            row.lang: row.wp_term_id
+            for row in db.query(WordPressSubjectTerm).filter(
+                WordPressSubjectTerm.subject_id == linking_key,
+                WordPressSubjectTerm.lang != lang,
+                WordPressSubjectTerm.site_url == config.site_url,
+            ).all()
+        }
+    else:
+        siblings = get_sibling_term_translations(db, linking_key, exclude_lang=lang, site_url=config.site_url)
+
+    custom_url = config.site_url.rstrip("/") + "/wp-json/zuzuplug/v1/set-term-language"
+    payload_lang: dict = {"term_id": term_id, "lang": lang}
+    if siblings:
+        payload_lang["translations"] = siblings
+
+    response = httpx.post(custom_url, auth=_auth(config), json=payload_lang, timeout=20.0)
+    if response.status_code not in (200, 201):
+        raise RuntimeError(
+            f"Term {term_id} was created but setting its language/translation link failed: "
+            f"{response.status_code} {response.text}"
+        )
+
+def _find_existing_term_by_name(config: WordPressIntegration, translated_name: str) -> int | None:
+    """Checks WordPress directly for a term with this exact name, regardless
+    of whether OUR app ever created it — so pushing to a site with
+    pre-existing categories (created manually, or by someone else) adopts
+    them instead of failing with a duplicate-name error."""
+    rest_base = TAXONOMY_REST_BASE.get(config.taxonomy, config.taxonomy)
+    url = config.site_url.rstrip("/") + f"/wp-json/wp/v2/{rest_base}"
+    response = httpx.get(url, auth=_auth(config), params={"search": translated_name}, timeout=15.0)
+    if response.status_code != 200:
+        return None
+    for term in response.json():
+        if term.get("name", "").strip().lower() == translated_name.strip().lower():
+            return term["id"]
+    return None
 
 def ensure_category_term(
     db: Session,
@@ -82,6 +129,30 @@ def ensure_category_term(
     if existing:
         return existing.wp_term_id
 
+    # Same guard as ensure_subject_term: only adopt an existing same-named
+    # WordPress term if we've never created ANY term for this category
+    # before, in any language — prevents two different-language pushes
+    # from colliding onto one shared term when the translated name happens
+    # to repeat across languages.
+    any_existing_for_category = (
+        db.query(WordPressCategoryTerm)
+        .filter(
+            WordPressCategoryTerm.category_id == category_id,
+            WordPressCategoryTerm.site_url == config.site_url,
+        )
+        .first()
+    )
+    if not any_existing_for_category:
+        existing_wp_term_id = _find_existing_term_by_name(config, translated_name)
+        if existing_wp_term_id is not None:
+            record = WordPressCategoryTerm(
+                category=category_name, category_id=category_id, lang=lang,
+                wp_term_id=existing_wp_term_id, site_url=config.site_url,
+            )
+            db.add(record)
+            db.commit()
+            return existing_wp_term_id
+
     rest_base = TAXONOMY_REST_BASE.get(config.taxonomy, config.taxonomy)
     url = config.site_url.rstrip("/") + f"/wp-json/wp/v2/{rest_base}"
 
@@ -94,15 +165,102 @@ def ensure_category_term(
         siblings = get_sibling_term_translations(db, category_id, exclude_lang=lang, site_url=config.site_url)
         if siblings:
             payload["translations"] = siblings
-
     response = httpx.post(url, auth=_auth(config), json=payload, timeout=15.0)
-
     if response.status_code not in (200, 201):
         raise RuntimeError(f"Failed to create taxonomy term '{translated_name}': {response.status_code} {response.text}")
+    term_id = response.json()["id"]
+
+    if config.use_polylang_linking:
+        _set_term_language_and_translations(db, config, term_id, lang, category_id, is_subject=False)
+
+    record = WordPressCategoryTerm(category=category_name, category_id=category_id, lang=lang, wp_term_id=term_id, site_url=config.site_url)
+    db.add(record)
+    db.commit()
+    return term_id
+
+def ensure_subject_term(
+    db: Session,
+    config: WordPressIntegration,
+    category_id: int,
+    category_name: str,
+    parent_term_id: int,
+    subject_id: int,
+    subject_name: str,
+    lang: str,
+    translated_name: str,
+) -> int:
+    """Returns the WP term ID for this subject+language+site, creating it as
+    a real WordPress subcategory nested under the category's own term
+    (parent_term_id) the first time it's ever needed for this specific
+    site. This is what makes 'Princess' a genuine child category of
+    'For Girls' on the real site, matching WordPress's own category
+    hierarchy rather than a flat tag."""
+    existing = (
+        db.query(WordPressSubjectTerm)
+        .filter(
+            WordPressSubjectTerm.subject_id == subject_id,
+            WordPressSubjectTerm.lang == lang,
+            WordPressSubjectTerm.site_url == config.site_url,
+        )
+        .first()
+    )
+    if existing:
+        return existing.wp_term_id
+
+    # Only adopt an existing same-named WordPress term if we've never
+    # created ANY term for this subject before, in any language — this is
+    # the "site already had this category" case (e.g. 'for boys'). Once we
+    # have our own first term for this subject, every later language MUST
+    # get its own genuinely new term, never adopted by name — otherwise a
+    # subject whose translated name happens to repeat across languages
+    # (e.g. 'Purim' staying 'Purim' in Spanish) would collide two
+    # different-language posts onto one shared term, corrupting its
+    # language assignment.
+    any_existing_for_subject = (
+        db.query(WordPressSubjectTerm)
+        .filter(
+            WordPressSubjectTerm.subject_id == subject_id,
+            WordPressSubjectTerm.site_url == config.site_url,
+        )
+        .first()
+    )
+    if not any_existing_for_subject:
+        existing_wp_term_id = _find_existing_term_by_name(config, translated_name)
+        if existing_wp_term_id is not None:
+            record = WordPressSubjectTerm(
+                category=category_name, category_id=category_id, subject=subject_name,
+                subject_id=subject_id, lang=lang, wp_term_id=existing_wp_term_id, site_url=config.site_url,
+            )
+            db.add(record)
+            db.commit()
+            return existing_wp_term_id
+
+    rest_base = TAXONOMY_REST_BASE.get(config.taxonomy, config.taxonomy)
+    url = config.site_url.rstrip("/") + f"/wp-json/wp/v2/{rest_base}"
+
+    payload = {"name": translated_name, "parent": parent_term_id}
+
+    if config.use_polylang_linking:
+        payload["lang"] = lang
+
+    response = httpx.post(url, auth=_auth(config), json=payload, timeout=15.0)
+    if response.status_code not in (200, 201):
+        raise RuntimeError(f"Failed to create subcategory term '{translated_name}': {response.status_code} {response.text}")
 
     term_id = response.json()["id"]
 
-    record = WordPressCategoryTerm(category=category_name, category_id=category_id, lang=lang, wp_term_id=term_id, site_url=config.site_url)
+    if config.use_polylang_linking:
+        _set_term_language_and_translations(db, config, term_id, lang, subject_id, is_subject=True)
+
+    record = WordPressSubjectTerm(
+        category=category_name,
+        category_id=category_id,
+        subject=subject_name,
+        subject_id=subject_id,
+        lang=lang,
+        wp_term_id=term_id,
+        site_url=config.site_url,
+    )
     db.add(record)
     db.commit()
     return term_id
@@ -191,20 +349,22 @@ def create_post(
 
     result = response.json()
 
+    result["_language_link_warning"] = None
     if lang or translations_link:
         post_id = result["id"]
-        custom_url = config.site_url.rstrip("/") + "/wp-json/zuzu/v1/set-post-language"
+        custom_url = config.site_url.rstrip("/") + "/wp-json/zuzuplug/v1/set-post-language"
         payload_lang: dict = {"post_id": post_id, "lang": lang}
         if translations_link:
             payload_lang["translations"] = translations_link
-
         lang_response = httpx.post(custom_url, auth=_auth(config), json=payload_lang, timeout=20.0)
         if lang_response.status_code not in (200, 201):
-            raise RuntimeError(
-                f"Post '{title}' was created (id={post_id}) but setting its language/translation "
-                f"link failed: {lang_response.status_code} {lang_response.text}"
+            # The post itself is real and live — never discard it over a
+            # failed language link. Surface this as a warning instead of
+            # aborting, so the item still gets tracked correctly.
+            result["_language_link_warning"] = (
+                f"Post created (id={post_id}) but language/translation link failed: "
+                f"{lang_response.status_code} {lang_response.text}"
             )
-
     return result
 
 
@@ -508,6 +668,7 @@ def push_batch_to_wordpress(
 
     category_description = ensure_category_description(db, category.id, translation.category_translated, lang)
     term_id = ensure_category_term(db, config, category.id, category_name, lang, translation.category_translated, description=category_description)
+    translation_items_by_subject = {item.subject_id: item.translated_text for item in translation.items}
     pushed_items = []
     failed_items = []
 
@@ -524,7 +685,6 @@ def push_batch_to_wordpress(
                 variation_text=image_record.variation_text,
                 lang=lang,
             )
-
             filename = os.path.basename(f["source_path"])
             media_id = upload_media(
                 config,
@@ -534,6 +694,21 @@ def push_batch_to_wordpress(
                 title=variant.seo_title,
             )
 
+            # Each image's Subject becomes its real WordPress term, nested
+            # under the Category's own term — so "Princess" is a genuine
+            # subcategory of "For Girls", not just tagged with the parent.
+            subject_record = db.query(Subject).filter(
+                Subject.category_id == category.id, Subject.name == image_record.subject
+            ).first()
+            if subject_record:
+                subject_translated = translation_items_by_subject.get(subject_record.id, subject_record.name)
+                post_term_id = ensure_subject_term(
+                    db, config, category.id, category_name, term_id,
+                    subject_record.id, subject_record.name, lang, subject_translated,
+                )
+            else:
+                post_term_id = term_id  # fallback: legacy image with no matching Subject record
+
             post_lang = None
             post_translations = None
             if config.use_polylang_linking:
@@ -541,12 +716,11 @@ def push_batch_to_wordpress(
                 siblings = get_sibling_translations(db, f["source_path"], exclude_lang=lang, site_url=config.site_url)
                 if siblings:
                     post_translations = siblings
-
             result = create_post(
                 config,
                 title=variant.seo_title,
                 media_id=media_id,
-                term_id=term_id,
+                term_id=post_term_id,
                 status=status,
                 content=variant.seo_content,
                 excerpt=variant.seo_excerpt,
@@ -557,6 +731,19 @@ def push_batch_to_wordpress(
                 yoast_meta_description=variant.yoast_meta_description,
                 focus_keyphrase=variant.focus_keyphrase,
             )
+
+            # A post published directly as live never passes through
+            # WordPress's normal editor-save flow, so Yoast's indexable
+            # cache (breadcrumbs, etc.) never gets built for it — Yoast's
+            # own docs confirm visiting the real URL triggers a lazy
+            # build. A single, best-effort GET request closes that gap
+            # with zero new WordPress-side code. Never worth failing the
+            # whole push over — SEO/breadcrumb polish, not core function.
+            if status == "publish" and result.get("link"):
+                try:
+                    httpx.get(result["link"], timeout=15.0)
+                except Exception:
+                    pass
 
             record_published_item(
                 db,
@@ -579,10 +766,10 @@ def push_batch_to_wordpress(
                 "wp_post_id": result["id"],
                 "wp_post_url": result.get("link", ""),
                 "title": variant.seo_title,
+                "warning": result.get("_language_link_warning"),
             })
         except Exception as e:
             failed_items.append({"source_path": f["source_path"], "error": str(e)})
-
     return {
         "pushed_count": len(pushed_items),
         "skipped_count": skipped_count,

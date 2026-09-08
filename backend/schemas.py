@@ -496,6 +496,7 @@ class WordPressPushedItem(BaseModel):
     wp_post_id: int
     wp_post_url: str
     title: str
+    warning: str | None = None
 
 
 class WordPressPushFailedItem(BaseModel):
