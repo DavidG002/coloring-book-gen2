@@ -14,6 +14,7 @@ export default function TemplateField({
   tokens,
   previewValues,
   placeholder,
+  disabled,
 }: {
   label: string;
   value: string;
@@ -21,6 +22,7 @@ export default function TemplateField({
   tokens: TemplateToken[];
   previewValues: Record<string, string>;
   placeholder?: string;
+  disabled?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -63,29 +65,33 @@ export default function TemplateField({
         <label className="block text-sm font-medium" style={{ color: "var(--ink)" }}>
           {label}
         </label>
-        <div className="flex items-center gap-1.5">
-          {tokens.map((token) => (
-            <button
-              key={token.key}
-              type="button"
-              onClick={() => insertToken(token.key)}
-              className="px-2 py-1 rounded text-xs font-medium"
-              style={{ background: "var(--paper)", color: "var(--teal)", border: "1px solid var(--pencil-light)" }}
-              title={`Insert {${token.key}}`}
-            >
-              + {token.label}
-            </button>
-          ))}
-        </div>
+        {!disabled && (
+          <div className="flex items-center gap-1.5">
+            {tokens.map((token) => (
+              <button
+                key={token.key}
+                type="button"
+                onClick={() => insertToken(token.key)}
+                className="px-2 py-1 rounded text-xs font-medium"
+                style={{ background: "var(--paper)", color: "var(--teal)", border: "1px solid var(--pencil-light)" }}
+                title={`Insert {${token.key}}`}
+              >
+                + {token.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       <input
         ref={inputRef}
         type="text"
+        spellCheck={true}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
+        readOnly={disabled}
         className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm font-mono"
-        style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+        style={{ borderColor: "var(--pencil-light)", background: "var(--paper)", cursor: disabled ? "default" : "text" }}
       />
       {value && (
         <p className="mt-1.5 text-xs truncate" style={{ color: "var(--pencil)" }}>

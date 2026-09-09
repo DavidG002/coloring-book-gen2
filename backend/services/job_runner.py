@@ -52,6 +52,17 @@ def run_generation_job(job_id: int, tasks: list[dict], settings: dict):
                 ))
                 job.completed_images += 1
                 db.commit()
+
+                if task.get("category_id"):
+                    try:
+                        from services.content_variants import auto_generate_seo_for_all_languages
+                        auto_generate_seo_for_all_languages(db, task["category_id"], task["subject"], task["variation_text"])
+                    except Exception:
+                        # SEO auto-generation is a convenience, never worth
+                        # failing a real, already-successful image generation
+                        # over — the manual "Generate missing" path in
+                        # Publish remains available as a fallback.
+                        pass
                 time.sleep(settings["sleep_between_calls"])
             else:
                 time.sleep(settings["sleep_on_failure"])

@@ -135,6 +135,11 @@ class CategoryRead(CategoryBase):
     book_name: str
     subjects: list[SubjectRead] = []
     variations: list[VariationRead] = []
+    auto_translated: dict[str, dict[str, list[str]]] = {}
+    # {lang: {"subjects": [...], "variations": [...]}} — only populated on
+    # the response right after new items were added and auto-translated,
+    # so the frontend can show a real, specific "X items were added and
+    # translated" notification instead of a generic message.
 
 
 class CategorySummary(BaseModel):
@@ -180,6 +185,7 @@ class TranslationItemRead(BaseModel):
     subject_id: int
     subject_name: str        # filled in manually in the route, not a direct DB column
     translated_text: str
+    pending_review: bool = False
 
 class VariationTranslationItemRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -187,6 +193,7 @@ class VariationTranslationItemRead(BaseModel):
     variation_id: int
     variation_text: str        # filled in manually in the route, not a direct DB column
     translated_text: str
+    pending_review: bool = False
 
 class TranslationBase(BaseModel):
     lang: str
@@ -586,6 +593,7 @@ class SeoContentVariantRow(BaseModel):
     yoast_meta_description: str
     generated: bool
     sample_image_id: int
+    pending_review: bool = False
 
 
 class SeoContentVariantUpdate(BaseModel):

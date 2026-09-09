@@ -95,6 +95,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/categories/{category_id}/translations/{lang}/mark-reviewed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark Translation Reviewed
+         * @description Called when a user opens (and closes) a language's translation
+         *     editor — clears pending_review on every item for that language,
+         *     regardless of whether anything was actually edited. Viewing counts
+         *     as reviewing; no save/edit required.
+         */
+        post: operations["mark_translation_reviewed_categories__category_id__translations__lang__mark_reviewed_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/categories/{category_id}/translations/{lang}/translate-variations": {
         parameters: {
             query?: never;
@@ -1024,6 +1047,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/categories/{category_id}/seo/{lang}/mark-reviewed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark Seo Reviewed
+         * @description Called when a user opens (and closes) a language's SEO/Publish
+         *     editor — clears pending_review on every ContentVariant for that
+         *     language, regardless of whether anything was actually edited.
+         *     Viewing counts as reviewing; no save/edit required.
+         */
+        post: operations["mark_seo_reviewed_categories__category_id__seo__lang__mark_reviewed_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/backup/settings": {
         parameters: {
             query?: never;
@@ -1681,6 +1727,15 @@ export interface components {
              * @default []
              */
             variations: components["schemas"]["VariationRead"][];
+            /**
+             * Auto Translated
+             * @default {}
+             */
+            auto_translated: {
+                [key: string]: {
+                    [key: string]: string[];
+                };
+            };
         };
         /** CategorySummary */
         CategorySummary: {
@@ -2032,6 +2087,11 @@ export interface components {
             generated: boolean;
             /** Sample Image Id */
             sample_image_id: number;
+            /**
+             * Pending Review
+             * @default false
+             */
+            pending_review: boolean;
         };
         /** SeoContentVariantUpdate */
         SeoContentVariantUpdate: {
@@ -2182,6 +2242,11 @@ export interface components {
             subject_name: string;
             /** Translated Text */
             translated_text: string;
+            /**
+             * Pending Review
+             * @default false
+             */
+            pending_review: boolean;
         };
         /** TranslationRead */
         TranslationRead: {
@@ -2264,6 +2329,11 @@ export interface components {
             variation_text: string;
             /** Translated Text */
             translated_text: string;
+            /**
+             * Pending Review
+             * @default false
+             */
+            pending_review: boolean;
         };
         /** WatermarkSettings */
         WatermarkSettings: {
@@ -2437,6 +2507,8 @@ export interface components {
             wp_post_url: string;
             /** Title */
             title: string;
+            /** Warning */
+            warning?: string | null;
         };
         /** WordPressSyncRequest */
         WordPressSyncRequest: {
@@ -2819,6 +2891,38 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_translation_reviewed_categories__category_id__translations__lang__mark_reviewed_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                category_id: number;
+                lang: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
             };
             /** @description Validation Error */
             422: {
@@ -4847,6 +4951,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SeoFieldRegenerateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_seo_reviewed_categories__category_id__seo__lang__mark_reviewed_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                category_id: number;
+                lang: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

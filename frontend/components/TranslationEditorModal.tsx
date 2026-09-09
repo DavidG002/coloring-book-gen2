@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X } from "lucide-react";
+import { X, Pencil } from "lucide-react";
 import TemplateField, { type TemplateToken } from "@/components/TemplateField";
+import { markTranslationReviewed } from "@/lib/api/translations";
 import {
   getTranslation,
   createTranslation,
@@ -64,8 +65,14 @@ export default function TranslationEditorModal({
   onSaved: () => void;
   onDeleted: () => void;
 }) {
+  function handleClose() {
+    markTranslationReviewed(categoryId, lang).catch(() => {});
+    onClose();
+  }
   const [isNew, setIsNew] = useState(false);
   const [hasLanguageDefault, setHasLanguageDefault] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [form, setForm] = useState<FormState>({
     categoryTranslated: "",
     filenameTemplate: "",
@@ -113,6 +120,7 @@ export default function TranslationEditorModal({
         if (cancelled) return;
         if (err instanceof ApiError && err.status === 404) {
           setIsNew(true);
+          setEditing(true);
           try {
             const def = await getLanguageTemplateDefault(bookId, lang);
             if (def) {
@@ -174,6 +182,7 @@ export default function TranslationEditorModal({
         await updateTranslation(categoryId, lang, payload);
       }
       setSaved(true);
+      setEditing(false);
       onSaved();
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
@@ -184,18 +193,16 @@ export default function TranslationEditorModal({
   }
 
   async function handleDelete() {
-    const confirmed = window.confirm(`Delete the '${lang}' translation for this category?`);
-    if (!confirmed) return;
     setDeleting(true);
     setError(null);
     try {
       await deleteTranslation(categoryId, lang);
       onDeleted();
-      onClose();
+      handleClose();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to delete translation");
-    } finally {
       setDeleting(false);
+      setConfirmingDelete(false);
     }
   }
 
@@ -287,18 +294,21 @@ export default function TranslationEditorModal({
     }
   }
 
+  const locked = !editing;
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-6"
       style={{ background: "rgba(28,27,26,0.5)" }}
-      onClick={onClose}
+      onClick={handleClose}
     >
       <div
-        className="rounded-xl overflow-y-auto"
-        style={{ width: "min(720px, 100%)", maxHeight: "88vh", background: "var(--canvas)", border: "1px solid var(--pencil-light)", boxShadow: "0 20px 60px rgba(28,27,26,0.2)" }}
+        className="rounded-xl flex flex-col"
+        style={{ width: "min(720px, 100%)", maxHeight: "88vh", background: "var(--canvas)", border: "1px solid var(--pencil-light)", boxShadow: "0 20px 60px rgba(28,27,26,0.2)", overflow: "hidden" }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: "1px solid var(--pencil-light)" }}>
+        {/* Sticky header */}
+        <div className="flex items-center justify-between px-6 py-4 shrink-0" style={{ borderBottom: "1px solid var(--pencil-light)", background: "var(--canvas)" }}>
           <div>
             <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--pencil)", letterSpacing: "0.1em" }}>
               Language
@@ -307,12 +317,24 @@ export default function TranslationEditorModal({
               {lang}
             </p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-full flex items-center justify-center" style={{ border: "1px solid var(--pencil-light)", color: "var(--pencil)" }}>
-            <X size={16} />
-          </button>
+          <div className="flex items-center gap-3">
+            {!isNew && !editing && (
+              <button
+                onClick={() => setEditing(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold"
+                style={{ border: "1px solid var(--teal)", color: "var(--teal)" }}
+              >
+                <Pencil size={12} /> Edit
+              </button>
+            )}
+            <button onClick={handleClose} className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ border: "1px solid var(--pencil-light)", color: "var(--pencil)" }}>
+              <X size={16} />
+            </button>
+          </div>
         </div>
 
-        <div className="p-6">
+        {/* Scrollable middle content */}
+        <div className="p-6 overflow-y-auto flex-1">
           {error && (
             <div className="mb-4 px-4 py-3 rounded-md text-sm" style={{ background: "var(--coral-light)", color: "var(--coral-dark)", border: "1px solid var(--coral)" }}>
               {error}
@@ -330,23 +352,26 @@ export default function TranslationEditorModal({
                   <label className="block text-sm font-medium" style={{ color: "var(--ink)" }}>
                     Translated category name
                   </label>
-                  <button
-                    type="button"
-                    onClick={handleAutoTranslateCategoryName}
-                    disabled={translatingCategoryName}
-                    className="text-xs font-medium disabled:opacity-60"
-                    style={{ color: "var(--teal)" }}
-                  >
-                    {translatingCategoryName ? "Translating..." : "Auto-translate"}
-                  </button>
+                  {!locked && (
+                    <button
+                      type="button"
+                      onClick={handleAutoTranslateCategoryName}
+                      disabled={translatingCategoryName}
+                      className="text-xs font-medium disabled:opacity-60"
+                      style={{ color: "var(--teal)" }}
+                    >
+                      {translatingCategoryName ? "Translating..." : "Auto-translate"}
+                    </button>
+                  )}
                 </div>
                 <input
                   type="text"
-                spellCheck={true}
+                  spellCheck={true}
                   value={form.categoryTranslated}
                   onChange={(e) => setForm((f) => ({ ...f, categoryTranslated: e.target.value }))}
+                  readOnly={locked}
                   className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
-                  style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+                  style={{ borderColor: "var(--pencil-light)", background: "var(--paper)", cursor: locked ? "default" : "text" }}
                 />
               </div>
 
@@ -375,6 +400,7 @@ export default function TranslationEditorModal({
                 tokens={TEMPLATE_TOKENS.filter((t) => t.key !== "variant")}
                 previewValues={{ category: form.categoryTranslated || "Category", item: "Item" }}
                 placeholder="e.g. coloring-page-{category}-{item}"
+                disabled={locked}
               />
               <TemplateField
                 label="Alt text template"
@@ -383,6 +409,7 @@ export default function TranslationEditorModal({
                 tokens={TEMPLATE_TOKENS}
                 previewValues={{ category: form.categoryTranslated || "Category", item: "Item", variant: "Variant" }}
                 placeholder="e.g. {category} {item} coloring page, free to print"
+                disabled={locked}
               />
               <TemplateField
                 label="Title template"
@@ -391,29 +418,14 @@ export default function TranslationEditorModal({
                 tokens={TEMPLATE_TOKENS}
                 previewValues={{ category: form.categoryTranslated || "Category", item: "Item", variant: "Variant" }}
                 placeholder="e.g. {category} {item} coloring page"
+                disabled={locked}
               />
               <p className="text-xs" style={{ color: "var(--pencil)" }}>
                 Click a token button to insert it into the field above, or type your own text around it. Filenames never
                 use Variant — it only changes once a URL is already published, so it&apos;s left out to keep links stable.
               </p>
 
-              {isNew ? (
-                <div className="flex items-center gap-3 pt-2">
-                  <button
-                    onClick={handleSave}
-                    disabled={saving}
-                    className="px-5 py-2.5 rounded-md text-sm font-medium text-white disabled:opacity-60"
-                    style={{ background: "var(--teal)" }}
-                  >
-                    {saving ? "Saving..." : "Save & continue"}
-                  </button>
-                  {saved && (
-                    <span className="text-sm font-medium" style={{ color: "var(--teal)" }}>
-                      Saved
-                    </span>
-                  )}
-                </div>
-              ) : (
+              {!isNew && (
                 <>
                   <div>
                     <div className="flex items-baseline justify-between mb-2">
@@ -426,15 +438,17 @@ export default function TranslationEditorModal({
                             {autoTranslateResultSubjects}
                           </span>
                         )}
-                        <button
-                          type="button"
-                          onClick={handleAutoTranslateSubjects}
-                          disabled={autoTranslatingSubjects}
-                          className="text-xs font-medium disabled:opacity-60"
-                          style={{ color: "var(--teal)" }}
-                        >
-                          {autoTranslatingSubjects ? "Translating..." : "Auto-translate missing"}
-                        </button>
+                        {!locked && (
+                          <button
+                            type="button"
+                            onClick={handleAutoTranslateSubjects}
+                            disabled={autoTranslatingSubjects}
+                            className="text-xs font-medium disabled:opacity-60"
+                            style={{ color: "var(--teal)" }}
+                          >
+                            {autoTranslatingSubjects ? "Translating..." : "Auto-translate missing"}
+                          </button>
+                        )}
                       </div>
                     </div>
                     <div className="space-y-2">
@@ -447,12 +461,13 @@ export default function TranslationEditorModal({
                             </span>
                             <input
                               type="text"
-                spellCheck={true}
+                              spellCheck={true}
                               value={form.itemsBySubject[s.name] ?? ""}
                               onChange={(e) => updateSubjectItem(s.name, e.target.value)}
                               placeholder="Not translated yet"
+                              readOnly={locked}
                               className="flex-1 px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
-                              style={{ borderColor: isEmpty ? "var(--coral)" : "var(--pencil-light)", background: "var(--canvas)" }}
+                              style={{ borderColor: isEmpty ? "var(--coral)" : "var(--pencil-light)", background: "var(--paper)", cursor: locked ? "default" : "text" }}
                             />
                           </div>
                         );
@@ -471,26 +486,28 @@ export default function TranslationEditorModal({
                             {autoTranslateResultVariations}
                           </span>
                         )}
-                        <button
-                          type="button"
-                          onClick={handleAutoTranslateVariations}
-                          disabled={autoTranslatingVariations}
-                          className="text-xs font-medium disabled:opacity-60"
-                          style={{ color: "var(--teal)" }}
-                        >
-                          {autoTranslatingVariations ? "Translating..." : "Auto-translate missing"}
-                        </button>
+                        {!locked && (
+                          <button
+                            type="button"
+                            onClick={handleAutoTranslateVariations}
+                            disabled={autoTranslatingVariations}
+                            className="text-xs font-medium disabled:opacity-60"
+                            style={{ color: "var(--teal)" }}
+                          >
+                            {autoTranslatingVariations ? "Translating..." : "Auto-translate missing"}
+                          </button>
+                        )}
                       </div>
                     </div>
                     {variations.length > 8 && (
                       <input
                         type="text"
-                spellCheck={true}
+                        spellCheck={true}
                         value={variationFilter}
                         onChange={(e) => setVariationFilter(e.target.value)}
                         placeholder={`Filter ${variations.length} variations...`}
                         className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm mb-2"
-                        style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
+                        style={{ borderColor: "var(--pencil-light)", background: "var(--paper)" }}
                       />
                     )}
                     <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
@@ -505,12 +522,13 @@ export default function TranslationEditorModal({
                             </span>
                             <input
                               type="text"
-                spellCheck={true}
+                              spellCheck={true}
                               value={form.itemsByVariation[v.text] ?? ""}
                               onChange={(e) => updateVariationItem(v.text, e.target.value)}
                               placeholder="Not translated yet"
+                              readOnly={locked}
                               className="flex-1 px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
-                              style={{ borderColor: isEmpty ? "var(--coral)" : "var(--pencil-light)", background: "var(--canvas)" }}
+                              style={{ borderColor: isEmpty ? "var(--coral)" : "var(--pencil-light)", background: "var(--paper)", cursor: locked ? "default" : "text" }}
                             />
                           </div>
                         );
@@ -519,35 +537,66 @@ export default function TranslationEditorModal({
                   </div>
                 </>
               )}
-
-              <div className="flex items-center gap-3 pt-4" style={{ borderTop: "1px solid var(--pencil-light)" }}>
-                <button
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="px-5 py-2.5 rounded-md text-sm font-medium text-white disabled:opacity-60"
-                  style={{ background: "var(--teal)" }}
-                >
-                  {saving ? "Saving..." : "Save translation"}
-                </button>
-                {!isNew && (
-                  <button
-                    onClick={handleDelete}
-                    disabled={deleting}
-                    className="px-4 py-2.5 rounded-md text-sm font-medium disabled:opacity-60"
-                    style={{ color: "var(--coral-dark)", border: "1.5px solid var(--coral)" }}
-                  >
-                    {deleting ? "Deleting..." : "Delete"}
-                  </button>
-                )}
-                {saved && (
-                  <span className="text-sm font-medium" style={{ color: "var(--teal)" }}>
-                    Saved
-                  </span>
-                )}
-              </div>
             </div>
           )}
         </div>
+
+        {/* Sticky footer */}
+        {!loading && (
+          <div className="flex items-center gap-3 px-6 py-4 shrink-0" style={{ borderTop: "1px solid var(--pencil-light)", background: "var(--canvas)" }}>
+            {editing ? (
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="px-5 py-2.5 rounded-md text-sm font-medium text-white disabled:opacity-60"
+                style={{ background: "var(--teal)" }}
+              >
+                {saving ? "Saving..." : isNew ? "Save & continue" : "Save"}
+              </button>
+            ) : (
+              <span className="text-xs" style={{ color: "var(--pencil)" }}>
+                Click Edit to make changes
+              </span>
+            )}
+            {!isNew && !confirmingDelete && (
+              <button
+                onClick={() => setConfirmingDelete(true)}
+                className="ml-auto px-4 py-2.5 rounded-md text-sm font-medium"
+                style={{ color: "var(--coral-dark)", border: "1.5px solid var(--coral)" }}
+              >
+                Delete
+              </button>
+            )}
+            {confirmingDelete && (
+              <div className="ml-auto flex items-center gap-2">
+                <span className="text-xs" style={{ color: "var(--coral-dark)" }}>
+                  Delete the &apos;{lang}&apos; translation?
+                </span>
+                <button
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="px-3 py-2 rounded-md text-xs font-bold text-white disabled:opacity-60"
+                  style={{ background: "var(--coral)" }}
+                >
+                  {deleting ? "Deleting..." : "Yes, delete"}
+                </button>
+                <button
+                  onClick={() => setConfirmingDelete(false)}
+                  disabled={deleting}
+                  className="px-3 py-2 rounded-md text-xs font-medium"
+                  style={{ color: "var(--pencil)" }}
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+            {saved && (
+              <span className="text-sm font-medium" style={{ color: "var(--teal)" }}>
+                Saved
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

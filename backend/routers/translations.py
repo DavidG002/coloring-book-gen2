@@ -39,6 +39,7 @@ def _to_translation_read(translation: Translation) -> TranslationRead:
                 subject_id=item.subject_id,
                 subject_name=item.subject.name,
                 translated_text=item.translated_text,
+                pending_review=item.pending_review,
             )
             for item in translation.items
         ],
@@ -48,6 +49,7 @@ def _to_translation_read(translation: Translation) -> TranslationRead:
                 variation_id=item.variation_id,
                 variation_text=item.variation.text,
                 translated_text=item.translated_text,
+                pending_review=item.pending_review,
             )
             for item in translation.variation_items
         ],
@@ -95,6 +97,24 @@ def _resolve_variation_id(category: Category, variation_text: str, db: Session) 
         )
     return variation.id
 
+@router.post("/{lang}/mark-reviewed")
+def mark_translation_reviewed(category_id: int, lang: str, db: Session = Depends(get_db)):
+    """Called when a user opens (and closes) a language's translation
+    editor — clears pending_review on every item for that language,
+    regardless of whether anything was actually edited. Viewing counts
+    as reviewing; no save/edit required."""
+    category = _get_category_or_404(category_id, db)
+    translation = next((t for t in category.translations if t.lang == lang), None)
+    if not translation:
+        raise HTTPException(status_code=404, detail=f"No '{lang}' translation for '{category.name}'")
+
+    for item in translation.items:
+        item.pending_review = False
+    for item in translation.variation_items:
+        item.pending_review = False
+
+    db.commit()
+    return {"success": True}
 
 @router.post("", response_model=TranslationRead, status_code=201)
 def create_translation(category_id: int, payload: TranslationCreate, db: Session = Depends(get_db)):

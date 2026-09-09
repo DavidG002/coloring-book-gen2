@@ -29,6 +29,24 @@ def _get_translation_or_404(db: Session, category: Category, lang: str) -> Trans
     return translation
 
 
+@router.get("/pending-review-count")
+def get_seo_pending_review_count(category_id: int, db: Session = Depends(get_db)):
+    """A lightweight aggregate check — how many ContentVariant rows across
+    ALL languages are currently pending_review for this category. Used by
+    the Generate page to show a real-time banner right when a generation
+    job completes, without needing to know which languages exist or fetch
+    full SEO data for each. Registered before the /{lang} route below,
+    since FastAPI matches routes in registration order — a later position
+    here would have "pending-review-count" incorrectly matched as if it
+    were a language code."""
+    category = _get_category_or_404(db, category_id)
+    subject_ids = [s.id for s in category.subjects]
+    count = db.query(ContentVariant).filter(
+        ContentVariant.subject_id.in_(subject_ids), ContentVariant.pending_review == True
+    ).count()
+    return {"count": count}
+
+
 @router.get("/{lang}", response_model=SeoDataResponse)
 def get_seo_data(category_id: int, lang: str, db: Session = Depends(get_db)):
     category = _get_category_or_404(db, category_id)
@@ -131,3 +149,20 @@ def regen_single_field(category_id: int, lang: str, payload: SeoFieldRegenerateR
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return SeoFieldRegenerateResponse(field=payload.field, value=value)
+
+
+@router.post("/{lang}/mark-reviewed")
+def mark_seo_reviewed(category_id: int, lang: str, db: Session = Depends(get_db)):
+    """Called when a user opens (and closes) a language's SEO/Publish
+    editor — clears pending_review on every ContentVariant for that
+    language, regardless of whether anything was actually edited.
+    Viewing counts as reviewing; no save/edit required."""
+    category = _get_category_or_404(db, category_id)
+    subject_ids = [s.id for s in category.subjects]
+    variants = db.query(ContentVariant).filter(
+        ContentVariant.subject_id.in_(subject_ids), ContentVariant.lang == lang
+    ).all()
+    for v in variants:
+        v.pending_review = False
+    db.commit()
+    return {"success": True}

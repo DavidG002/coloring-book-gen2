@@ -3,9 +3,10 @@ from sqlalchemy.orm import Session, joinedload
 from database import get_db
 from models import Category, Subject, Variation, Book
 from services.book_deletion import get_category_deletion_info, delete_category_cascade
+from services.translate import auto_translate_new_items
 from schemas import CategoryCreate, CategoryUpdate, CategoryRead, CategorySummary, CategoryDeletionInfo, CategoryDeletionResult
 router = APIRouter(prefix="/categories", tags=["categories"])
-def _to_category_read(category: Category) -> CategoryRead:
+def _to_category_read(category: Category, auto_translated: dict | None = None) -> CategoryRead:
     return CategoryRead(
         id=category.id,
         name=category.name,
@@ -13,6 +14,7 @@ def _to_category_read(category: Category) -> CategoryRead:
         book_name=category.book.name,
         subjects=category.subjects,
         variations=category.variations,
+        auto_translated=auto_translated or {},
     )
 
 @router.get("", response_model=list[CategorySummary])
@@ -63,11 +65,16 @@ def create_category(payload: CategoryCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(category)
     return _to_category_read(category)
+
 @router.put("/{category_id}", response_model=CategoryRead)
 def update_category(category_id: int, payload: CategoryUpdate, db: Session = Depends(get_db)):
     category = db.query(Category).filter(Category.id == category_id).first()
     if not category:
         raise HTTPException(status_code=404, detail=f"Category {category_id} not found")
+
+    new_subjects = []
+    new_variations = []
+
     if payload.subjects is not None:
         existing_by_name = {s.name: s for s in category.subjects}
         desired_names = set(payload.subjects)
@@ -76,8 +83,11 @@ def update_category(category_id: int, payload: CategoryUpdate, db: Session = Dep
                 db.delete(subject)
         for subj_name in payload.subjects:
             if subj_name not in existing_by_name:
-                db.add(Subject(category_id=category.id, name=subj_name))
+                new_subject = Subject(category_id=category.id, name=subj_name)
+                db.add(new_subject)
+                new_subjects.append(new_subject)
         db.flush()
+
     if payload.variations is not None:
         existing_by_text = {v.text: v for v in category.variations}
         desired_texts = set(payload.variations)
@@ -89,11 +99,23 @@ def update_category(category_id: int, payload: CategoryUpdate, db: Session = Dep
             if text in existing_by_text:
                 existing_by_text[text].order = i
             else:
-                db.add(Variation(category_id=category.id, text=text, order=i))
+                new_variation = Variation(category_id=category.id, text=text, order=i)
+                db.add(new_variation)
+                new_variations.append(new_variation)
         db.flush()
+
+    # Auto-translate any genuinely new subjects/variations into every
+    # language this category already has set up, so a user reviewing a
+    # language later finds it already filled in.
+    auto_translated = {}
+    if new_subjects or new_variations:
+        auto_translated = auto_translate_new_items(db, category, new_subjects, new_variations)
+
     db.commit()
     db.refresh(category)
-    return _to_category_read(category)
+    return _to_category_read(category, auto_translated)
+
+
 @router.get("/{category_id}/deletion-info", response_model=CategoryDeletionInfo)
 def category_deletion_info(category_id: int, db: Session = Depends(get_db)):
     try:

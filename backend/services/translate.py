@@ -97,3 +97,51 @@ def translate_template_structure_for_book(product_noun: str, target_lang: str) -
         key: translate_template(text, target_lang)
         for key, text in neutral_templates.items()
     }
+
+def auto_translate_new_items(db, category, new_subjects: list, new_variations: list) -> dict:
+    """Called right after new subjects/variations are added to a Category.
+    For every language the category already has a Translation set up for,
+    automatically translates just the genuinely-new items and saves them —
+    so a user reviewing that language later finds it already filled in,
+    rather than needing to remember to visit and generate it manually.
+    Returns {lang: {"subjects": [...], "variations": [...]}} — the newly
+    auto-translated item names per language, for surfacing a real,
+    reviewable notification rather than a silent background write."""
+    from models import TranslationItem, VariationTranslationItem
+
+    result = {}
+    if not new_subjects and not new_variations:
+        return result
+
+    for translation in category.translations:
+        lang = translation.lang
+        touched = {"subjects": [], "variations": []}
+
+        if new_subjects:
+            phrases = [s.name for s in new_subjects]
+            translated = translate_phrases(phrases, lang)
+            for subject in new_subjects:
+                text = translated.get(subject.name, "")
+                if text:
+                    db.add(TranslationItem(
+                        translation_id=translation.id, subject_id=subject.id,
+                        translated_text=text, pending_review=True,
+                    ))
+                    touched["subjects"].append(subject.name)
+
+        if new_variations:
+            phrases = [v.text for v in new_variations]
+            translated = translate_phrases(phrases, lang)
+            for variation in new_variations:
+                text = translated.get(variation.text, "")
+                if text:
+                    db.add(VariationTranslationItem(
+                        translation_id=translation.id, variation_id=variation.id,
+                        translated_text=text, pending_review=True,
+                    ))
+                    touched["variations"].append(variation.text)
+
+        if touched["subjects"] or touched["variations"]:
+            result[lang] = touched
+
+    return result

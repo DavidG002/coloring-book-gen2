@@ -22,9 +22,12 @@ export default function CategoryDetailPage() {
   const [wordPressAvailable, setWordPressAvailable] = useState(false);
   const [wordPressSiteLabel, setWordPressSiteLabel] = useState("WordPress");
   const [languageNeedsAttention, setLanguageNeedsAttention] = useState(false);
+  const [languagePendingReview, setLanguagePendingReview] = useState<string[]>([]);
   const [languageCheckTrigger, setLanguageCheckTrigger] = useState(0);
   const [publishNeedsAttention, setPublishNeedsAttention] = useState(false);
+  const [publishPendingReview, setPublishPendingReview] = useState<string[]>([]);
   const [publishCheckTrigger, setPublishCheckTrigger] = useState(0);
+  const [publishSetImageIds, setPublishSetImageIds] = useState<number[] | null>(null);
 
   useEffect(() => {
     if (!category) return;
@@ -35,6 +38,7 @@ export default function CategoryDetailPage() {
         if (cancelled) return;
         if (translations.length === 0) {
           setLanguageNeedsAttention(false);
+          setLanguagePendingReview([]);
           return;
         }
         const incomplete = translations.some((t) => {
@@ -42,6 +46,11 @@ export default function CategoryDetailPage() {
           return category.subjects.some((s) => !translatedSubjects.has(s.name));
         });
         setLanguageNeedsAttention(incomplete);
+
+        const langsWithPendingReview = translations
+          .filter((t) => t.items.some((i) => i.pending_review) || t.variation_items.some((i) => i.pending_review))
+          .map((t) => t.lang);
+        setLanguagePendingReview(langsWithPendingReview);
       } catch {
         // silent — worst case, the nudge just doesn't show this time
       }
@@ -67,16 +76,22 @@ export default function CategoryDetailPage() {
         // generated — mirrors the SEO panel's own "generated: false" rows,
         // so the warning means exactly what the SEO list itself shows.
         let incomplete = false;
+        const langsWithPendingReview: string[] = [];
         for (const t of translations) {
           const res = await fetch(`${API_BASE_URL}/categories/${categoryId}/seo/${t.lang}`);
           if (!res.ok) continue;
           const data = await res.json();
           if (data.content_variants?.some((v: { generated: boolean }) => !v.generated)) {
             incomplete = true;
-            break;
+          }
+          if (data.content_variants?.some((v: { pending_review: boolean }) => v.pending_review)) {
+            langsWithPendingReview.push(t.lang);
           }
         }
-        if (!cancelled) setPublishNeedsAttention(incomplete);
+        if (!cancelled) {
+          setPublishNeedsAttention(incomplete);
+          setPublishPendingReview(langsWithPendingReview);
+        }
       } catch {
         // silent — worst case, the nudge just doesn't show this time
       }
@@ -197,7 +212,9 @@ export default function CategoryDetailPage() {
       wordPressStepAvailable={wordPressAvailable}
       wordPressSiteLabel={wordPressSiteLabel}
       languageNeedsAttention={languageNeedsAttention}
+      languagePendingReview={languagePendingReview}
       publishNeedsAttention={publishNeedsAttention}
+      publishPendingReview={publishPendingReview}
     >
       {(activeStep, setActiveStep) => {
         const goToStep = (step: StepId) => {
@@ -218,6 +235,11 @@ export default function CategoryDetailPage() {
                 onGoToLanguage={() => goToStep("language")}
                 publishNeedsAttention={publishNeedsAttention}
                 onGoToPublish={() => goToStep("publish")}
+                onPublishStatusChanged={() => setPublishCheckTrigger((n) => n + 1)}
+                onBuildPublishSet={(imageIds) => {
+                  setPublishSetImageIds(imageIds);
+                  goToStep("publish");
+                }}
               />
             )}
             {activeStep === "language" && (
@@ -238,6 +260,7 @@ export default function CategoryDetailPage() {
                 onGoToWordPress={() => goToStep("wordpress")}
                 onGoToLanguage={() => goToStep("language")}
                 onSeoChanged={() => setPublishCheckTrigger((n) => n + 1)}
+                publishSetImageIds={publishSetImageIds}
               />
             )}
             {activeStep === "wordpress" && (

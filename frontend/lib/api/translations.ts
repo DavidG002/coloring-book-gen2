@@ -31,3 +31,9 @@ export function deleteTranslation(categoryId: number, lang: string) {
     { method: "DELETE" }
   );
 }
+export function markTranslationReviewed(categoryId: number, lang: string) {
+  return apiRequest<{ success: boolean }>(
+    `/categories/${categoryId}/translations/${encodeURIComponent(lang)}/mark-reviewed`,
+    { method: "POST" }
+  );
+}

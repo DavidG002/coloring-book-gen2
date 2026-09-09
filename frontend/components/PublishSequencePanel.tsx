@@ -21,6 +21,9 @@ async function getSeoData(categoryId: number, lang: string): Promise<SeoData> {
   }
   return res.json();
 }
+async function markSeoReviewed(categoryId: number, lang: string): Promise<void> {
+  await fetch(`${API_BASE_URL}/categories/${categoryId}/seo/${lang}/mark-reviewed`, { method: "POST" }).catch(() => {});
+}
 async function saveDescription(categoryId: number, lang: string, description: string): Promise<void> {
   await fetch(`${API_BASE_URL}/categories/${categoryId}/seo/${lang}/description`, {
     method: "PUT",
@@ -105,12 +108,14 @@ export default function PublishSequencePanel({
   onGoToWordPress,
   onGoToLanguage,
   onSeoChanged,
+  publishSetImageIds,
 }: {
   categoryId: number;
   categoryName: string;
   onGoToWordPress: () => void;
   onGoToLanguage: () => void;
   onSeoChanged?: () => void;
+  publishSetImageIds?: number[] | null;
 }) {
   const [languages, setLanguages] = useState<string[]>([]);
   const [loadingLangs, setLoadingLangs] = useState(true);
@@ -142,6 +147,7 @@ export default function PublishSequencePanel({
   const [showWordPress, setShowWordPress] = useState(false);
 
   const [regeneratingField, setRegeneratingField] = useState<string | null>(null);
+  const [autoSeoBanner, setAutoSeoBanner] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -231,6 +237,12 @@ export default function PublishSequencePanel({
           setDescription(data.category_description);
           setSavedDescriptionSnapshot(data.category_description);
           setDirtyRows(new Set());
+          const pendingCount = data.content_variants?.filter((v) => v.pending_review).length ?? 0;
+          if (pendingCount > 0) {
+            setAutoSeoBanner(`${pendingCount} item${pendingCount === 1 ? "" : "s"} auto-generated with SEO content — review anytime`);
+            setTimeout(() => setAutoSeoBanner(null), 4500);
+            markSeoReviewed(categoryId, selectedLang).then(() => onSeoChanged?.());
+          }
         })
         .catch((err) => {
           if (!cancelled) setError(err instanceof ApiError ? err.message : "Failed to load SEO data");
@@ -243,6 +255,7 @@ export default function PublishSequencePanel({
       cancelled = true;
       clearTimeout(timer);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [categoryId, selectedLang]);
 
   async function handleSaveDescription() {
@@ -396,6 +409,11 @@ export default function PublishSequencePanel({
         </p>
       </div>
 
+      {autoSeoBanner && (
+        <div className="mx-6 mb-4 px-4 py-3 rounded-md text-xs" style={{ background: "var(--tone-blue-bg)", color: "var(--tone-blue)", border: "1px solid var(--tone-blue)" }}>
+          {autoSeoBanner}
+        </div>
+      )}
       {error && (
         <div className="mx-6 mb-4 px-4 py-3 rounded-md text-sm" style={{ background: "var(--coral-light)", color: "var(--coral-dark)", border: "1px solid var(--coral)" }}>
           {error}
@@ -517,7 +535,11 @@ export default function PublishSequencePanel({
                       <div
                         key={key}
                         className="rounded-lg overflow-hidden"
-                        style={{ border: `1px solid ${row.generated ? "var(--pencil-light)" : "var(--coral)"}` }}
+                        style={{
+                          border: `1.5px solid ${
+                            !row.generated ? "var(--coral)" : row.pending_review ? "var(--tone-blue)" : "var(--pencil-light)"
+                          }`,
+                        }}
                       >
                         <button
                           onClick={() => setExpandedRow(isExpanded ? null : key)}

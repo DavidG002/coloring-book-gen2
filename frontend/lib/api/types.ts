@@ -37,6 +37,7 @@ export interface Category {
   book_name: string;
   subjects: Subject[];
   variations: Variation[];
+  auto_translated: Record<string, { subjects: string[]; variations: string[] }>;
 }
 
 export interface CategorySummary {
@@ -67,13 +68,14 @@ export interface TranslationItem {
   subject_id: number;
   subject_name: string;
   translated_text: string;
+  pending_review: boolean;
 }
-
 export interface VariationTranslationItem {
   id: number;
   variation_id: number;
   variation_text: string;
   translated_text: string;
+  pending_review: boolean;
 }
 
 export interface Translation {

@@ -215,6 +215,55 @@ def ensure_content_variant(
     return record
 
 
+def auto_generate_seo_for_all_languages(db: Session, category_id: int, subject_name: str, variation_text: str) -> dict:
+    """Called right after a pairing's first-ever image is successfully
+    generated. For every language this category already has a
+    Translation set up for, auto-generates SEO content (if it doesn't
+    already exist) — same idempotent, lazy pattern as ensure_content_variant,
+    just triggered proactively instead of waiting for a manual
+    'Generate missing' click. Marks each newly-created variant
+    pending_review so it surfaces the same review workflow as
+    auto-translated subjects/variations. Returns the list of languages
+    something was actually generated for."""
+    from models import Translation
+
+    category = _get_category_or_raise(db, category_id)
+    langs_touched = []
+
+    translations = db.query(Translation).filter(Translation.category_id == category_id).all()
+    for translation in translations:
+        lang = translation.lang
+        subject = db.query(Subject).filter(Subject.category_id == category.id, Subject.name == subject_name).first()
+        variation = db.query(Variation).filter(Variation.category_id == category.id, Variation.text == variation_text).first()
+        if not subject or not variation:
+            continue
+
+        existing = (
+            db.query(ContentVariant)
+            .filter(ContentVariant.subject_id == subject.id, ContentVariant.variation_id == variation.id, ContentVariant.lang == lang)
+            .first()
+        )
+        if existing:
+            continue
+
+        generated = generate_content_variant(
+            category.book.base_prompt, category.book.product_noun, category.name, subject_name, variation_text, lang
+        )
+        record = ContentVariant(
+            subject_id=subject.id,
+            variation_id=variation.id,
+            lang=lang,
+            pending_review=True,
+            **generated,
+        )
+        db.add(record)
+        langs_touched.append(lang)
+
+    if langs_touched:
+        db.commit()
+
+    return langs_touched
+
 def generate_category_description(book_base_prompt: str, product_noun: str, category_name: str, translated_category_name: str, lang: str) -> str:
     language_name = LANGUAGE_NAMES.get(lang.lower(), lang)
 
@@ -358,6 +407,7 @@ def list_content_variants(db: Session, category_id: int, lang: str) -> list[dict
                 "yoast_meta_description": (existing.yoast_meta_description or "") if existing else "",
                 "generated": existing is not None,
                 "sample_image_id": representative.id,
+                "pending_review": existing.pending_review if existing else False,
             })
     return rows
 

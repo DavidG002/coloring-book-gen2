@@ -75,6 +75,8 @@ export default function GenerateSequencePanel({
   onGoToLanguage,
   publishNeedsAttention,
   onGoToPublish,
+  onPublishStatusChanged,
+  onBuildPublishSet,
 }: {
   categoryName: string;
   category: Category;
@@ -83,14 +85,43 @@ export default function GenerateSequencePanel({
   onGoToLanguage?: () => void;
   publishNeedsAttention?: boolean;
   onGoToPublish?: () => void;
+  onPublishStatusChanged?: () => void;
+  onBuildPublishSet?: (imageIds: number[]) => void;
 }) {
   
   const [subjects, setSubjects] = useState<string[]>(category.subjects.map((s) => s.name));
   const [variations, setVariations] = useState<string[]>(
     category.variations.sort((a, b) => a.order - b.order).map((v) => v.text)
   );
+
   const [selectedSubject, setSelectedSubject] = useState<string>(subjects[0] ?? "");
   const [pairs, setPairs] = useState<Pair[]>([]);
+
+  const pairsLoadedRef = useRef(false);
+
+  useEffect(() => {
+    pairsLoadedRef.current = false;
+    const timer = setTimeout(() => {
+      try {
+        const saved = window.localStorage.getItem(`generate-pairs-${category.id}`);
+        if (saved) {
+          setPairs(JSON.parse(saved));
+        }
+      } catch {
+        // corrupted/old data — ignore, start fresh
+      } finally {
+        pairsLoadedRef.current = true;
+      }
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [category.id]);
+
+  useEffect(() => {
+    if (!pairsLoadedRef.current) return;
+    window.localStorage.setItem(`generate-pairs-${category.id}`, JSON.stringify(pairs));
+  }, [pairs, category.id]);
+
+
   const [pairCounts, setPairCounts] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
 
@@ -104,6 +135,9 @@ export default function GenerateSequencePanel({
   const recentPaceRef = useRef<number[]>([]);
 
   const [editModalKind, setEditModalKind] = useState<"subjects" | "variations" | null>(null);
+  const [autoTranslateBanner, setAutoTranslateBanner] = useState<string | null>(null);
+
+  const [selectedImageIds, setSelectedImageIds] = useState<number[]>([]);
 
 
   useEffect(() => {
@@ -138,11 +172,28 @@ export default function GenerateSequencePanel({
       return [...withoutSubject, ...variations.map((v) => ({ subject: selectedSubject, variation_text: v }))];
     });
   }
+  function unpairAllForSubject() {
+    setPairs((prev) => prev.filter((p) => p.subject !== selectedSubject));
+  }
 
   function handleListSaved(updated: Category) {
     setSubjects(updated.subjects.map((s) => s.name));
     setVariations(updated.variations.sort((a, b) => a.order - b.order).map((v) => v.text));
     onCategoryChanged(updated);
+
+    const langs = Object.keys(updated.auto_translated ?? {});
+    if (langs.length > 0) {
+      // Count unique item names across languages (same items get translated
+      // into every language, so this reflects genuinely new subjects/
+      // variations, not one count per language).
+      const uniqueNames = new Set<string>();
+      langs.forEach((lang) => {
+        updated.auto_translated[lang].subjects.forEach((n) => uniqueNames.add(`s:${n}`));
+        updated.auto_translated[lang].variations.forEach((n) => uniqueNames.add(`v:${n}`));
+      });
+      setAutoTranslateBanner(`${uniqueNames.size} new item${uniqueNames.size === 1 ? "" : "s"} added and automatically translated`);
+      setTimeout(() => setAutoTranslateBanner(null), 4500);
+    }
   }
 
   async function handleRemoveSubject(subject: string) {
@@ -222,6 +273,18 @@ export default function GenerateSequencePanel({
             setPairs([]);
             setRefreshTrigger((n) => n + 1);
             getPairCounts(category.id).then(setPairCounts).catch(() => {});
+            if (status.status === "done") {
+              fetch(`${API_BASE_URL}/categories/${category.id}/seo/pending-review-count`)
+                .then((r) => r.json())
+                .then((data) => {
+                  if (data.count > 0) {
+                    setAutoTranslateBanner(`${data.count} item${data.count === 1 ? "" : "s"} generated with SEO content ready to review`);
+                    setTimeout(() => setAutoTranslateBanner(null), 4500);
+                    onPublishStatusChanged?.();
+                  }
+                })
+                .catch(() => {});
+            }
           }
         } catch {
           // keep polling; a transient failure shouldn't kill the whole run
@@ -254,49 +317,26 @@ export default function GenerateSequencePanel({
       icon={<WandSparkles size={25} className={generating ? "animate-spin" : ""} />}
       headerBorder={!generating}
       footer={
-        <div className="grid items-center w-full" style={{ gridTemplateColumns: "1fr auto 1fr" }}>
-          <span className="text-[10px] justify-self-start" style={{ color: "var(--pencil)" }}>
-            {pairs.length} images ready
-          </span>
-          <button
-            onClick={handleGenerate}
-            disabled={pairs.length === 0 || generating}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold text-white disabled:opacity-40 justify-self-center"
-            style={{ background: "var(--teal)", boxShadow: "0 5px 14px rgba(91,124,147,0.14)" }}
-          >
-            {generating ? "Generating..." : "Generate pages"} <WandSparkles size={14} />
-          </button>
-          <div className="flex items-center gap-2 justify-self-end">
-            {onGoToLanguage && (
-              <button
-                onClick={onGoToLanguage}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-lg text-xs font-bold"
-                style={
-                  languageNeedsAttention
-                    ? { background: "var(--coral)", color: "white" }
-                    : { border: "1px solid var(--pencil-light)", color: "var(--pencil)" }
-                }
-              >
-                Language <ChevronRight size={13} />
-              </button>
-            )}
-            {onGoToPublish && (
-              <button
-                onClick={onGoToPublish}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-lg text-xs font-bold"
-                style={
-                  publishNeedsAttention
-                    ? { background: "var(--coral)", color: "white" }
-                    : { border: "1px solid var(--pencil-light)", color: "var(--pencil)" }
-                }
-              >
-                Publish <ChevronRight size={13} />
-              </button>
-            )}
-          </div>
+        <div className="flex items-center justify-end w-full">
+          {/* Intentionally minimal for now — Generate/Build controls moved up
+              into the "Files to be generated" section header. Reserved here
+              in case a future action belongs at the very bottom instead. */}
         </div>
       }
     >
+      {autoTranslateBanner && (
+        <div
+          className="mx-6 mt-5 px-4 py-3 rounded-md text-xs flex items-center justify-between gap-3"
+          style={{ background: "var(--tone-blue-bg)", color: "var(--tone-blue)", border: "1px solid var(--tone-blue)" }}
+        >
+          <span>{autoTranslateBanner}</span>
+          {onGoToLanguage && (
+            <button onClick={onGoToLanguage} className="underline font-bold shrink-0">
+              Review
+            </button>
+          )}
+        </div>
+      )}
       {languageNeedsAttention && (
         <div
           className="mx-6 mt-5 px-4 py-3 rounded-md text-xs flex items-center justify-between gap-3"
@@ -354,10 +394,63 @@ export default function GenerateSequencePanel({
         </div>
       )}
 
-      <CategoryImageStrip categoryId={category.id} categoryName={categoryName} refreshKey={refreshTrigger} />
-      <BatchHistoryPanel categoryName={categoryName} refreshKey={refreshTrigger} />
+          <CategoryImageStrip categoryId={category.id} categoryName={categoryName} refreshKey={refreshTrigger} onSelectionChanged={setSelectedImageIds} />
+         <div className="flex items-center justify-between gap-3 mx-5 mt-5" style={{ padding: "0 2px" }}>
+        <span className="text-[11px]" style={{ color: "var(--pencil)" }}>
+          <strong style={{ color: "var(--teal-dark)", fontSize: 12 }}>{pairs.length}</strong> pairings selected — {pairs.length} images will be generated
+        </span>
+        <div className="flex items-center gap-3 shrink-0">
+          {generating && (
+            <button onClick={handleCancel} className="text-[10px] font-bold" style={{ color: "var(--coral-dark)" }}>
+              Cancel
+            </button>
+          )}
+          {selectedImageIds.length > 0 && onBuildPublishSet && (
+            <button
+               onClick={() => onBuildPublishSet(selectedImageIds)}
+               className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold text-white"
+               style={{ background: "var(--tone-sage)", boxShadow: "0 5px 14px rgba(92,129,113,0.18)" }}
+             >
+               Send to Publish ({selectedImageIds.length})
+             </button>
+          )}
+          <button
+            onClick={handleGenerate}
+            disabled={pairs.length === 0 || generating}
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold text-white disabled:opacity-40"
+            style={{ background: "var(--teal)", boxShadow: "0 5px 14px rgba(91,124,147,0.14)" }}
+          >
+            {generating ? "Generating..." : "Generate pages"} <WandSparkles size={14} />
+          </button>
+        </div>
+      </div>
+      <div className="mx-5 mt-3 mb-5 rounded-lg" style={{ padding: "15px 17px", border: "1px solid var(--pencil-light)", background: "var(--paper)" }}>
+        <p className="text-[10px] uppercase font-bold m-0 mb-3.5" style={{ color: "var(--pencil)", letterSpacing: "0.1em" }}>
+          Files to be generated
+        </p>
+        {remainingPairs.length === 0 ? (
+          <p className="text-[11px] italic m-0" style={{ color: "var(--pencil)" }}>
+            {generating ? "All selected files are being prepared..." : "Select a pairing to preview filenames."}
+          </p>
+        ) : (
+            <div className="grid gap-1.5 overflow-y-auto pr-1" style={{ height: 108, alignContent: "start" }}>
+            {remainingPairs.map((pair, i) => (
+              <div
+                key={`${pair.subject}-${pair.variation_text}`}
+                className="flex items-baseline gap-2.5 rounded"
+                style={{ padding: "6px 10px", background: "var(--teal-tint)", color: "var(--teal-dark)", fontFamily: "ui-monospace, monospace", fontSize: 10 }}
+              >
+                <b style={{ minWidth: 18, color: "var(--pencil)", fontSize: 9, fontWeight: 500 }}>
+                  {String(i + 1).padStart(2, "0")}
+                </b>
+                <span className="truncate">{fileNameFor(pair.subject, pair.variation_text)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
-      <div className="grid grid-cols-2" style={{ borderTop: "1px solid var(--pencil-light)", background: "var(--paper)" }}>
+      <div className="grid" style={{ gridTemplateColumns: "minmax(320px, 0.8fr) 1.6fr", borderTop: "1px solid var(--pencil-light)", background: "#eef2f5cd" }}>
         <div style={{ padding: 20, borderRight: "1px solid var(--pencil-light)" }}>
           <div className="flex items-start justify-between mb-3.5">
             <div>
@@ -376,6 +469,7 @@ export default function GenerateSequencePanel({
               <Plus size={13} /> Add
             </button>
           </div>
+          <div className="overflow-y-auto pr-1" style={{ maxHeight: 260 }}>
           {subjects.map((subject) => {
             const count = pairs.filter((p) => p.subject === subject).length;
             const active = selectedSubject === subject;
@@ -412,8 +506,8 @@ export default function GenerateSequencePanel({
               </div>
             );
           })}
+          </div>
         </div>
-
         <div style={{ padding: 20 }}>
           <div className="flex items-start justify-between mb-3.5">
             <div>
@@ -433,6 +527,13 @@ export default function GenerateSequencePanel({
                 Pair all
               </button>
               <button
+                onClick={unpairAllForSubject}
+                className="px-2 py-1.5 rounded-md text-[10px] font-bold"
+                style={{ border: "1px solid var(--pencil-light)", color: "var(--coral-dark)" }}
+              >
+                Unpair all
+              </button>
+              <button
                 onClick={() => setEditModalKind("variations")}
                 className="inline-flex items-center gap-1 px-2 py-1.5 rounded-md text-[10px] font-bold"
                 style={{ border: "1px solid var(--pencil-light)", color: "var(--teal)" }}
@@ -441,6 +542,7 @@ export default function GenerateSequencePanel({
               </button>
             </div>
           </div>
+          <div className="overflow-y-auto pr-1" style={{ maxHeight: 260 }}>
           {variations.map((variation) => {
             const paired = isPaired(selectedSubject, variation);
             const count = pairCounts[pairKey(selectedSubject, variation)] ?? 0;
@@ -479,9 +581,9 @@ export default function GenerateSequencePanel({
               </div>
             );
           })}
+          </div>
         </div>
       </div>
-
       <div
         className="flex items-center justify-between text-[10px]"
         style={{ padding: "14px 20px", borderTop: "1px solid var(--pencil-light)", color: "var(--pencil)" }}
@@ -492,32 +594,7 @@ export default function GenerateSequencePanel({
         <span>{pairs.length} images will be generated</span>
       </div>
 
-      <div className="mx-5 mb-5 rounded-lg" style={{ padding: "15px 17px", border: "1px solid var(--pencil-light)", background: "var(--paper)" }}>
-        <p className="text-[10px] uppercase font-bold m-0 mb-2" style={{ color: "var(--pencil)", letterSpacing: "0.1em" }}>
-          Files to be generated
-        </p>
-        {remainingPairs.length === 0 ? (
-          <p className="text-[11px] italic m-0" style={{ color: "var(--pencil)" }}>
-            {generating ? "All selected files are being prepared..." : "Select a pairing to preview filenames."}
-          </p>
-        ) : (
-          <div className="grid gap-1.5">
-            {remainingPairs.map((pair, i) => (
-              <div
-                key={`${pair.subject}-${pair.variation_text}`}
-                className="flex items-baseline gap-2.5 rounded"
-                style={{ padding: "8px 10px", background: "var(--teal-tint)", color: "var(--teal-dark)", fontFamily: "ui-monospace, monospace", fontSize: 10 }}
-              >
-                <b style={{ minWidth: 18, color: "var(--pencil)", fontSize: 9, fontWeight: 500 }}>
-                  {String(i + 1).padStart(2, "0")}
-                </b>
-                <span>{fileNameFor(pair.subject, pair.variation_text)}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
+            <BatchHistoryPanel categoryName={categoryName} refreshKey={refreshTrigger} />
       {editModalKind && (
         <EditListModal
           categoryId={category.id}

@@ -136,6 +136,7 @@ class TranslationItem(Base):
     translation_id = Column(Integer, ForeignKey("translations.id"), nullable=False)
     subject_id = Column(Integer, ForeignKey("subjects.id"), nullable=False)
     translated_text = Column(String, nullable=False)
+    pending_review = Column(Boolean, nullable=False, default=False)
 
     translation = relationship("Translation", back_populates="items")
     subject = relationship("Subject", back_populates="translation_items")
@@ -149,6 +150,7 @@ class VariationTranslationItem(Base):
     translation_id = Column(Integer, ForeignKey("translations.id"), nullable=False)
     variation_id = Column(Integer, ForeignKey("variations.id"), nullable=False)
     translated_text = Column(String, nullable=False)
+    pending_review = Column(Boolean, nullable=False, default=False)
 
     translation = relationship("Translation", back_populates="variation_items")
     variation = relationship("Variation", back_populates="variation_translation_items")
@@ -366,6 +368,7 @@ class ContentVariant(Base):
     seo_alt_text = Column(String, nullable=False)
     seo_excerpt = Column(Text, nullable=False)
     seo_content = Column(Text, nullable=False)
+    pending_review = Column(Boolean, nullable=False, default=False)
 
     created_at = Column(DateTime, default=datetime.utcnow)
 

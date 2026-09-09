@@ -22,7 +22,9 @@ export default function CategorySequenceShell({
   wordPressStepAvailable,
   wordPressSiteLabel,
   languageNeedsAttention,
+  languagePendingReview,
   publishNeedsAttention,
+  publishPendingReview,
   children,
 }: {
   bookId: number;
@@ -32,7 +34,9 @@ export default function CategorySequenceShell({
   wordPressStepAvailable: boolean;
   wordPressSiteLabel: string;
   languageNeedsAttention?: boolean;
+  languagePendingReview?: string[];
   publishNeedsAttention?: boolean;
+  publishPendingReview?: string[];
   children: (activeStep: StepId, setActiveStep: (s: StepId) => void) => React.ReactNode;
 }) {
 
@@ -135,11 +139,25 @@ const stepIndex = activeStep === "wordpress" ? STEPS.length - 1 : mainStepIndex;
                       title="Some subjects or variations need translation"
                     />
                   )}
+                  {step.id === "language" && !languageNeedsAttention && languagePendingReview && languagePendingReview.length > 0 && (
+                    <span
+                      className="ml-auto w-2 h-2 rounded-full shrink-0"
+                      style={{ background: "var(--tone-blue)" }}
+                      title="New auto-translated items to review"
+                    />
+                  )}
                   {step.id === "publish" && publishNeedsAttention && (
                     <span
                       className="ml-auto w-2 h-2 rounded-full shrink-0"
                       style={{ background: "var(--coral)" }}
                       title="Some pairings still need SEO content"
+                    />
+                  )}
+                  {step.id === "publish" && !publishNeedsAttention && publishPendingReview && publishPendingReview.length > 0 && (
+                    <span
+                      className="ml-auto w-2 h-2 rounded-full shrink-0"
+                      style={{ background: "var(--tone-blue)" }}
+                      title="New auto-generated SEO content to review"
                     />
                   )}
                 </button>

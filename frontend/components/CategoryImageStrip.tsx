@@ -91,15 +91,23 @@ export default function CategoryImageStrip({
   categoryId,
   categoryName,
   refreshKey,
+  onSelectionChanged,
 }: {
   categoryId: number;
   categoryName: string;
   refreshKey: number;
+  onSelectionChanged?: (imageIds: number[]) => void;
 }) {
+
   const [images, setImages] = useState<CategoryImage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<Set<number>>(new Set());
+    const [selected, setSelected] = useState<Set<number>>(new Set());
+
+  useEffect(() => {
+    onSelectionChanged?.(Array.from(selected));
+  }, [selected, onSelectionChanged]);
+  
   const [busyId, setBusyId] = useState<number | null>(null);
   const [bulkRejecting, setBulkRejecting] = useState(false);
   const [minimized, setMinimized] = useState(false);
@@ -337,43 +345,6 @@ async function doRegenerate(id: number) {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {selected.size > 0 && !bulkRejectPicker && (
-            <button
-              onClick={() => setBulkRejectPicker(true)}
-              disabled={bulkRejecting}
-              className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-md text-[10px] font-bold disabled:opacity-60"
-              style={{ border: "1px solid var(--coral)", color: "var(--coral-dark)" }}
-            >
-              <Trash2 size={13} /> {bulkRejecting ? "Rejecting..." : `Reject ${selected.size} selected`}
-            </button>
-          )}
-          {selected.size > 0 && bulkRejectPicker && (
-            <div className="flex items-center gap-1 flex-wrap">
-              <span className="text-[10px] font-bold mr-1" style={{ color: "var(--coral-dark)" }}>
-                Why?
-              </span>
-              {REJECT_REASONS.map((r) => (
-                <button
-                  key={r.key}
-                  onClick={() => {
-                    handleBulkReject(r.key);
-                    setBulkRejectPicker(false);
-                  }}
-                  className="px-2 py-1 rounded-full text-[9px] font-bold"
-                  style={{ background: "var(--coral-light)", color: "var(--coral-dark)" }}
-                >
-                  {r.label}
-                </button>
-              ))}
-              <button
-                onClick={() => setBulkRejectPicker(false)}
-                className="text-[9px] font-medium ml-1"
-                style={{ color: "var(--pencil)" }}
-              >
-                Cancel
-              </button>
-            </div>
-          )}
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value as typeof filterStatus)}
@@ -427,7 +398,63 @@ async function doRegenerate(id: number) {
           </button>
         </div>
       </div>
-
+      {!minimized && (
+        <div className="flex items-center gap-2 flex-wrap px-4 py-2.5" style={{ borderBottom: "1px solid var(--pencil-light)" }}>
+          <button
+            onClick={() => setSelected(new Set(sortedImages.filter((img) => img.status !== "rejected").map((img) => img.id)))}
+            className="text-[10px] font-bold"
+            style={{ color: "var(--teal)" }}
+          >
+            Select all
+          </button>
+          {selected.size > 0 && (
+            <button
+              onClick={() => setSelected(new Set())}
+              className="text-[10px] font-bold"
+              style={{ color: "var(--pencil)" }}
+            >
+              Clear selection
+            </button>
+          )}
+          {selected.size > 0 && !bulkRejectPicker && (
+            <button
+              onClick={() => setBulkRejectPicker(true)}
+              disabled={bulkRejecting}
+              className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-md text-[10px] font-bold disabled:opacity-60"
+              style={{ border: "1px solid var(--coral)", color: "var(--coral-dark)" }}
+            >
+              <Trash2 size={13} /> {bulkRejecting ? "Rejecting..." : `Reject ${selected.size} selected`}
+            </button>
+          )}
+          {selected.size > 0 && bulkRejectPicker && (
+            <div className="flex items-center gap-1 flex-wrap">
+              <span className="text-[10px] font-bold mr-1" style={{ color: "var(--coral-dark)" }}>
+                Why?
+              </span>
+              {REJECT_REASONS.map((r) => (
+                <button
+                  key={r.key}
+                  onClick={() => {
+                    handleBulkReject(r.key);
+                    setBulkRejectPicker(false);
+                  }}
+                  className="px-2 py-1 rounded-full text-[9px] font-bold"
+                  style={{ background: "var(--coral-light)", color: "var(--coral-dark)" }}
+                >
+                  {r.label}
+                </button>
+              ))}
+              <button
+                onClick={() => setBulkRejectPicker(false)}
+                className="text-[9px] font-medium ml-1"
+                style={{ color: "var(--pencil)" }}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+        </div>
+      )}
       {error && (
         <div className="mx-4 mt-3 px-3 py-2 rounded text-xs" style={{ background: "var(--coral-light)", color: "var(--coral-dark)" }}>
           {error}
@@ -455,7 +482,7 @@ async function doRegenerate(id: number) {
                   key={img.id}
                   className="flex-shrink-0 rounded-lg overflow-hidden relative"
                   style={{
-                    width: 200,
+                    width: 220,
                     border: `1.5px solid ${isSelected ? "var(--teal)" : "var(--pencil-light)"}`,
                     boxShadow: isFlashing ? "0 0 0 3px var(--teal)" : "none",
                     opacity: isRejected ? 0.55 : 1,
@@ -479,7 +506,7 @@ async function doRegenerate(id: number) {
                       src={imageFileUrl(img.id, img.created_at)}
                       alt={`${img.subject} — ${img.variation_text ?? ""}`}
                       className="w-full object-cover"
-                      style={{ height: 140, background: "var(--tone-sage-bg)" }}
+                      style={{ height: 300, background: "var(--tone-sage-bg)" }}
                     />
                   </button>
 

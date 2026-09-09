@@ -20,7 +20,7 @@ export default function EditListModal({
   onSaved: (updated: Category) => void;
 }) {
   const [mode, setMode] = useState<Mode>("rows");
-  const [rows, setRows] = useState<string[]>(currentItems.length > 0 ? currentItems : [""]);
+    const [rows, setRows] = useState<string[]>(["", ...currentItems]);
   const [pasteText, setPasteText] = useState(currentItems.join("\n"));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -124,7 +124,7 @@ export default function EditListModal({
           )}
 
           {mode === "rows" ? (
-            <div className="space-y-2">
+            <div className="space-y-2 overflow-y-auto pr-1" style={{ maxHeight: 280 }}>
               {rows.map((row, i) => (
                 <div key={i} className="flex items-center gap-2">
                   <input
