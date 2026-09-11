@@ -464,12 +464,13 @@ export default function GenerateSequencePanel({
                         const img = imagesById[id];
                         if (!img) continue;
                         const key = `${id}-${Date.now()}`;
+                        const label = `${img.subject}${img.variation_text ? ` — ${img.variation_text}` : ""}`;
                         if (blockedIds.includes(id)) {
-                          newRows.push({ key, filename: img.filename, tone: "blocked", message: "Already published in every language — not added" });
+                          newRows.push({ key, filename: label, tone: "blocked", message: "Already published in every language — skipped" });
                         } else if (warnedIds.includes(id)) {
-                          newRows.push({ key, filename: img.filename, tone: "added", message: "Added — this match already has published content, consider updating SEO" });
+                          newRows.push({ key, filename: label, tone: "added", message: "Added — this match already has published content, consider updating SEO" });
                         } else {
-                          newRows.push({ key, filename: img.filename, tone: "added", message: "Added to your Publish set" });
+                          newRows.push({ key, filename: label, tone: "added", message: "Added to your Publish set" });
                         }
                       }
                     } catch {

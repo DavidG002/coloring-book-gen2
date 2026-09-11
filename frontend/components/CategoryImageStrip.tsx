@@ -107,13 +107,47 @@ export default function CategoryImageStrip({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const selectedLoadedRef = useRef(false);
+
+  useEffect(() => {
+    selectedLoadedRef.current = false;
+    const timer = setTimeout(() => {
+      try {
+        const saved = window.localStorage.getItem(`image-selection-${categoryId}`);
+        if (saved) setSelected(new Set(JSON.parse(saved)));
+      } catch {
+        // corrupted/old data — ignore, start fresh
+      } finally {
+        selectedLoadedRef.current = true;
+      }
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [categoryId]);
+
+  useEffect(() => {
+    if (!selectedLoadedRef.current) return;
+    window.localStorage.setItem(`image-selection-${categoryId}`, JSON.stringify(Array.from(selected)));
+  }, [selected, categoryId]);
 
   useEffect(() => {
     onSelectionChanged?.(Array.from(selected));
   }, [selected, onSelectionChanged]);
 
+  const clearTriggerBaselineRef = useRef<number | undefined>(undefined);
   useEffect(() => {
     if (clearSelectionTrigger === undefined) return;
+    if (clearTriggerBaselineRef.current === undefined) {
+      // Record the very first value we ever see as the baseline —
+      // React Strict Mode double-invokes this effect in dev, so a
+      // simple "have I mounted" boolean isn't enough (the second
+      // invocation would wrongly treat the still-unchanged value as a
+      // real, new trigger). Comparing against the real baseline value
+      // is safe regardless of how many times the effect re-fires with
+      // that same starting value.
+      clearTriggerBaselineRef.current = clearSelectionTrigger;
+      return;
+    }
+    if (clearSelectionTrigger === clearTriggerBaselineRef.current) return;
     const timer = setTimeout(() => setSelected(new Set()), 0);
     return () => clearTimeout(timer);
   }, [clearSelectionTrigger]);
