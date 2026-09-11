@@ -40,6 +40,36 @@ def list_job_images(category_name: str, job_id: int, db: Session = Depends(get_d
     ]
 
 
+@router.get("/images-by-ids", response_model=list[ReviewImage])
+def get_images_by_ids(ids: str, db: Session = Depends(get_db)):
+    """Resolves a comma-separated list of real image IDs into their full
+    details — used by the Publish page's selected-images preview, which
+    only carries raw IDs forward from Generate's selection checkboxes."""
+    from models import GenerationImage
+    try:
+        id_list = [int(i) for i in ids.split(",") if i.strip()]
+    except ValueError:
+        raise HTTPException(status_code=400, detail="ids must be a comma-separated list of integers")
+
+    images = db.query(GenerationImage).filter(GenerationImage.id.in_(id_list)).all()
+    by_id = {img.id: img for img in images}
+    # Preserve the caller's original order, silently skipping any ID that
+    # no longer exists (e.g. deleted since selection).
+    ordered = [by_id[i] for i in id_list if i in by_id]
+
+    return [
+        ReviewImage(
+            id=img.id,
+            subject=img.subject,
+            variation_number=img.variation_number,
+            variation_text=img.variation_text,
+            status=img.status,
+            filename=os.path.basename(img.file_path),
+        )
+        for img in ordered
+    ]
+
+
 @router.get("/image/{image_id}/file")
 def serve_image_file(image_id: int, db: Session = Depends(get_db)):
     from models import GenerationImage

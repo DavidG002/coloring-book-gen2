@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { ChevronDown, Image as ImageIcon, Eye, X, ChevronLeft, ChevronRight } from "lucide-react";
 
-
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 interface ReviewJob {
@@ -20,6 +19,13 @@ interface ReviewImage {
   variation_text: string | null;
   status: string;
   filename: string;
+}
+
+interface DateGroup {
+  dateKey: string;
+  dateLabel: string;
+  jobs: ReviewJob[];
+  totalImages: number;
 }
 
 async function getJobs(categoryName: string): Promise<ReviewJob[]> {
@@ -40,11 +46,38 @@ function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
+function formatTimeOnly(iso: string): string {
+  return new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
+function groupJobsByDate(jobs: ReviewJob[]): DateGroup[] {
+  const groups = new Map<string, ReviewJob[]>();
+  for (const job of jobs) {
+    const date = new Date(job.created_at);
+    const dateKey = date.toDateString();
+    if (!groups.has(dateKey)) groups.set(dateKey, []);
+    groups.get(dateKey)!.push(job);
+  }
+  return Array.from(groups.entries())
+    .map(([dateKey, groupJobs]) => ({
+      dateKey,
+      dateLabel: new Date(groupJobs[0].created_at).toLocaleDateString(undefined, {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+      }),
+      jobs: groupJobs,
+      totalImages: groupJobs.reduce((sum, j) => sum + j.completed_images, 0),
+    }))
+    .sort((a, b) => new Date(b.jobs[0].created_at).getTime() - new Date(a.jobs[0].created_at).getTime());
+}
+
 export default function BatchHistoryPanel({ categoryName, refreshKey }: { categoryName: string; refreshKey?: number }) {
   const [open, setOpen] = useState(false);
   const [jobs, setJobs] = useState<ReviewJob[]>([]);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [expandedDate, setExpandedDate] = useState<string | null>(null);
   const [expandedJobId, setExpandedJobId] = useState<number | null>(null);
   const [jobImages, setJobImages] = useState<Record<number, ReviewImage[]>>({});
   const [loadingJobId, setLoadingJobId] = useState<number | null>(null);
@@ -70,6 +103,10 @@ export default function BatchHistoryPanel({ categoryName, refreshKey }: { catego
     return () => clearTimeout(timer);
   }, [open, loaded, categoryName]);
 
+  function toggleDate(dateKey: string) {
+    setExpandedDate((prev) => (prev === dateKey ? null : dateKey));
+  }
+
   async function toggleJob(jobId: number) {
     if (expandedJobId === jobId) {
       setExpandedJobId(null);
@@ -88,6 +125,8 @@ export default function BatchHistoryPanel({ categoryName, refreshKey }: { catego
       }
     }
   }
+
+  const dateGroups = groupJobsByDate(jobs);
 
   return (
     <div className="mx-7 mb-5 rounded-xl overflow-hidden" style={{ border: "1px solid var(--pencil-light)", background: "var(--paper)" }}>
@@ -112,103 +151,130 @@ export default function BatchHistoryPanel({ categoryName, refreshKey }: { catego
             <p className="text-sm px-4 py-4" style={{ color: "var(--pencil)" }}>
               Loading batch history...
             </p>
-          ) : jobs.length === 0 ? (
+          ) : dateGroups.length === 0 ? (
             <p className="text-sm px-4 py-4" style={{ color: "var(--pencil)" }}>
               No past batches yet.
             </p>
           ) : (
             <div>
-              {jobs.map((job) => (
-                <div key={job.job_id} style={{ borderBottom: "1px solid var(--pencil-light)" }}>
-                  <button onClick={() => toggleJob(job.job_id)} className="w-full flex items-center justify-between px-4 py-3">
-                    <div className="flex items-center gap-3 text-left">
-                      <span
-                        className="w-7 h-7 rounded-md flex items-center justify-center shrink-0"
-                        style={{ background: "var(--teal-tint)", color: "var(--teal-dark)" }}
-                      >
-                        <ImageIcon size={13} />
-                      </span>
-                      <div>
-                        <p className="text-xs font-medium m-0" style={{ color: "var(--ink)" }}>
-                          Batch #{job.job_id}
-                        </p>
-                        <p className="text-[10px] m-0 mt-0.5" style={{ color: "var(--pencil)" }}>
-                          {formatDateTime(job.created_at)} · {job.completed_images} of {job.total_images} images
-                        </p>
-                      </div>
+              {dateGroups.map((group) => (
+                <div key={group.dateKey} style={{ borderBottom: "1px solid var(--pencil-light)" }}>
+                  <button onClick={() => toggleDate(group.dateKey)} className="w-full flex items-center justify-between px-4 py-3">
+                    <div className="text-left">
+                      <p className="text-xs font-bold m-0" style={{ color: "var(--ink)" }}>
+                        {group.dateLabel}
+                      </p>
+                      <p className="text-[10px] m-0 mt-0.5" style={{ color: "var(--pencil)" }}>
+                        {group.jobs.length} {group.jobs.length === 1 ? "batch" : "batches"} · {group.totalImages} images
+                      </p>
                     </div>
                     <ChevronDown
-                      size={14}
+                      size={15}
                       style={{
                         color: "var(--pencil)",
-                        transform: expandedJobId === job.job_id ? "rotate(180deg)" : "rotate(0deg)",
+                        transform: expandedDate === group.dateKey ? "rotate(180deg)" : "rotate(0deg)",
                         transition: "transform 0.2s",
                       }}
                     />
                   </button>
 
-                  {expandedJobId === job.job_id && (
-                    <div className="px-4 pb-4">
-                      {loadingJobId === job.job_id ? (
-                        <p className="text-xs" style={{ color: "var(--pencil)" }}>
-                          Loading images...
-                        </p>
-                      ) : (jobImages[job.job_id]?.length ?? 0) === 0 ? (
-                        <p className="text-xs" style={{ color: "var(--pencil)" }}>
-                          No images recorded for this batch.
-                        </p>
-                      ) : (
-                        <div className="grid gap-1.5 rounded-lg" style={{ padding: "10px 12px", background: "var(--paper)", border: "1px solid var(--pencil-light)" }}>
-                          {jobImages[job.job_id].map((img) => {
-                            const rejected = img.status === "rejected";
-                            return (
-                              <div
-                                key={img.id}
-                                className="flex items-center justify-between gap-3 rounded"
-                                style={{
-                                  padding: "8px 10px",
-                                  background: rejected ? "var(--coral-light)" : "var(--teal-tint)",
-                                }}
+                  {expandedDate === group.dateKey && (
+                    <div style={{ borderTop: "1px solid var(--pencil-light)" }}>
+                      {group.jobs.map((job) => (
+                        <div key={job.job_id} className="pl-3" style={{ borderBottom: "1px solid var(--pencil-light)" }}>
+                          <button onClick={() => toggleJob(job.job_id)} className="w-full flex items-center justify-between px-4 py-3">
+                            <div className="flex items-center gap-3 text-left">
+                              <span
+                                className="w-7 h-7 rounded-md flex items-center justify-center shrink-0"
+                                style={{ background: "var(--teal-tint)", color: "var(--teal-dark)" }}
                               >
-                                <div className="min-w-0 flex-1">
-                                  <p
-                                    className="text-[10px] m-0 truncate"
-                                    style={{
-                                      fontFamily: "ui-monospace, monospace",
-                                      color: rejected ? "var(--coral-dark)" : "var(--teal-dark)",
-                                    }}
-                                  >
-                                    {img.filename}
-                                  </p>
-                                  <p className="text-[10px] m-0 mt-0.5 capitalize" style={{ color: "var(--pencil)" }}>
-                                    {img.subject} — {img.variation_text ?? "no variation recorded"}
-                                  </p>
-                                </div>
-                                {rejected ? (
-                                  <span
-                                    className="shrink-0 px-2 py-1 rounded text-[9px] font-bold"
-                                    style={{ background: "var(--coral)", color: "white" }}
-                                  >
-                                    Rejected
-                                  </span>
-                                  ) : (
-                                    <button
-                                      onClick={() => {
-                                        const approvedInBatch = jobImages[job.job_id].filter((i) => i.status !== "rejected");
-                                        const idx = approvedInBatch.findIndex((i) => i.id === img.id);
-                                        setLightbox({ jobId: job.job_id, index: idx });
-                                      }}
-                                      className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded text-[9px] font-bold"
-                                      style={{ border: "1px solid var(--teal)", color: "var(--teal-dark)" }}
-                                    >
-                                      View <Eye size={10} />
-                                    </button>
-                                  )}
+                                <ImageIcon size={13} />
+                              </span>
+                              <div>
+                                <p className="text-xs font-medium m-0" style={{ color: "var(--ink)" }}>
+                                  Batch #{job.job_id}
+                                </p>
+                                <p className="text-[10px] m-0 mt-0.5" style={{ color: "var(--pencil)" }}>
+                                  {formatTimeOnly(job.created_at)} · {job.completed_images} of {job.total_images} images
+                                </p>
                               </div>
-                            );
-                          })}
+                            </div>
+                            <ChevronDown
+                              size={14}
+                              style={{
+                                color: "var(--pencil)",
+                                transform: expandedJobId === job.job_id ? "rotate(180deg)" : "rotate(0deg)",
+                                transition: "transform 0.2s",
+                              }}
+                            />
+                          </button>
+
+                          {expandedJobId === job.job_id && (
+                            <div className="px-4 pb-4">
+                              {loadingJobId === job.job_id ? (
+                                <p className="text-xs" style={{ color: "var(--pencil)" }}>
+                                  Loading images...
+                                </p>
+                              ) : (jobImages[job.job_id]?.length ?? 0) === 0 ? (
+                                <p className="text-xs" style={{ color: "var(--pencil)" }}>
+                                  No images recorded for this batch.
+                                </p>
+                              ) : (
+                                <div className="grid gap-1.5 rounded-lg" style={{ padding: "10px 12px", background: "var(--paper)", border: "1px solid var(--pencil-light)" }}>
+                                  {jobImages[job.job_id].map((img) => {
+                                    const rejected = img.status === "rejected";
+                                    return (
+                                      <div
+                                        key={img.id}
+                                        className="flex items-center justify-between gap-3 rounded"
+                                        style={{
+                                          padding: "8px 10px",
+                                          background: rejected ? "var(--coral-light)" : "var(--teal-tint)",
+                                        }}
+                                      >
+                                        <div className="min-w-0 flex-1">
+                                          <p
+                                            className="text-[10px] m-0 truncate"
+                                            style={{
+                                              fontFamily: "ui-monospace, monospace",
+                                              color: rejected ? "var(--coral-dark)" : "var(--teal-dark)",
+                                            }}
+                                          >
+                                            {img.filename}
+                                          </p>
+                                          <p className="text-[10px] m-0 mt-0.5 capitalize" style={{ color: "var(--pencil)" }}>
+                                            {img.subject} — {img.variation_text ?? "no variation recorded"}
+                                          </p>
+                                        </div>
+                                        {rejected ? (
+                                          <span
+                                            className="shrink-0 px-2 py-1 rounded text-[9px] font-bold"
+                                            style={{ background: "var(--coral)", color: "white" }}
+                                          >
+                                            Rejected
+                                          </span>
+                                        ) : (
+                                          <button
+                                            onClick={() => {
+                                              const approvedInBatch = jobImages[job.job_id].filter((i) => i.status !== "rejected");
+                                              const idx = approvedInBatch.findIndex((i) => i.id === img.id);
+                                              setLightbox({ jobId: job.job_id, index: idx });
+                                            }}
+                                            className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded text-[9px] font-bold"
+                                            style={{ border: "1px solid var(--teal)", color: "var(--teal-dark)" }}
+                                          >
+                                            View <Eye size={10} />
+                                          </button>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
-                      )}
+                      ))}
                     </div>
                   )}
                 </div>

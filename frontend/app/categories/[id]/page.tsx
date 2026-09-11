@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { getCategory, getTranslations, ApiError, type Category } from "@/lib/api";
 import CategorySequenceShell, { type StepId } from "@/components/CategorySequenceShell";
@@ -28,6 +28,27 @@ export default function CategoryDetailPage() {
   const [publishPendingReview, setPublishPendingReview] = useState<string[]>([]);
   const [publishCheckTrigger, setPublishCheckTrigger] = useState(0);
   const [publishSetImageIds, setPublishSetImageIds] = useState<number[] | null>(null);
+  const publishSetLoadedRef = useRef(false);
+
+  useEffect(() => {
+    publishSetLoadedRef.current = false;
+    const timer = setTimeout(() => {
+      try {
+        const saved = window.localStorage.getItem(`publish-set-${categoryId}`);
+        if (saved) setPublishSetImageIds(JSON.parse(saved));
+      } catch {
+        // corrupted/old data — ignore, start fresh
+      } finally {
+        publishSetLoadedRef.current = true;
+      }
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [categoryId]);
+
+  useEffect(() => {
+    if (!publishSetLoadedRef.current) return;
+    window.localStorage.setItem(`publish-set-${categoryId}`, JSON.stringify(publishSetImageIds ?? []));
+  }, [publishSetImageIds, categoryId]);
 
   useEffect(() => {
     if (!category) return;
@@ -236,10 +257,11 @@ export default function CategoryDetailPage() {
                 publishNeedsAttention={publishNeedsAttention}
                 onGoToPublish={() => goToStep("publish")}
                 onPublishStatusChanged={() => setPublishCheckTrigger((n) => n + 1)}
+                publishSetImageIds={publishSetImageIds ?? []}
                 onBuildPublishSet={(imageIds) => {
-                  setPublishSetImageIds(imageIds);
-                  goToStep("publish");
+                  setPublishSetImageIds((prev) => Array.from(new Set([...(prev ?? []), ...imageIds])));
                 }}
+                onReviewPublishSet={() => goToStep("publish")}
               />
             )}
             {activeStep === "language" && (
@@ -261,6 +283,9 @@ export default function CategoryDetailPage() {
                 onGoToLanguage={() => goToStep("language")}
                 onSeoChanged={() => setPublishCheckTrigger((n) => n + 1)}
                 publishSetImageIds={publishSetImageIds}
+                onRemoveFromPublishSet={(imageId) => {
+                  setPublishSetImageIds((prev) => (prev ?? []).filter((id) => id !== imageId));
+                }}
               />
             )}
             {activeStep === "wordpress" && (

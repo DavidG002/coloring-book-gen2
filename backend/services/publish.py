@@ -42,7 +42,13 @@ def _variation_text_for_number(variations_sorted: list, variation_number: int) -
 
 def _already_published_source_paths(db: Session, category_name: str, lang: str) -> set[str]:
     """Every source_path that has appeared in any past publish run for this
-    category+language, across all runs — used to mark files as new vs repeat."""
+    category+language, across all runs — used to mark files as new vs repeat.
+    NOTE: this is genuinely per-FILE, not per-pairing — see
+    is_pairing_published() below for the real, per-pairing check.
+    Retained as-is since is_new (per-file) still has a real, honest
+    meaning: "has THIS EXACT picture been copied into a publish run
+    before" — useful for avoiding literal re-copies of the same file,
+    separate from the pairing-level duplicate-content question."""
     rows = (
         db.query(PublishedFile.source_path)
         .join(PublishRun, PublishedFile.run_id == PublishRun.id)
@@ -52,7 +58,55 @@ def _already_published_source_paths(db: Session, category_name: str, lang: str) 
     return {r[0] for r in rows}
 
 
-def build_publish_plan(db: Session, category_name: str, lang: str, only_new: bool = False) -> dict:
+def is_pairing_published(db: Session, category_id: int, subject_name: str, variation_text: str, lang: str) -> bool:
+    """Real, per-PAIRING check: has ANY image of this exact (subject,
+    variation) combination — regardless of which specific file — ever
+    actually been pushed live to WordPress in this language?
+
+    Checks WordPressPublishedItem — confirmed via real testing
+    (2026-09-11) to be the genuine, real-world source of truth for
+    'is this actually live', since real pushes go through this table,
+    not the separate local-build PublishedFile/PublishRun tracking.
+    That local-build system may need consolidating with this one later
+    (logged separately) — for now, this is the one that matches reality."""
+    from models import WordPressPublishedItem, GenerationImage
+
+    match = (
+        db.query(WordPressPublishedItem.id)
+        .join(GenerationImage, GenerationImage.file_path == WordPressPublishedItem.source_path)
+        .filter(
+            WordPressPublishedItem.category_id == category_id,
+            WordPressPublishedItem.lang == lang,
+            GenerationImage.subject == subject_name,
+            GenerationImage.variation_text == variation_text,
+        )
+        .first()
+    )
+    return match is not None
+
+def is_exact_file_published_in_all_langs(db: Session, source_path: str, category_id: int, langs: list[str]) -> bool:
+    """Stricter than is_pairing_published — checks whether THIS EXACT file
+    (not just any file of its pairing) is already live in every given
+    language. True means genuinely nothing new to offer anywhere; the
+    caller should block adding it, not just warn."""
+    from models import WordPressPublishedItem
+
+    for lang in langs:
+        match = (
+            db.query(WordPressPublishedItem.id)
+            .filter(
+                WordPressPublishedItem.category_id == category_id,
+                WordPressPublishedItem.lang == lang,
+                WordPressPublishedItem.source_path == source_path,
+            )
+            .first()
+        )
+        if not match:
+            return False
+    return True
+
+
+def build_publish_plan(db: Session, category_name: str, lang: str, only_new: bool = False, image_ids: set[int] | None = None) -> dict:
     category = db.query(Category).filter(Category.name == category_name).first()
     if not category:
         raise ValueError(f"Category '{category_name}' not found")
@@ -94,11 +148,19 @@ def build_publish_plan(db: Session, category_name: str, lang: str, only_new: boo
                 .filter(GenerationImage.file_path == source_path)
                 .first()
             )
+
+            # When scoped to a specific publish set, only include files
+            # whose real GenerationImage record was actually selected —
+            # everything else (older approved-but-never-selected files)
+            # is correctly excluded, rather than defaulting to "every
+            # approved file in the category."
+            if image_ids is not None and (not recorded or recorded.id not in image_ids):
+                continue
+
             if recorded and recorded.variation_text:
                 variation_text_en = recorded.variation_text
             else:
                 variation_text_en = _variation_text_for_number(variations_sorted, variation_number)
-
             translated_variant = variation_map.get(variation_text_en, "")
 
             name_raw = translation.filename_template.format(
@@ -147,12 +209,12 @@ def build_publish_plan(db: Session, category_name: str, lang: str, only_new: boo
     }
 
 
-def execute_publish(db: Session, category_name: str, lang: str, only_new: bool = False) -> dict:
+def execute_publish(db: Session, category_name: str, lang: str, only_new: bool = False, image_ids: set[int] | None = None) -> dict:
     category = db.query(Category).filter(Category.name == category_name).first()
     if not category:
         raise ValueError(f"Category '{category_name}' not found")
 
-    plan = build_publish_plan(db, category_name, lang, only_new=only_new)
+    plan = build_publish_plan(db, category_name, lang, only_new=only_new, image_ids=image_ids)
     files_info = plan["files"]
 
     publish_category_dir = os.path.join(PUBLISH_DIR, lang, category_name)

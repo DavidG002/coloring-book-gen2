@@ -92,21 +92,31 @@ export default function CategoryImageStrip({
   categoryName,
   refreshKey,
   onSelectionChanged,
+  publishSetImageIds,
+  clearSelectionTrigger,
 }: {
   categoryId: number;
   categoryName: string;
   refreshKey: number;
   onSelectionChanged?: (imageIds: number[]) => void;
+  publishSetImageIds?: number[];
+  clearSelectionTrigger?: number;
 }) {
 
   const [images, setImages] = useState<CategoryImage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-    const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [selected, setSelected] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     onSelectionChanged?.(Array.from(selected));
   }, [selected, onSelectionChanged]);
+
+  useEffect(() => {
+    if (clearSelectionTrigger === undefined) return;
+    const timer = setTimeout(() => setSelected(new Set()), 0);
+    return () => clearTimeout(timer);
+  }, [clearSelectionTrigger]);
   
   const [busyId, setBusyId] = useState<number | null>(null);
   const [bulkRejecting, setBulkRejecting] = useState(false);
@@ -116,6 +126,8 @@ export default function CategoryImageStrip({
   const [sortBy, setSortBy] = useState<"oldest" | "newest" | "subject">("oldest");
   const [filterStatus, setFilterStatus] = useState<"all" | StatusKey>("all");
   const [filterBatch, setFilterBatch] = useState<"all" | number>("all");
+  const [filterDate, setFilterDate] = useState<"all" | string>("all");
+  const [showOnlyPublishSet, setShowOnlyPublishSet] = useState(false);
   const [confirming, setConfirming] = useState<{ id: number; action: "reject" | "regenerate" } | null>(null);
 
   const scrollElRef = useRef<HTMLDivElement | null>(null);
@@ -303,10 +315,35 @@ async function doRegenerate(id: number) {
   }
 }
 
-  const batchIds = Array.from(new Set(images.map((img) => img.job_id))).sort((a, b) => b - a);
+  
+  const subjectsInImages = Array.from(new Set(images.map((img) => img.subject))).sort();
+  const [filterSubject, setFilterSubject] = useState<"all" | string>("all");
+
+  const batchesByDate = (() => {
+    const dateToBatchIds = new Map<string, Set<number>>();
+    for (const img of images) {
+      const dateKey = new Date(img.created_at).toDateString();
+      if (!dateToBatchIds.has(dateKey)) dateToBatchIds.set(dateKey, new Set());
+      dateToBatchIds.get(dateKey)!.add(img.job_id);
+    }
+    return Array.from(dateToBatchIds.entries())
+      .map(([dateKey, ids]) => ({
+        dateKey,
+        dateLabel: new Date(dateKey).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }),
+        batchIds: Array.from(ids).sort((a, b) => b - a),
+      }))
+      .sort((a, b) => new Date(b.dateKey).getTime() - new Date(a.dateKey).getTime());
+  })();
+  
 
   const filteredImages = images.filter((img) => {
+    if (showOnlyPublishSet) {
+
+      return publishSetImageIds?.includes(img.id) ?? false;
+    }
     if (filterStatus !== "all" && statusKeyFor(img) !== filterStatus) return false;
+    if (filterSubject !== "all" && img.subject !== filterSubject) return false;
+    if (filterDate !== "all" && new Date(img.created_at).toDateString() !== filterDate) return false;
     if (filterBatch !== "all" && img.job_id !== filterBatch) return false;
     return true;
   });
@@ -334,7 +371,7 @@ async function doRegenerate(id: number) {
   }
 
   return (
-    <div className="mx-7 my-5 rounded-xl overflow-hidden" style={{ border: "1px solid var(--pencil-light)", background: "var(--paper)" }}>
+    <div className="mx-4 my-5 rounded-xl overflow-hidden" style={{ border: "1px solid var(--pencil-light)", background: "var(--paper)" }}>
       <div className="flex items-center justify-between gap-3 flex-wrap px-4 py-3.5" style={{ borderBottom: minimized ? "none" : "1px solid var(--pencil-light)" }}>
         <div>
           <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--pencil)", letterSpacing: "0.1em" }}>
@@ -344,12 +381,19 @@ async function doRegenerate(id: number) {
             {sortedImages.length} of {images.length} {images.length === 1 ? "page" : "pages"}
           </p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+         <div className="flex items-center gap-2 flex-nowrap overflow-x-auto">
           <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value as typeof filterStatus)}
+            value={showOnlyPublishSet ? "in_publish_set" : filterStatus}
+            onChange={(e) => {
+              if (e.target.value === "in_publish_set") {
+                setShowOnlyPublishSet(true);
+              } else {
+                setShowOnlyPublishSet(false);
+                setFilterStatus(e.target.value as typeof filterStatus);
+              }
+            }}
             className="px-2 py-2 rounded-md text-[10px] font-bold outline-none"
-            style={{ border: "1px solid var(--pencil-light)", color: "var(--pencil)", background: "var(--canvas)" }}
+            style={{ width: 118, border: "1px solid var(--pencil-light)", color: "var(--pencil)", background: "var(--canvas)" }}
           >
             <option value="all">All statuses</option>
             <option value="not_published">Not published</option>
@@ -357,20 +401,54 @@ async function doRegenerate(id: number) {
             <option value="draft">Draft on site</option>
             <option value="live">Live on site</option>
             <option value="rejected">Rejected</option>
+            {publishSetImageIds && publishSetImageIds.length > 0 && (
+             <option value="in_publish_set">Publish list</option>
+            )}
           </select>
           <select
-            value={filterBatch}
-            onChange={(e) => setFilterBatch(e.target.value === "all" ? "all" : parseInt(e.target.value))}
-            className="px-2 py-2 rounded-md text-[10px] font-bold outline-none"
-            style={{ border: "1px solid var(--pencil-light)", color: "var(--pencil)", background: "var(--canvas)" }}
+            value={filterSubject}
+            onChange={(e) => setFilterSubject(e.target.value)}
+            className="px-2 py-2 rounded-md text-[10px] font-bold outline-none capitalize"
+            style={{ width: 118, border: "1px solid var(--pencil-light)", color: "var(--pencil)", background: "var(--canvas)" }}
           >
-            <option value="all">All batches</option>
-            {batchIds.map((id) => (
-              <option key={id} value={id}>
-                Batch #{id}
+            <option value="all">All subjects</option>
+            {subjectsInImages.map((s) => (
+              <option key={s} value={s} className="capitalize">
+                {s}
               </option>
             ))}
           </select>
+            <select
+            value={filterDate}
+            onChange={(e) => {
+              setFilterDate(e.target.value);
+              setFilterBatch("all");
+            }}
+            className="px-2 py-2 rounded-md text-[10px] font-bold outline-none"
+            style={{ width: 130, border: "1px solid var(--pencil-light)", color: "var(--pencil)", background: "var(--canvas)" }}
+          >
+            <option value="all">All dates</option>
+            {batchesByDate.map((d) => (
+              <option key={d.dateKey} value={d.dateKey}>
+                {d.dateLabel} ({d.batchIds.length})
+              </option>
+            ))}
+          </select>
+          {filterDate !== "all" && (
+            <select
+              value={filterBatch}
+              onChange={(e) => setFilterBatch(e.target.value === "all" ? "all" : parseInt(e.target.value))}
+              className="px-2 py-2 rounded-md text-[10px] font-bold outline-none"
+              style={{ width: 105, border: "1px solid var(--pencil-light)", color: "var(--pencil)", background: "var(--canvas)" }}
+            >
+              <option value="all">Daily batches</option>
+              {batchesByDate.find((d) => d.dateKey === filterDate)?.batchIds.map((id) => (
+                <option key={id} value={id}>
+                  Batch #{id}
+                </option>
+              ))}
+            </select>
+          )}
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
@@ -382,16 +460,9 @@ async function doRegenerate(id: number) {
             <option value="subject">By subject</option>
           </select>
           <button
-            onClick={() => setLightboxIndex(sortedImages.length - 1)}
-            className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-md text-[10px] font-bold"
-            style={{ border: "1px solid var(--pencil-light)", color: "var(--teal-dark)" }}
-          >
-            <Expand size={13} /> Full preview
-          </button>
-          <button
             onClick={() => setMinimized((v) => !v)}
-            className="w-8 h-8 flex items-center justify-center rounded-md"
-            style={{ border: "1px solid var(--pencil-light)", color: "var(--pencil)" }}
+            className="w-8 h-8 flex items-center justify-center rounded-md ml-auto"
+            style={{ border: "1px solid var(--tone-blue)", color: "var(--tone-blue)", background: "#eef2f5" }}
             aria-label={minimized ? "Expand" : "Minimize"}
           >
             {minimized ? <Maximize2 size={13} /> : <Minimize2 size={13} />}
@@ -399,31 +470,58 @@ async function doRegenerate(id: number) {
         </div>
       </div>
       {!minimized && (
-        <div className="flex items-center gap-2 flex-wrap px-4 py-2.5" style={{ borderBottom: "1px solid var(--pencil-light)" }}>
-          <button
-            onClick={() => setSelected(new Set(sortedImages.filter((img) => img.status !== "rejected").map((img) => img.id)))}
-            className="text-[10px] font-bold"
-            style={{ color: "var(--teal)" }}
-          >
-            Select all
-          </button>
-          {selected.size > 0 && (
+            <div className="flex items-center justify-between gap-2 flex-nowrap overflow-x-auto px-4 py-2.5 relative" style={{ borderBottom: "1px solid var(--pencil-light)" }}>
+              <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => setSelected(new Set(sortedImages.filter((img) => img.status !== "rejected").map((img) => img.id)))}
+              className="text-[10px] font-bold"
+              style={{ color: "var(--teal)" }}
+            >
+              Select all
+            </button>
             <button
               onClick={() => setSelected(new Set())}
               className="text-[10px] font-bold"
-              style={{ color: "var(--pencil)" }}
+              style={{ color: "var(--pencil)", visibility: selected.size > 0 ? "visible" : "hidden" }}
             >
               Clear selection
             </button>
-          )}
+            {publishSetImageIds && publishSetImageIds.length > 0 && (
+              <button
+                onClick={() => setShowOnlyPublishSet((v) => !v)}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold ml-2"
+                style={
+                  showOnlyPublishSet
+                    ? { background: "var(--tone-lavender)", color: "white" }
+                    : { border: "1px solid var(--tone-lavender)", color: "var(--tone-lavender)" }
+                }
+              >
+                Publish list
+              </button>
+            )}
+          </div>
+          <button
+            onClick={() => {
+              if (selected.size > 0) {
+                const firstSelectedIndex = sortedImages.findIndex((img) => selected.has(img.id));
+                setLightboxIndex(firstSelectedIndex >= 0 ? firstSelectedIndex : sortedImages.length - 1);
+              } else {
+                setLightboxIndex(sortedImages.length - 1);
+              }
+            }}
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold absolute left-1/2"
+            style={{ transform: "translateX(-50%)", border: "1px solid var(--pencil-light)", color: "var(--teal-dark)" }}
+          >
+            <Expand size={11} /> Full preview
+          </button>
           {selected.size > 0 && !bulkRejectPicker && (
             <button
               onClick={() => setBulkRejectPicker(true)}
               disabled={bulkRejecting}
-              className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-md text-[10px] font-bold disabled:opacity-60"
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold disabled:opacity-60"
               style={{ border: "1px solid var(--coral)", color: "var(--coral-dark)" }}
             >
-              <Trash2 size={13} /> {bulkRejecting ? "Rejecting..." : `Reject ${selected.size} selected`}
+              <Trash2 size={11} /> {bulkRejecting ? "Rejecting..." : `Reject ${selected.size} selected`}
             </button>
           )}
           {selected.size > 0 && bulkRejectPicker && (
@@ -463,7 +561,7 @@ async function doRegenerate(id: number) {
 
       {!minimized && (
         <div className="relative group">
-          <div ref={scrollRef} className="flex gap-3 p-4 overflow-x-auto scroll-smooth" style={{ scrollbarWidth: "thin" }}>
+            <div ref={scrollRef} className="flex gap-3 p-3 overflow-x-auto scroll-smooth" style={{ scrollbarWidth: "thin" }}>
             {sortedImages.length === 0 && (
               <p className="text-sm py-6" style={{ color: "var(--pencil)" }}>
                 No images match the current filters.
@@ -477,12 +575,13 @@ async function doRegenerate(id: number) {
               const isRejected = img.status === "rejected";
               const confirmingRegen = confirming?.id === img.id && confirming.action === "regenerate";
               const isPickingReason = rejectingId === img.id;
+              const inPublishSet = publishSetImageIds?.includes(img.id) ?? false;
               return (
                 <div
                   key={img.id}
                   className="flex-shrink-0 rounded-lg overflow-hidden relative"
                   style={{
-                    width: 220,
+                    width: 260,
                     border: `1.5px solid ${isSelected ? "var(--teal)" : "var(--pencil-light)"}`,
                     boxShadow: isFlashing ? "0 0 0 3px var(--teal)" : "none",
                     opacity: isRejected ? 0.55 : 1,
@@ -494,8 +593,9 @@ async function doRegenerate(id: number) {
                     onClick={() => toggleSelected(img.id)}
                     className="absolute top-2 left-2 z-10 w-5 h-5 rounded flex items-center justify-center"
                     style={{
-                      border: `1px solid ${isSelected ? "var(--teal)" : "rgba(255,255,255,0.8)"}`,
-                      background: isSelected ? "var(--teal)" : "rgba(255,255,255,0.85)",
+                      border: `1.5px solid ${isSelected ? "var(--teal)" : "var(--pencil)"}`,
+                      background: isSelected ? "var(--teal)" : "rgba(255,255,255,0.9)",
+                      boxShadow: isSelected ? "none" : "0 1px 3px rgba(28,27,26,0.2)",
                     }}
                   >
                     {isSelected && <Check size={12} color="white" />}
@@ -505,8 +605,8 @@ async function doRegenerate(id: number) {
                     <img
                       src={imageFileUrl(img.id, img.created_at)}
                       alt={`${img.subject} — ${img.variation_text ?? ""}`}
-                      className="w-full object-cover"
-                      style={{ height: 300, background: "var(--tone-sage-bg)" }}
+                      className="w-full object-contain"
+                      style={{ height: 368, background: "var(--canvas)" }}
                     />
                   </button>
 
@@ -515,12 +615,24 @@ async function doRegenerate(id: number) {
                       <p className="text-xs font-medium m-0 capitalize" style={{ color: "var(--ink)" }}>
                         {img.subject}
                       </p>
-                      <span
-                        className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap"
-                        style={{ background: meta.bg, color: meta.fg }}
-                      >
-                        {meta.label}
-                      </span>
+                      <div className="flex flex-col items-end gap-1 shrink-0" style={{ minHeight: 38 }}>
+                        <span
+                          className="px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap"
+                          style={{ background: meta.bg, color: meta.fg }}
+                        >
+                          {meta.label}
+                        </span>
+                        <span
+                          className="px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap"
+                          style={{
+                            background: "var(--tone-lavender-bg)",
+                            color: "var(--tone-lavender)",
+                            visibility: inPublishSet ? "visible" : "hidden",
+                          }}
+                        >
+                          Publish list
+                        </span>
+                      </div>
                     </div>
                     <p className="text-[10px] m-0 mb-1.5 truncate" style={{ color: "var(--pencil)" }}>
                       {img.variation_text ?? "No variation recorded"}

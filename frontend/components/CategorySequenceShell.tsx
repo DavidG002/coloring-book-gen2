@@ -93,7 +93,7 @@ const stepIndex = activeStep === "wordpress" ? STEPS.length - 1 : mainStepIndex;
 
       <main
         className="grid items-start justify-center mx-auto"
-        style={{ gridTemplateColumns: "280px minmax(0, 720px)", gap: 72, padding: "58px 6vw 90px" }}
+        style={{ gridTemplateColumns: "280px minmax(0, 900px)", gap: 72, padding: "58px 6vw 90px" }}
       >
         <aside>
           <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--pencil)", letterSpacing: "0.12em" }}>

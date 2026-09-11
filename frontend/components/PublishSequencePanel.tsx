@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Send, RotateCw } from "lucide-react";
+import { Send, RotateCw, ArrowUp, ArrowDown, X } from "lucide-react";
 import SequencePanel from "./SequencePanel";
 import LanguagePills from "@/components/LanguagePills";
 import { getTranslations, ApiError, type Translation } from "@/lib/api";
@@ -23,6 +23,18 @@ async function getSeoData(categoryId: number, lang: string): Promise<SeoData> {
 }
 async function markSeoReviewed(categoryId: number, lang: string): Promise<void> {
   await fetch(`${API_BASE_URL}/categories/${categoryId}/seo/${lang}/mark-reviewed`, { method: "POST" }).catch(() => {});
+}
+interface SelectedImageInfo {
+  id: number;
+  subject: string;
+  variation_text: string | null;
+  filename: string;
+}
+async function getImagesByIds(ids: number[]): Promise<SelectedImageInfo[]> {
+  if (ids.length === 0) return [];
+  const res = await fetch(`${API_BASE_URL}/review/images-by-ids?ids=${ids.join(",")}`);
+  if (!res.ok) return [];
+  return res.json();
 }
 async function saveDescription(categoryId: number, lang: string, description: string): Promise<void> {
   await fetch(`${API_BASE_URL}/categories/${categoryId}/seo/${lang}/description`, {
@@ -81,21 +93,21 @@ async function regenerateField(categoryId: number, lang: string, subjectName: st
   return data.value as string;
 }
 
-async function planPublishForLang(category: string, lang: string) {
+async function planPublishForLang(category: string, lang: string, imageIds?: number[]) {
   const res = await fetch(`${API_BASE_URL}/publish/plan`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ category, lang, only_new: true }),
+    body: JSON.stringify({ category, lang, only_new: true, image_ids: imageIds && imageIds.length > 0 ? imageIds : null }),
   });
   const data = await res.json();
   if (!res.ok) throw new ApiError(res.status, data.detail);
   return data as { total_files: number; skipped_subjects: string[] };
 }
-async function runPublishForLang(category: string, lang: string) {
+async function runPublishForLang(category: string, lang: string, imageIds?: number[]) {
   const res = await fetch(`${API_BASE_URL}/publish/run`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ category, lang, only_new: true }),
+    body: JSON.stringify({ category, lang, only_new: true, image_ids: imageIds && imageIds.length > 0 ? imageIds : null }),
   });
   const data = await res.json();
   if (!res.ok) throw new ApiError(res.status, data.detail);
@@ -109,6 +121,7 @@ export default function PublishSequencePanel({
   onGoToLanguage,
   onSeoChanged,
   publishSetImageIds,
+  onRemoveFromPublishSet,
 }: {
   categoryId: number;
   categoryName: string;
@@ -116,10 +129,25 @@ export default function PublishSequencePanel({
   onGoToLanguage: () => void;
   onSeoChanged?: () => void;
   publishSetImageIds?: number[] | null;
+  onRemoveFromPublishSet?: (imageId: number) => void;
 }) {
   const [languages, setLanguages] = useState<string[]>([]);
   const [loadingLangs, setLoadingLangs] = useState(true);
   const [selectedLang, setSelectedLang] = useState("");
+
+  const [selectedImages, setSelectedImages] = useState<SelectedImageInfo[]>([]);
+  const [imagesNewestFirst, setImagesNewestFirst] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!publishSetImageIds || publishSetImageIds.length === 0) {
+        setSelectedImages([]);
+        return;
+      }
+      getImagesByIds(publishSetImageIds).then(setSelectedImages).catch(() => {});
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [publishSetImageIds]);
 
   const [seoData, setSeoData] = useState<SeoData | null>(null);
   const [loadingSeo, setLoadingSeo] = useState(false);
@@ -148,6 +176,7 @@ export default function PublishSequencePanel({
 
   const [regeneratingField, setRegeneratingField] = useState<string | null>(null);
   const [autoSeoBanner, setAutoSeoBanner] = useState<string | null>(null);
+  const [removingId, setRemovingId] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -181,7 +210,7 @@ export default function PublishSequencePanel({
       const skipped: Record<string, string[]> = {};
       for (const lang of languages) {
         try {
-          const plan = await planPublishForLang(categoryName, lang);
+          const plan = await planPublishForLang(categoryName, lang, publishSetImageIds ?? undefined);
           counts[lang] = plan.total_files;
           skipped[lang] = plan.skipped_subjects ?? [];
         } catch {
@@ -199,7 +228,7 @@ export default function PublishSequencePanel({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [categoryName, languages]);
+  }, [categoryName, languages, publishSetImageIds]);
 
   async function handleBuildLanguageSets() {
   setBuilding(true);
@@ -208,7 +237,7 @@ export default function PublishSequencePanel({
   try {
     for (const lang of languages) {
       if ((langFileCounts[lang] ?? 0) === 0) continue;
-      const result = await runPublishForLang(categoryName, lang);
+      const result = await runPublishForLang(categoryName, lang, publishSetImageIds ?? undefined);
       totalPublished += result.published_count;
     }
     setBuiltSummary(`${totalPublished} file${totalPublished === 1 ? "" : "s"} across ${languages.length} language${languages.length === 1 ? "" : "s"}`);
@@ -407,6 +436,187 @@ export default function PublishSequencePanel({
         <p className="text-xs leading-relaxed m-0" style={{ maxWidth: 450, color: "var(--pencil)" }}>
           Write SEO titles and alt text for each generated image, then build your local files and push to WordPress.
         </p>
+      </div>
+
+      {selectedImages.length > 0 && (
+        <div className="mx-6 mb-6 rounded-lg" style={{ padding: "15px 17px", border: "1px solid var(--tone-lavender)", background: "var(--tone-lavender-bg)" }}>
+          <div className="flex items-center justify-between mb-3.5">
+            <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--tone-lavender)", letterSpacing: "0.1em" }}>
+              Selected for publishing ({selectedImages.length})
+            </p>
+            <button
+              onClick={() => setImagesNewestFirst((v) => !v)}
+              className="w-5 h-5 flex items-center justify-center rounded"
+              style={{ color: "var(--tone-lavender)" }}
+              title={imagesNewestFirst ? "Newest on top" : "Oldest on top"}
+            >
+              {imagesNewestFirst ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
+            </button>
+          </div>
+           <div className="grid gap-1.5 overflow-y-auto pr-1" style={{ height: 108, alignContent: "start" }}>
+            {(imagesNewestFirst ? [...selectedImages].reverse() : selectedImages).map((img, i) => (
+              <div
+                key={img.id}
+                className="flex items-center gap-2.5 rounded"
+                style={{ padding: "6px 10px", background: "var(--canvas)", color: "var(--tone-lavender)", fontFamily: "ui-monospace, monospace", fontSize: 10 }}
+              >
+                <b style={{ minWidth: 18, color: "var(--pencil)", fontSize: 9, fontWeight: 500 }}>
+                  {String(i + 1).padStart(2, "0")}
+                </b>
+                <span className="truncate flex-1">{img.filename}</span>
+                {removingId === img.id ? (
+                  <div className="flex items-center gap-1 shrink-0">
+                    <span style={{ color: "var(--coral-dark)", fontFamily: "inherit", fontSize: 9 }}>Remove?</span>
+                    <button
+                      onClick={() => {
+                        setSelectedImages((prev) => prev.filter((i2) => i2.id !== img.id));
+                        onRemoveFromPublishSet?.(img.id);
+                        setRemovingId(null);
+                      }}
+                      className="font-bold"
+                      style={{ color: "var(--coral)", fontFamily: "inherit", fontSize: 9 }}
+                    >
+                      Yes
+                    </button>
+                    <button
+                      onClick={() => setRemovingId(null)}
+                      style={{ color: "var(--pencil)", fontFamily: "inherit", fontSize: 9 }}
+                    >
+                      No
+                    </button>
+                  </div>
+                ) : (
+                  <button onClick={() => setRemovingId(img.id)} className="shrink-0" style={{ color: "var(--tone-lavender)" }}>
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {languages.length > 0 && (
+        <div className="mx-6 mb-6">
+          {!filesSectionCollapsed ? (
+            <div className="rounded-lg" style={{ border: "1px solid var(--pencil-light)", background: "var(--paper)" }}>
+              <div className="flex items-center justify-between gap-4 p-4">
+                <div>
+                  <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--pencil)", letterSpacing: "0.1em" }}>
+                    Prepare your files
+                  </p>
+                  <p className="font-display font-normal m-0 mt-1" style={{ fontSize: 17, color: "var(--ink)" }}>
+                    Build language sets
+                  </p>
+                  <p className="text-xs m-0 mt-1" style={{ color: "var(--pencil)" }}>
+                    Marry the approved images with their reviewed translations and SEO metadata.
+                  </p>
+                </div>
+                <div className="flex flex-col gap-2 shrink-0">
+                  {languages.map((lang) => {
+                    const count = langFileCounts[lang] ?? 0;
+                    const skipped = langSkippedSubjects[lang] ?? [];
+                    return (
+                      <div key={lang}>
+                      <div className="flex items-center gap-3">
+                        <span
+                          className="inline-flex items-center justify-center rounded-md text-[10px] font-black uppercase"
+                          style={{ width: 30, height: 22, background: "var(--teal-tint)", color: "var(--teal-dark)" }}
+                        >
+                          {lang}
+                        </span>
+                        <span className="text-[11px] w-16 text-right" style={{ color: "var(--pencil)" }}>
+                          {loadingCounts ? "..." : `${count} file${count === 1 ? "" : "s"}`}
+                        </span>
+                        <span
+                          className="px-2 py-1 rounded-full text-[9px] font-bold whitespace-nowrap"
+                          style={
+                            count > 0
+                              ? { background: "var(--tone-sage-bg)", color: "var(--tone-sage)" }
+                              : { background: "var(--pencil-light)", color: "var(--pencil)" }
+                          }
+                        >
+                          {count > 0 ? "Ready" : "Up to date"}
+                        </span>
+                    </div>
+                    {skipped.length > 0 && (
+                      <p className="text-[10px] mt-1 mb-0" style={{ color: "var(--coral-dark)" }}>
+                        {skipped.length} subject{skipped.length === 1 ? "" : "s"} can&apos;t publish yet — missing{" "}
+                        {lang.toUpperCase()} translation: {skipped.join(", ")}.{" "}
+                        <button onClick={onGoToLanguage} className="underline font-bold">
+                          Fix in Language
+                        </button>
+                      </p>
+                    )}
+                    </div>
+                    );
+                  })}
+          </div>
+              </div>
+              <div
+                className="flex items-center justify-between gap-4 px-4 py-3"
+                style={{ borderTop: "1px solid var(--pencil-light)" }}
+              >
+                <span className="text-[10px]" style={{ color: "var(--pencil)" }}>
+                  {Object.values(langFileCounts).every((c) => c === 0)
+                    ? "Everything is already built."
+                    : "Review SEO before building the sets."}
+                </span>
+                <button
+                  onClick={handleBuildLanguageSets}
+                  disabled={building || Object.values(langFileCounts).every((c) => c === 0)}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold text-white disabled:opacity-40"
+                  style={{ background: "var(--teal)" }}
+                >
+                  {building ? "Building..." : "Build publish sets"} <Send size={13} />
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setFilesSectionCollapsed(false)}
+              className="w-full flex items-center justify-between gap-4 rounded-lg px-4 py-3"
+              style={{ border: "1px solid var(--pencil-light)", background: "var(--paper)" }}
+            >
+              <span className="inline-flex items-center gap-2 text-xs font-medium" style={{ color: "var(--ink)" }}>
+                <Check size={14} style={{ color: "var(--tone-sage)" }} />
+                Language sets built — {builtSummary}
+              </span>
+              <ChevronDown size={14} style={{ color: "var(--pencil)" }} />
+            </button>
+          )}
+
+          {showWordPress && (
+              <div
+                className="mt-3 rounded-lg overflow-hidden"
+                style={{ border: "1px solid var(--tone-sage)", background: "var(--tone-sage-bg)" }}
+              >
+                <div className="flex items-center justify-between gap-4 p-4">
+                  <div>
+                    <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--tone-sage)", letterSpacing: "0.1em" }}>
+                      Final handoff
+                    </p>
+                    <p className="font-display font-normal m-0 mt-1" style={{ fontSize: 17, color: "var(--ink)" }}>
+                      Your language sets are ready
+                    </p>
+                    <p className="text-xs m-0 mt-1" style={{ color: "var(--pencil)" }}>
+                      {builtSummary} prepared locally. Push them live to WordPress.
+                    </p>
+                  </div>
+                  <button
+                    onClick={onGoToWordPress}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold text-white shrink-0"
+                    style={{ background: "var(--tone-sage)" }}
+                  >
+                    Publish to WordPress <Send size={13} />
+                  </button>
+                </div>
+              </div>
+            )}
+        </div>
+      )}
+
+      <div className="px-6 pt-1 pb-2">
       </div>
 
       {autoSeoBanner && (
@@ -801,125 +1011,7 @@ export default function PublishSequencePanel({
         </div>
       )}
 
-      {languages.length > 0 && (
-        <div className="mx-6 mb-6">
-          {!filesSectionCollapsed ? (
-            <div className="rounded-lg" style={{ border: "1px solid var(--pencil-light)", background: "var(--paper)" }}>
-              <div className="flex items-center justify-between gap-4 p-4">
-                <div>
-                  <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--pencil)", letterSpacing: "0.1em" }}>
-                    Prepare your files
-                  </p>
-                  <p className="font-display font-normal m-0 mt-1" style={{ fontSize: 17, color: "var(--ink)" }}>
-                    Build language sets
-                  </p>
-                  <p className="text-xs m-0 mt-1" style={{ color: "var(--pencil)" }}>
-                    Marry the approved images with their reviewed translations and SEO metadata.
-                  </p>
-                </div>
-                <div className="flex flex-col gap-2 shrink-0">
-                  {languages.map((lang) => {
-                    const count = langFileCounts[lang] ?? 0;
-                    const skipped = langSkippedSubjects[lang] ?? [];
-                    return (
-                      <div key={lang}>
-                      <div className="flex items-center gap-3">
-                        <span
-                          className="inline-flex items-center justify-center rounded-md text-[10px] font-black uppercase"
-                          style={{ width: 30, height: 22, background: "var(--teal-tint)", color: "var(--teal-dark)" }}
-                        >
-                          {lang}
-                        </span>
-                        <span className="text-[11px] w-16 text-right" style={{ color: "var(--pencil)" }}>
-                          {loadingCounts ? "..." : `${count} file${count === 1 ? "" : "s"}`}
-                        </span>
-                        <span
-                          className="px-2 py-1 rounded-full text-[9px] font-bold whitespace-nowrap"
-                          style={
-                            count > 0
-                              ? { background: "var(--tone-sage-bg)", color: "var(--tone-sage)" }
-                              : { background: "var(--pencil-light)", color: "var(--pencil)" }
-                          }
-                        >
-                          {count > 0 ? "Ready" : "Up to date"}
-                        </span>
-                    </div>
-                    {skipped.length > 0 && (
-                      <p className="text-[10px] mt-1 mb-0" style={{ color: "var(--coral-dark)" }}>
-                        {skipped.length} subject{skipped.length === 1 ? "" : "s"} can&apos;t publish yet — missing{" "}
-                        {lang.toUpperCase()} translation: {skipped.join(", ")}.{" "}
-                        <button onClick={onGoToLanguage} className="underline font-bold">
-                          Fix in Language
-                        </button>
-                      </p>
-                    )}
-                    </div>
-                    );
-                  })}
-          </div>
-              </div>
-              <div
-                className="flex items-center justify-between gap-4 px-4 py-3"
-                style={{ borderTop: "1px solid var(--pencil-light)" }}
-              >
-                <span className="text-[10px]" style={{ color: "var(--pencil)" }}>
-                  {Object.values(langFileCounts).every((c) => c === 0)
-                    ? "Everything is already built."
-                    : "Review SEO before building the sets."}
-                </span>
-                <button
-                  onClick={handleBuildLanguageSets}
-                  disabled={building || Object.values(langFileCounts).every((c) => c === 0)}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold text-white disabled:opacity-40"
-                  style={{ background: "var(--teal)" }}
-                >
-                  {building ? "Building..." : "Build publish sets"} <Send size={13} />
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              onClick={() => setFilesSectionCollapsed(false)}
-              className="w-full flex items-center justify-between gap-4 rounded-lg px-4 py-3"
-              style={{ border: "1px solid var(--pencil-light)", background: "var(--paper)" }}
-            >
-              <span className="inline-flex items-center gap-2 text-xs font-medium" style={{ color: "var(--ink)" }}>
-                <Check size={14} style={{ color: "var(--tone-sage)" }} />
-                Language sets built — {builtSummary}
-              </span>
-              <ChevronDown size={14} style={{ color: "var(--pencil)" }} />
-            </button>
-          )}
 
-            {showWordPress && (
-              <div
-                className="mt-3 rounded-lg overflow-hidden"
-                style={{ border: "1px solid var(--tone-sage)", background: "var(--tone-sage-bg)" }}
-              >
-                <div className="flex items-center justify-between gap-4 p-4">
-                  <div>
-                    <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--tone-sage)", letterSpacing: "0.1em" }}>
-                      Final handoff
-                    </p>
-                    <p className="font-display font-normal m-0 mt-1" style={{ fontSize: 17, color: "var(--ink)" }}>
-                      Your language sets are ready
-                    </p>
-                    <p className="text-xs m-0 mt-1" style={{ color: "var(--pencil)" }}>
-                      {builtSummary} prepared locally. Push them live to WordPress.
-                    </p>
-                  </div>
-                  <button
-                    onClick={onGoToWordPress}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold text-white shrink-0"
-                    style={{ background: "var(--tone-sage)" }}
-                  >
-                    Publish to WordPress <Send size={13} />
-                  </button>
-                </div>
-              </div>
-            )}
-        </div>
-      )}
     </SequencePanel>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Plus, Trash2, Check, ChevronRight, WandSparkles } from "lucide-react";
+import { Plus, Trash2, Check, ChevronRight, WandSparkles, ArrowUp, ArrowDown, Minimize2, Maximize2, X } from "lucide-react";
 import SequencePanel from "./SequencePanel";
 import type { Category } from "@/lib/api";
 import CategoryImageStrip from "./CategoryImageStrip";
@@ -77,6 +77,8 @@ export default function GenerateSequencePanel({
   onGoToPublish,
   onPublishStatusChanged,
   onBuildPublishSet,
+  publishSetImageIds,
+  onReviewPublishSet,
 }: {
   categoryName: string;
   category: Category;
@@ -87,6 +89,8 @@ export default function GenerateSequencePanel({
   onGoToPublish?: () => void;
   onPublishStatusChanged?: () => void;
   onBuildPublishSet?: (imageIds: number[]) => void;
+  publishSetImageIds?: number[];
+  onReviewPublishSet?: () => void;
 }) {
   
   const [subjects, setSubjects] = useState<string[]>(category.subjects.map((s) => s.name));
@@ -135,9 +139,14 @@ export default function GenerateSequencePanel({
   const recentPaceRef = useRef<number[]>([]);
 
   const [editModalKind, setEditModalKind] = useState<"subjects" | "variations" | null>(null);
-  const [autoTranslateBanner, setAutoTranslateBanner] = useState<string | null>(null);
+  const [autoTranslateBanner, setAutoTranslateBanner] = useState<{ text: string; tone: "blue" | "coral" } | null>(null);
+  const [publishSetNotifications, setPublishSetNotifications] = useState<{ key: string; filename: string; tone: "blocked" | "added"; message: string }[]>([]);
 
   const [selectedImageIds, setSelectedImageIds] = useState<number[]>([]);
+  const [clearSelectionTrigger, setClearSelectionTrigger] = useState(0);
+
+  const [listsExpanded, setListsExpanded] = useState(false);
+  const [filesListExpanded, setFilesListExpanded] = useState(false);
 
 
   useEffect(() => {
@@ -191,7 +200,7 @@ export default function GenerateSequencePanel({
         updated.auto_translated[lang].subjects.forEach((n) => uniqueNames.add(`s:${n}`));
         updated.auto_translated[lang].variations.forEach((n) => uniqueNames.add(`v:${n}`));
       });
-      setAutoTranslateBanner(`${uniqueNames.size} new item${uniqueNames.size === 1 ? "" : "s"} added and automatically translated`);
+      setAutoTranslateBanner({ text: `${uniqueNames.size} new item${uniqueNames.size === 1 ? "" : "s"} added and automatically translated`, tone: "blue" });
       setTimeout(() => setAutoTranslateBanner(null), 4500);
     }
   }
@@ -278,8 +287,7 @@ export default function GenerateSequencePanel({
                 .then((r) => r.json())
                 .then((data) => {
                   if (data.count > 0) {
-                    setAutoTranslateBanner(`${data.count} item${data.count === 1 ? "" : "s"} generated with SEO content ready to review`);
-                    setTimeout(() => setAutoTranslateBanner(null), 4500);
+                    setAutoTranslateBanner({ text: `${data.count} item${data.count === 1 ? "" : "s"} generated with SEO content ready to review`, tone: "blue" });
                     onPublishStatusChanged?.();
                   }
                 })
@@ -302,7 +310,8 @@ export default function GenerateSequencePanel({
     }
   }
 
-  const remainingPairs = pairs;
+  const [newestFirst, setNewestFirst] = useState(true);
+  const remainingPairs = newestFirst ? [...pairs].reverse() : pairs;
   const progressPct = job && job.total_images > 0 ? (job.completed_images / job.total_images) * 100 : 0;
 
   return (
@@ -327,9 +336,13 @@ export default function GenerateSequencePanel({
       {autoTranslateBanner && (
         <div
           className="mx-6 mt-5 px-4 py-3 rounded-md text-xs flex items-center justify-between gap-3"
-          style={{ background: "var(--tone-blue-bg)", color: "var(--tone-blue)", border: "1px solid var(--tone-blue)" }}
+          style={
+            autoTranslateBanner.tone === "coral"
+              ? { background: "var(--coral-light)", color: "var(--coral-dark)", border: "1px solid var(--coral)" }
+              : { background: "var(--tone-blue-bg)", color: "var(--tone-blue)", border: "1px solid var(--tone-blue)" }
+          }
         >
-          <span>{autoTranslateBanner}</span>
+          <span>{autoTranslateBanner.text}</span>
           {onGoToLanguage && (
             <button onClick={onGoToLanguage} className="underline font-bold shrink-0">
               Review
@@ -394,7 +407,7 @@ export default function GenerateSequencePanel({
         </div>
       )}
 
-          <CategoryImageStrip categoryId={category.id} categoryName={categoryName} refreshKey={refreshTrigger} onSelectionChanged={setSelectedImageIds} />
+          <CategoryImageStrip categoryId={category.id} categoryName={categoryName} refreshKey={refreshTrigger} onSelectionChanged={setSelectedImageIds} publishSetImageIds={publishSetImageIds} clearSelectionTrigger={clearSelectionTrigger} />
          <div className="flex items-center justify-between gap-3 mx-5 mt-5" style={{ padding: "0 2px" }}>
         <span className="text-[11px]" style={{ color: "var(--pencil)" }}>
           <strong style={{ color: "var(--teal-dark)", fontSize: 12 }}>{pairs.length}</strong> pairings selected — {pairs.length} images will be generated
@@ -405,15 +418,92 @@ export default function GenerateSequencePanel({
               Cancel
             </button>
           )}
-          {selectedImageIds.length > 0 && onBuildPublishSet && (
-            <button
-               onClick={() => onBuildPublishSet(selectedImageIds)}
-               className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold text-white"
-               style={{ background: "var(--tone-sage)", boxShadow: "0 5px 14px rgba(92,129,113,0.18)" }}
-             >
-               Send to Publish ({selectedImageIds.length})
-             </button>
-          )}
+            {selectedImageIds.length > 0 && onBuildPublishSet && (
+              <button
+                onClick={async () => {
+                  const alreadySent = new Set(publishSetImageIds ?? []);
+                  const candidateIds = selectedImageIds.filter((id) => !alreadySent.has(id));
+                  const skippedCount = selectedImageIds.length - candidateIds.length;
+
+                  let finalIds = candidateIds;
+                  const newRows: { key: string; filename: string; tone: "blocked" | "added"; message: string }[] = [];
+
+                  if (candidateIds.length > 0) {
+                    try {
+                      const [newImagesRes, translationsRes] = await Promise.all([
+                        fetch(`${API_BASE_URL}/review/images-by-ids?ids=${candidateIds.join(",")}`).then((r) => r.json()),
+                        fetch(`${API_BASE_URL}/categories/${category.id}/translations`).then((r) => r.json()),
+                      ]);
+                      const langs = translationsRes.map((t: { lang: string }) => t.lang);
+                      const imagesById: Record<number, { id: number; filename: string; subject: string; variation_text: string | null }> = {};
+                      newImagesRes.forEach((img: { id: number; filename: string; subject: string; variation_text: string | null }) => {
+                        imagesById[img.id] = img;
+                      });
+
+                      let blockedIds: number[] = [];
+                      let warnedIds: number[] = [];
+                      if (langs.length > 0) {
+                        const imagesPayload = newImagesRes.map((img: { id: number; filename: string; subject: string; variation_text: string | null }) => ({
+                          id: img.id,
+                          source_path: `output/${category.id}/${img.filename}`,
+                          subject: img.subject,
+                          variation_text: img.variation_text,
+                        }));
+                        const checkRes = await fetch(`${API_BASE_URL}/publish/check-fully-published`, {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ category_id: category.id, images: imagesPayload, langs }),
+                        }).then((r) => r.json());
+                        blockedIds = checkRes.exact_file_blocked ?? [];
+                        warnedIds = checkRes.pairing_warning ?? [];
+                      }
+
+                      finalIds = candidateIds.filter((id) => !blockedIds.includes(id));
+
+                      for (const id of candidateIds) {
+                        const img = imagesById[id];
+                        if (!img) continue;
+                        const key = `${id}-${Date.now()}`;
+                        if (blockedIds.includes(id)) {
+                          newRows.push({ key, filename: img.filename, tone: "blocked", message: "Already published in every language — not added" });
+                        } else if (warnedIds.includes(id)) {
+                          newRows.push({ key, filename: img.filename, tone: "added", message: "Added — this match already has published content, consider updating SEO" });
+                        } else {
+                          newRows.push({ key, filename: img.filename, tone: "added", message: "Added to your Publish set" });
+                        }
+                      }
+                    } catch {
+                      // best-effort — never block adding over a failed check
+                    }
+                  }
+
+                  setPublishSetNotifications((prev) => [...newRows, ...prev]);
+
+                  if (skippedCount > 0) {
+                    setAutoTranslateBanner({
+                      text: `${skippedCount} image${skippedCount === 1 ? "" : "s"} already in your Publish set`,
+                      tone: "coral",
+                    });
+                    setTimeout(() => setAutoTranslateBanner(null), 4500);
+                  }
+                  if (finalIds.length > 0) onBuildPublishSet(finalIds);
+                  setClearSelectionTrigger((n) => n + 1);
+                }}
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold text-white"
+                style={{ background: "var(--tone-lavender)", boxShadow: "0 5px 14px rgba(129,113,142,0.18)" }}
+              >
+                Add to Publish set ({selectedImageIds.length})
+              </button>
+            )}
+            {(publishSetImageIds?.length ?? 0) > 0 && onReviewPublishSet && (
+              <button
+                onClick={onReviewPublishSet}
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold"
+                style={{ border: "1.5px solid var(--tone-lavender)", color: "var(--tone-lavender)" }}
+              >
+                Review Publish set ({publishSetImageIds?.length})
+              </button>
+            )}
           <button
             onClick={handleGenerate}
             disabled={pairs.length === 0 || generating}
@@ -424,16 +514,67 @@ export default function GenerateSequencePanel({
           </button>
         </div>
       </div>
+      {publishSetNotifications.length > 0 && (
+        <div className="mx-5 mt-3 grid gap-1.5">
+          {publishSetNotifications.map((n) => (
+            <div
+              key={n.key}
+              className="flex items-start gap-2.5 rounded"
+              style={{
+                padding: "8px 10px",
+                background: n.tone === "blocked" ? "var(--coral-light)" : "var(--tone-lavender-bg)",
+                color: n.tone === "blocked" ? "var(--coral-dark)" : "var(--tone-lavender)",
+              }}
+            >
+              <div className="flex-1 min-w-0">
+                <p className="m-0 truncate" style={{ fontFamily: "ui-monospace, monospace", fontSize: 10 }}>
+                  {n.filename}
+                </p>
+                <p className="m-0 mt-0.5" style={{ fontSize: 10 }}>
+                  {n.message}
+                </p>
+              </div>
+              <button
+                onClick={() => setPublishSetNotifications((prev) => prev.filter((row) => row.key !== n.key))}
+                className="shrink-0"
+                style={{ color: "inherit", opacity: 0.7 }}
+              >
+                <X size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="mx-5 mt-3 mb-5 rounded-lg" style={{ padding: "15px 17px", border: "1px solid var(--pencil-light)", background: "var(--paper)" }}>
-        <p className="text-[10px] uppercase font-bold m-0 mb-3.5" style={{ color: "var(--pencil)", letterSpacing: "0.1em" }}>
-          Files to be generated
-        </p>
+        <div className="flex items-center justify-between mb-3.5">
+          <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--pencil)", letterSpacing: "0.1em" }}>
+            Files to be generated
+          </p>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setFilesListExpanded((v) => !v)}
+              className="w-5 h-5 flex items-center justify-center rounded"
+              style={{ color: "var(--pencil)" }}
+              title={filesListExpanded ? "Collapse" : "Expand"}
+            >
+              {filesListExpanded ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+            </button>
+            <button
+              onClick={() => setNewestFirst((v) => !v)}
+              className="w-5 h-5 flex items-center justify-center rounded"
+              style={{ color: "var(--pencil)" }}
+              title={newestFirst ? "Newest on top" : "Oldest on top"}
+            >
+              {newestFirst ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
+            </button>
+          </div>
+        </div>
         {remainingPairs.length === 0 ? (
           <p className="text-[11px] italic m-0" style={{ color: "var(--pencil)" }}>
             {generating ? "All selected files are being prepared..." : "Select a pairing to preview filenames."}
           </p>
         ) : (
-            <div className="grid gap-1.5 overflow-y-auto pr-1" style={{ height: 108, alignContent: "start" }}>
+            <div className="grid gap-1.5 overflow-y-auto pr-1" style={{ height: filesListExpanded ? 216 : 108, alignContent: "start", transition: "height 0.2s ease" }}>
             {remainingPairs.map((pair, i) => (
               <div
                 key={`${pair.subject}-${pair.variation_text}`}
@@ -450,7 +591,26 @@ export default function GenerateSequencePanel({
         )}
       </div>
 
-      <div className="grid" style={{ gridTemplateColumns: "minmax(320px, 0.8fr) 1.6fr", borderTop: "1px solid var(--pencil-light)", background: "#eef2f5cd" }}>
+            <div className="grid relative" style={{ gridTemplateColumns: "minmax(320px, 0.8fr) 1.6fr", borderTop: "1px solid var(--pencil-light)", background: "#eef2f5cd" }}>
+         <div
+          className="absolute flex items-center justify-center"
+          style={{ gridColumn: "1 / 2", justifySelf: "end", bottom: -13, width: 26, height: 26, position: "absolute", right: -13 }}
+        >
+          <button
+            onClick={() => setListsExpanded((v) => !v)}
+            className="flex items-center justify-center rounded-full w-full h-full"
+            style={{
+              background: "var(--canvas)",
+              border: "1px solid var(--pencil-light)",
+              color: "var(--pencil)",
+              zIndex: 10,
+              boxShadow: "0 2px 6px rgba(28,27,26,0.12)",
+            }}
+            title={listsExpanded ? "Collapse" : "Expand"}
+          >
+            {listsExpanded ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+          </button>
+        </div>
         <div style={{ padding: 20, borderRight: "1px solid var(--pencil-light)" }}>
           <div className="flex items-start justify-between mb-3.5">
             <div>
@@ -461,15 +621,17 @@ export default function GenerateSequencePanel({
                 {subjects.length} available
               </p>
             </div>
-            <button
-              onClick={() => setEditModalKind("subjects")}
-              className="inline-flex items-center gap-1 px-2 py-1.5 rounded-md text-[10px] font-bold"
-              style={{ border: "1px solid var(--pencil-light)", color: "var(--teal)" }}
-            >
-              <Plus size={13} /> Add
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setEditModalKind("subjects")}
+                className="inline-flex items-center gap-1 px-2 py-1.5 rounded-md text-[10px] font-bold"
+                style={{ border: "1px solid var(--pencil-light)", color: "var(--teal)" }}
+              >
+                <Plus size={13} /> Add
+              </button>
+            </div>
           </div>
-          <div className="overflow-y-auto pr-1" style={{ maxHeight: 260 }}>
+          <div className="overflow-y-auto pr-1" style={{ maxHeight: listsExpanded ? 520 : 260, transition: "max-height 0.2s ease" }}>
           {subjects.map((subject) => {
             const count = pairs.filter((p) => p.subject === subject).length;
             const active = selectedSubject === subject;
@@ -542,7 +704,7 @@ export default function GenerateSequencePanel({
               </button>
             </div>
           </div>
-          <div className="overflow-y-auto pr-1" style={{ maxHeight: 260 }}>
+          <div className="overflow-y-auto pr-1" style={{ maxHeight: listsExpanded ? 520 : 260, transition: "max-height 0.2s ease" }}>
           {variations.map((variation) => {
             const paired = isPaired(selectedSubject, variation);
             const count = pairCounts[pairKey(selectedSubject, variation)] ?? 0;
@@ -584,17 +746,8 @@ export default function GenerateSequencePanel({
           </div>
         </div>
       </div>
-      <div
-        className="flex items-center justify-between text-[10px]"
-        style={{ padding: "14px 20px", borderTop: "1px solid var(--pencil-light)", color: "var(--pencil)" }}
-      >
-        <span>
-          <strong style={{ color: "var(--teal-dark)", fontSize: 12 }}>{pairs.length}</strong> pairings selected
-        </span>
-        <span>{pairs.length} images will be generated</span>
-      </div>
-
-            <BatchHistoryPanel categoryName={categoryName} refreshKey={refreshTrigger} />
+        <div style={{ height: 20 }} />
+        <BatchHistoryPanel categoryName={categoryName} refreshKey={refreshTrigger} />
       {editModalKind && (
         <EditListModal
           categoryId={category.id}

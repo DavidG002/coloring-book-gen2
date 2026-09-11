@@ -399,6 +399,7 @@ class PublishRequest(BaseModel):
     category: str
     lang: str
     only_new: bool = False
+    image_ids: list[int] | None = None
 
 
 class PublishedFileInfo(BaseModel):

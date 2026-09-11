@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from fastapi.responses import Response
-from services.publish import build_publish_plan, execute_publish, get_publish_history, generate_manifest_csv
+from services.publish import build_publish_plan, execute_publish, get_publish_history, generate_manifest_csv, is_pairing_published, is_exact_file_published_in_all_langs
 from models import PublishRun
 
 import json
@@ -19,7 +19,8 @@ router = APIRouter(prefix="/publish", tags=["publish"])
 @router.post("/plan", response_model=PublishPlanResponse)
 def plan_publish(payload: PublishRequest, db: Session = Depends(get_db)):
     try:
-        result = build_publish_plan(db, payload.category, payload.lang, only_new=payload.only_new)
+        image_ids_set = set(payload.image_ids) if payload.image_ids is not None else None
+        result = build_publish_plan(db, payload.category, payload.lang, only_new=payload.only_new, image_ids=image_ids_set)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -35,7 +36,8 @@ def plan_publish(payload: PublishRequest, db: Session = Depends(get_db)):
 @router.post("/run", response_model=PublishRunResponse)
 def run_publish(payload: PublishRequest, db: Session = Depends(get_db)):
     try:
-        result = execute_publish(db, payload.category, payload.lang, only_new=payload.only_new)
+        image_ids_set = set(payload.image_ids) if payload.image_ids is not None else None
+        result = execute_publish(db, payload.category, payload.lang, only_new=payload.only_new, image_ids=image_ids_set)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -97,3 +99,40 @@ def get_output_path(category_name: str):
     publish_path = os.path.abspath(os.path.join("publish"))
     return {"output_path": output_path, "publish_root": publish_path}
 
+
+@router.get("/pairing-published")
+def check_pairing_published(category_id: int, subject: str, variation_text: str, lang: str, db: Session = Depends(get_db)):
+    """Real, per-pairing check — has ANY image of this (subject, variation)
+    combination been published in this language before, regardless of
+    which specific file. Temporary debug/test endpoint for Layer 1 of
+    the pairing-level publish tracking design."""
+    published = is_pairing_published(db, category_id, subject, variation_text, lang)
+    return {"published": published}
+
+
+@router.post("/check-fully-published")
+def check_fully_published(payload: dict, db: Session = Depends(get_db)):
+    """Given a category and a list of images (each with an id, source_path,
+    subject, variation_text), plus the real languages configured for that
+    category, returns two things per image:
+    - exact_file_blocked: this EXACT file is already live in every given
+      language — genuinely nothing new to offer, caller should PREVENT
+      adding it at all.
+    - pairing_warning: a DIFFERENT file of the same pairing is already
+      live in every given language — real, legitimate new content
+      (different picture), caller should WARN but still allow adding."""
+    category_id = payload["category_id"]
+    images = payload["images"]
+    langs = payload["langs"]
+
+    exact_file_blocked = []
+    pairing_warning = []
+    for img in images:
+        if is_exact_file_published_in_all_langs(db, img["source_path"], category_id, langs):
+            exact_file_blocked.append(img["id"])
+        elif is_pairing_published_in_all_langs := all(
+            is_pairing_published(db, category_id, img["subject"], img["variation_text"], lang) for lang in langs
+        ):
+            pairing_warning.append(img["id"])
+
+    return {"exact_file_blocked": exact_file_blocked, "pairing_warning": pairing_warning}
