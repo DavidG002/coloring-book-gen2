@@ -189,7 +189,23 @@ def ensure_content_variant(
     if not subject:
         raise ValueError(f"Subject '{subject_name}' not found in '{category_name}'")
 
-    variation = db.query(Variation).filter(Variation.category_id == category.id, Variation.text == variation_text).first()
+    # Prefer a variation scoped specifically to this subject; fall back
+    # to a shared/global one (subject_id IS NULL) only if no
+    # subject-specific match exists. Never silently grab another
+    # subject's own scoped variation just because the text happens to
+    # match — that was the real root cause of a genuine cross-subject
+    # content mix-up, confirmed via live testing 2026-09-12.
+    variation = (
+        db.query(Variation)
+        .filter(Variation.category_id == category.id, Variation.text == variation_text, Variation.subject_id == subject.id)
+        .first()
+    )
+    if not variation:
+        variation = (
+            db.query(Variation)
+            .filter(Variation.category_id == category.id, Variation.text == variation_text, Variation.subject_id.is_(None))
+            .first()
+        )
     if not variation:
         raise ValueError(f"Variation '{variation_text}' not found in '{category_name}'")
 
@@ -321,7 +337,17 @@ def regenerate_content_variant(
     category_name = category.name
 
     subject = db.query(Subject).filter(Subject.category_id == category.id, Subject.name == subject_name).first()
-    variation = db.query(Variation).filter(Variation.category_id == category.id, Variation.text == variation_text).first()
+    variation = (
+        db.query(Variation)
+        .filter(Variation.category_id == category.id, Variation.text == variation_text, Variation.subject_id == (subject.id if subject else None))
+        .first()
+    ) if subject else None
+    if not variation and subject:
+        variation = (
+            db.query(Variation)
+            .filter(Variation.category_id == category.id, Variation.text == variation_text, Variation.subject_id.is_(None))
+            .first()
+        )
     if not subject or not variation:
         raise ValueError("Subject or variation not found")
 
@@ -384,7 +410,14 @@ def list_content_variants(db: Session, category_id: int, lang: str) -> list[dict
 
     rows = []
     for subject in category.subjects:
-        for variation in sorted(category.variations, key=lambda v: v.order):
+        # Only cross this subject with its OWN scoped variations, plus any
+        # shared/global ones (subject_id is None) — never another
+        # subject's scoped variations, even if the text happens to match.
+        relevant_variations = [
+            v for v in category.variations
+            if v.subject_id is None or v.subject_id == subject.id
+        ]
+        for variation in sorted(relevant_variations, key=lambda v: v.order):
             key = (subject.name, variation.text)
             representative = representative_image_by_pairing.get(key)
             if not representative:

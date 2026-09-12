@@ -12,12 +12,14 @@ export default function EditListModal({
   currentItems,
   onClose,
   onSaved,
+  variationsSubjectId,
 }: {
   categoryId: number;
   kind: "subjects" | "variations";
   currentItems: string[];
   onClose: () => void;
   onSaved: (updated: Category) => void;
+  variationsSubjectId?: number;
 }) {
   const [mode, setMode] = useState<Mode>("rows");
     const [rows, setRows] = useState<string[]>(["", ...currentItems]);
@@ -68,7 +70,10 @@ export default function EditListModal({
 
     setSaving(true);
     try {
-      const updated = await updateCategory(categoryId, { [kind]: items });
+      const updated = await updateCategory(
+        categoryId,
+        kind === "variations" ? { variations: items, variations_subject_id: variationsSubjectId } : { subjects: items }
+      );
       onSaved(updated);
       onClose();
     } catch (err) {

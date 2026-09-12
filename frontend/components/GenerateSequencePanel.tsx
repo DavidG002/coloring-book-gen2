@@ -51,7 +51,7 @@ async function getPairCounts(categoryId: number): Promise<Record<string, number>
   return data.counts ?? {};
 }
 
-async function updateCategoryLists(categoryId: number, body: { subjects?: string[]; variations?: string[] }) {
+async function updateCategoryLists(categoryId: number, body: { subjects?: string[]; variations?: string[]; variations_subject_id?: number }) {
   const res = await fetch(`${API_BASE_URL}/categories/${categoryId}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -96,11 +96,14 @@ export default function GenerateSequencePanel({
 }) {
   
   const [subjects, setSubjects] = useState<string[]>(category.subjects.map((s) => s.name));
-  const [variations, setVariations] = useState<string[]>(
-    category.variations.sort((a, b) => a.order - b.order).map((v) => v.text)
-  );
 
   const [selectedSubject, setSelectedSubject] = useState<string>(subjects[0] ?? "");
+
+  const selectedSubjectId = category.subjects.find((s) => s.name === selectedSubject)?.id;
+  const variations = category.variations
+    .filter((v) => v.subject_id === selectedSubjectId)
+    .sort((a, b) => a.order - b.order)
+    .map((v) => v.text);
   const [pairs, setPairs] = useState<Pair[]>([]);
 
   const pairsLoadedRef = useRef(false);
@@ -189,7 +192,6 @@ export default function GenerateSequencePanel({
 
   function handleListSaved(updated: Category) {
     setSubjects(updated.subjects.map((s) => s.name));
-    setVariations(updated.variations.sort((a, b) => a.order - b.order).map((v) => v.text));
     onCategoryChanged(updated);
 
     const langs = Object.keys(updated.auto_translated ?? {});
@@ -222,10 +224,9 @@ export default function GenerateSequencePanel({
 
   async function handleRemoveVariation(variation: string) {
     const next = variations.filter((v) => v !== variation);
-    setVariations(next);
     setPairs((prev) => prev.filter((p) => p.variation_text !== variation));
     try {
-      const updated = await updateCategoryLists(category.id, { variations: next });
+      const updated = await updateCategoryLists(category.id, { variations: next, variations_subject_id: selectedSubjectId });
       onCategoryChanged(updated);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to remove variation");
@@ -762,6 +763,7 @@ export default function GenerateSequencePanel({
           currentItems={editModalKind === "subjects" ? subjects : variations}
           onClose={() => setEditModalKind(null)}
           onSaved={handleListSaved}
+          variationsSubjectId={selectedSubjectId}
         />
       )}
     </SequencePanel>

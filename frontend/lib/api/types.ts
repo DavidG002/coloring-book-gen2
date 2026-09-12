@@ -28,6 +28,7 @@ export interface Variation {
   id: number;
   text: string;
   order: number;
+  subject_id: number | null;
 }
 
 export interface Category {
@@ -59,6 +60,7 @@ export interface CategoryCreateInput {
 export interface CategoryUpdateInput {
   subjects?: string[];
   variations?: string[];
+  variations_subject_id?: number;
 }
 
 // ---------- Translations ----------
