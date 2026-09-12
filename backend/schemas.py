@@ -33,6 +33,7 @@ class VariationCreate(BaseModel):
 class VariationRead(VariationBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    subject_id: Optional[int] = None
 
 # ---------- Book ----------
 
@@ -126,6 +127,14 @@ class CategoryCreate(CategoryBase):
 class CategoryUpdate(BaseModel):
     subjects: Optional[list[str]] = None
     variations: Optional[list[str]] = None
+    variations_subject_id: Optional[int] = None
+    # When variations is provided AND variations_subject_id is set, the
+    # update is scoped to just that one subject's own variations —
+    # existing variations belonging to OTHER subjects, or the shared
+    # (NULL subject_id) pool, are left completely untouched. When
+    # variations_subject_id is omitted, behavior is unchanged: operates
+    # on the full category-wide list, matching the original, flat
+    # behavior used by the general Book/Category prep panel.
 
 
 class CategoryRead(CategoryBase):

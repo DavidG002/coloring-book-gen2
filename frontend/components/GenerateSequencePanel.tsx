@@ -142,7 +142,7 @@ export default function GenerateSequencePanel({
 
   const [editModalKind, setEditModalKind] = useState<"subjects" | "variations" | null>(null);
   const [autoTranslateBanner, setAutoTranslateBanner] = useState<{ text: string; tone: "blue" | "coral" } | null>(null);
-  const [publishSetNotifications, setPublishSetNotifications] = useState<{ key: string; filename: string; tone: "blocked" | "added"; message: string }[]>([]);
+  const [publishSetNotifications, setPublishSetNotifications] = useState<{ key: string; filename: string; tone: "blocked" | "added" | "warned"; message: string }[]>([]);
 
   const [selectedImageIds, setSelectedImageIds] = useState<number[]>([]);
   const [clearSelectionTrigger, setClearSelectionTrigger] = useState(0);
@@ -428,7 +428,7 @@ export default function GenerateSequencePanel({
                   const skippedCount = selectedImageIds.length - candidateIds.length;
 
                   let finalIds = candidateIds;
-                  const newRows: { key: string; filename: string; tone: "blocked" | "added"; message: string }[] = [];
+                  const newRows: { key: string; filename: string; tone: "blocked" | "added" | "warned"; message: string }[] = [];
 
                   if (candidateIds.length > 0) {
                     try {
@@ -470,7 +470,7 @@ export default function GenerateSequencePanel({
                         if (blockedIds.includes(id)) {
                           newRows.push({ key, filename: label, tone: "blocked", message: "Already published in every language — skipped" });
                         } else if (warnedIds.includes(id)) {
-                          newRows.push({ key, filename: label, tone: "added", message: "Added — this match already has published content, consider updating SEO" });
+                          newRows.push({ key, filename: label, tone: "warned", message: "Added — this match already has published content, consider updating SEO" });
                         } else {
                           newRows.push({ key, filename: label, tone: "added", message: "Added to your Publish set" });
                         }
@@ -529,8 +529,8 @@ export default function GenerateSequencePanel({
               className="flex items-start gap-2.5 rounded"
               style={{
                 padding: "8px 10px",
-                background: n.tone === "blocked" ? "var(--coral-light)" : "var(--tone-lavender-bg)",
-                color: n.tone === "blocked" ? "var(--coral-dark)" : "var(--tone-lavender)",
+                background: n.tone === "blocked" ? "var(--coral-light)" : n.tone === "warned" ? "#fdf3e2" : "var(--tone-lavender-bg)",
+                color: n.tone === "blocked" ? "var(--coral-dark)" : n.tone === "warned" ? "#9c6f1f" : "var(--tone-lavender)",
               }}
             >
               <div className="flex-1 min-w-0">
@@ -557,24 +557,14 @@ export default function GenerateSequencePanel({
           <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--pencil)", letterSpacing: "0.1em" }}>
             Files to be generated
           </p>
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => setFilesListExpanded((v) => !v)}
-              className="w-5 h-5 flex items-center justify-center rounded"
-              style={{ color: "var(--pencil)" }}
-              title={filesListExpanded ? "Collapse" : "Expand"}
-            >
-              {filesListExpanded ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
-            </button>
-            <button
-              onClick={() => setNewestFirst((v) => !v)}
-              className="w-5 h-5 flex items-center justify-center rounded"
-              style={{ color: "var(--pencil)" }}
-              title={newestFirst ? "Newest on top" : "Oldest on top"}
-            >
-              {newestFirst ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
-            </button>
-          </div>
+          <button
+            onClick={() => setNewestFirst((v) => !v)}
+            className="w-5 h-5 flex items-center justify-center rounded"
+            style={{ color: "var(--pencil)" }}
+            title={newestFirst ? "Newest on top" : "Oldest on top"}
+          >
+            {newestFirst ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
+          </button>
         </div>
         {remainingPairs.length === 0 ? (
           <p className="text-[11px] italic m-0" style={{ color: "var(--pencil)" }}>
@@ -596,6 +586,16 @@ export default function GenerateSequencePanel({
             ))}
           </div>
         )}
+        <div className="flex justify-end mt-3">
+          <button
+            onClick={() => setFilesListExpanded((v) => !v)}
+            className="w-5 h-5 flex items-center justify-center rounded"
+            style={{ color: "var(--pencil)" }}
+            title={filesListExpanded ? "Collapse" : "Expand"}
+          >
+            {filesListExpanded ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+          </button>
+        </div>
       </div>
 
             <div className="grid relative" style={{ gridTemplateColumns: "minmax(320px, 0.8fr) 1.6fr", borderTop: "1px solid var(--pencil-light)", background: "#eef2f5cd" }}>

@@ -89,7 +89,17 @@ def update_category(category_id: int, payload: CategoryUpdate, db: Session = Dep
         db.flush()
 
     if payload.variations is not None:
-        existing_by_text = {v.text: v for v in category.variations}
+        if payload.variations_subject_id is not None:
+            # Scoped update: only this subject's own variations are
+            # considered for the diff — every other subject's variations,
+            # and the shared (subject_id IS NULL) pool, are left
+            # completely untouched.
+            relevant_variations = [v for v in category.variations if v.subject_id == payload.variations_subject_id]
+        else:
+            # Unscoped update — original, flat, category-wide behavior.
+            relevant_variations = list(category.variations)
+
+        existing_by_text = {v.text: v for v in relevant_variations}
         desired_texts = set(payload.variations)
         for text, variation in existing_by_text.items():
             if text not in desired_texts:
@@ -99,7 +109,12 @@ def update_category(category_id: int, payload: CategoryUpdate, db: Session = Dep
             if text in existing_by_text:
                 existing_by_text[text].order = i
             else:
-                new_variation = Variation(category_id=category.id, text=text, order=i)
+                new_variation = Variation(
+                    category_id=category.id,
+                    subject_id=payload.variations_subject_id,
+                    text=text,
+                    order=i,
+                )
                 db.add(new_variation)
                 new_variations.append(new_variation)
         db.flush()

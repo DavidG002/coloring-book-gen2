@@ -180,6 +180,11 @@ export default function PublishSequencePanel({
   const [autoSeoBanner, setAutoSeoBanner] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<number | null>(null);
   const [selectedImagesExpanded, setSelectedImagesExpanded] = useState(false);
+  const [confirmingRemoveAll, setConfirmingRemoveAll] = useState(false);
+  const [seoFilterSubject, setSeoFilterSubject] = useState<"all" | string>("all");
+  const [seoSortView, setSeoSortView] = useState<"all" | "latest" | "oldest">("all");
+  const [seoOnlyNeedsReview, setSeoOnlyNeedsReview] = useState(false);
+  const [seoRowsExpanded, setSeoRowsExpanded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -421,13 +426,27 @@ export default function PublishSequencePanel({
   }
 
   const descriptionDirty = description !== savedDescriptionSnapshot;
-  const filteredVariants =
-    seoData?.content_variants.filter(
-      (r) =>
-        !filter ||
-        r.subject_name.toLowerCase().includes(filter.toLowerCase()) ||
-        r.variation_text.toLowerCase().includes(filter.toLowerCase())
-    ) ?? [];
+  const seoSubjects = Array.from(new Set((seoData?.content_variants ?? []).map((r) => r.subject_name))).sort();
+  const filteredVariants = (() => {
+    let rows = seoData?.content_variants ?? [];
+    if (seoFilterSubject !== "all") {
+      rows = rows.filter((r) => r.subject_name === seoFilterSubject);
+    }
+    if (seoOnlyNeedsReview) {
+      const warnedPairings = new Set(
+        selectedImages
+          .filter((img) => warnedImageIds?.includes(img.id))
+          .map((img) => `${img.subject}::${img.variation_text}`)
+      );
+      rows = rows.filter((r) => r.pending_review || warnedPairings.has(`${r.subject_name}::${r.variation_text}`));
+    }
+    if (seoSortView === "latest") {
+      rows = [...rows].sort((a, b) => b.sample_image_id - a.sample_image_id);
+    } else if (seoSortView === "oldest") {
+      rows = [...rows].sort((a, b) => a.sample_image_id - b.sample_image_id);
+    }
+    return rows;
+  })();
 
   return (
     <SequencePanel
@@ -435,170 +454,205 @@ export default function PublishSequencePanel({
       title="Tag and publish your pages"
       icon={<Send size={25} />}
     >
-      <div className="px-6 pt-1 pb-2">
-        <p className="text-xs leading-relaxed m-0" style={{ maxWidth: 450, color: "var(--pencil)" }}>
-          Write SEO titles and alt text for each generated image, then build your local files and push to WordPress.
-        </p>
-      </div>
-
-      {selectedImages.length > 0 && (
-        <div className="mx-6 mb-6 rounded-lg" style={{ padding: "15px 17px 10px", border: "1px solid var(--tone-lavender)", background: "var(--tone-lavender-bg)" }}>
-          <div className="flex items-center justify-between mb-3.5">
-            <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--tone-lavender)", letterSpacing: "0.1em" }}>
-              Selected for publishing ({selectedImages.length})
-            </p>
-            <button
-              onClick={() => setImagesNewestFirst((v) => !v)}
-              className="w-5 h-5 flex items-center justify-center rounded"
-              style={{ color: "var(--tone-lavender)" }}
-              title={imagesNewestFirst ? "Newest on top" : "Oldest on top"}
-            >
-              {imagesNewestFirst ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
-            </button>
-          </div>
-           <div className="flex flex-col gap-1.5 overflow-y-auto pr-1" style={{ height: selectedImagesExpanded ? 280 : 140, transition: "height 0.2s ease" }}>
-            {(imagesNewestFirst ? [...selectedImages].reverse() : selectedImages).map((img, i) => {
-              const isWarned = warnedImageIds?.includes(img.id) ?? false;
-              return (
-              <div key={img.id} className="rounded overflow-hidden shrink-0" style={{ border: isWarned ? "1px solid #c99a4a" : "none" }}>
-              <div
-                className="flex items-center gap-2.5 rounded"
-                style={{
-                  padding: "6px 10px",
-                  background: isWarned ? "#fdf3e2" : "var(--canvas)",
-                  color: isWarned ? "#9c6f1f" : "var(--tone-lavender)",
-                  fontFamily: "ui-monospace, monospace",
-                  fontSize: 10,
-                }}
-              >
-                <b style={{ minWidth: 18, color: "var(--pencil)", fontSize: 9, fontWeight: 500 }}>
-                  {String(i + 1).padStart(2, "0")}
-                </b>
-                <span className="truncate flex-1">
-                  {img.subject}
-                  {img.variation_text ? ` — ${img.variation_text}` : ""}
-                </span>
-                {removingId === img.id ? (
-                  <div className="flex items-center gap-1 shrink-0">
-                    <span style={{ color: "var(--coral-dark)", fontFamily: "inherit", fontSize: 9 }}>Remove?</span>
-                    <button
-                      onClick={() => {
-                        setSelectedImages((prev) => prev.filter((i2) => i2.id !== img.id));
-                        onRemoveFromPublishSet?.(img.id);
-                        setRemovingId(null);
-                      }}
-                      className="font-bold"
-                      style={{ color: "var(--coral)", fontFamily: "inherit", fontSize: 9 }}
-                    >
-                      Yes
-                    </button>
-                    <button
-                      onClick={() => setRemovingId(null)}
-                      style={{ color: "var(--pencil)", fontFamily: "inherit", fontSize: 9 }}
-                    >
-                      No
-                    </button>
-                  </div>
-                ) : (
-                  <button onClick={() => setRemovingId(img.id)} className="shrink-0" style={{ color: isWarned ? "#9c6f1f" : "var(--tone-lavender)" }}>
-                    <X size={12} />
-                  </button>
-                )}
-              </div>
-              {isWarned && (
-                <div className="flex items-center justify-between gap-2" style={{ padding: "5px 10px 5px 28px", background: "#fdf3e2", borderTop: "1px solid #eddcb8" }}>
-                  <span style={{ fontSize: 9, color: "#9c6f1f" }}>Update SEO for this image?</span>
-                  <button
-                    title="Regenerate just this field"
-                    className="disabled:opacity-40"
-                    style={{ color: "#9c6f1f" }}
-                  >
-                    <RotateCw size={11} />
-                  </button>
-                </div>
-              )}
-              </div>
-              );
-            })}
-          </div>
-          <div className="flex justify-end mt-5">
-            <button
-              onClick={() => setSelectedImagesExpanded((v) => !v)}
-              className="w-5 h-5 flex items-center justify-center rounded"
-              style={{ color: "var(--tone-lavender)" }}
-              title={selectedImagesExpanded ? "Collapse" : "Expand"}
-            >
-              {selectedImagesExpanded ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
-            </button>
-          </div>
-        </div>
-      )}
+      <div className="px-6 pt-1 pb-2" />
 
       {languages.length > 0 && (
         <div className="mx-6 mb-6">
           {!filesSectionCollapsed ? (
             <div className="rounded-lg" style={{ border: "1px solid var(--pencil-light)", background: "var(--paper)" }}>
-              <div className="flex items-center justify-between gap-4 p-4">
-                <div>
-                  <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--pencil)", letterSpacing: "0.1em" }}>
-                    Prepare your files
-                  </p>
-                  <p className="font-display font-normal m-0 mt-1" style={{ fontSize: 17, color: "var(--ink)" }}>
-                    Build language sets
-                  </p>
-                  <p className="text-xs m-0 mt-1" style={{ color: "var(--pencil)" }}>
-                    Marry the approved images with their reviewed translations and SEO metadata.
-                  </p>
-                </div>
-                <div className="flex flex-col gap-2 shrink-0">
-                  {languages.map((lang) => {
-                    const count = langFileCounts[lang] ?? 0;
-                    const skipped = langSkippedSubjects[lang] ?? [];
-                    return (
-                      <div key={lang}>
-                      <div className="flex items-center gap-3">
-                        <span
-                          className="inline-flex items-center justify-center rounded-md text-[10px] font-black uppercase"
-                          style={{ width: 30, height: 22, background: "var(--teal-tint)", color: "var(--teal-dark)" }}
-                        >
-                          {lang}
-                        </span>
-                        <span className="text-[11px] w-16 text-right" style={{ color: "var(--pencil)" }}>
-                          {loadingCounts ? "..." : `${count} file${count === 1 ? "" : "s"}`}
-                        </span>
-                        <span
-                          className="px-2 py-1 rounded-full text-[9px] font-bold whitespace-nowrap"
-                          style={
-                            count > 0
-                              ? { background: "var(--tone-sage-bg)", color: "var(--tone-sage)" }
-                              : { background: "var(--pencil-light)", color: "var(--pencil)" }
-                          }
-                        >
-                          {count > 0 ? "Ready" : "Up to date"}
-                        </span>
-                    </div>
-                    {skipped.length > 0 && (
-                      <p className="text-[10px] mt-1 mb-0" style={{ color: "var(--coral-dark)" }}>
-                        {skipped.length} subject{skipped.length === 1 ? "" : "s"} can&apos;t publish yet — missing{" "}
-                        {lang.toUpperCase()} translation: {skipped.join(", ")}.{" "}
-                        <button onClick={onGoToLanguage} className="underline font-bold">
-                          Fix in Language
-                        </button>
-                      </p>
-                    )}
-                    </div>
-                    );
-                  })}
-          </div>
+              <div className="p-4">
+                <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--pencil)", letterSpacing: "0.1em" }}>
+                  Prepare your files
+                </p>
+                <p className="font-display font-normal m-0 mt-1" style={{ fontSize: 17, color: "var(--ink)" }}>
+                  Build language sets
+                </p>
+                <p className="text-xs m-0 mt-1" style={{ color: "var(--pencil)" }}>
+                  Write SEO titles and alt text for each generated image, then build your local files and push to WordPress.
+                </p>
               </div>
+
+              {selectedImages.length > 0 && (
+                <div className="mx-4 mb-4 rounded-lg" style={{ padding: "15px 17px 10px", border: "1px solid var(--tone-lavender)", background: "var(--tone-lavender-bg)" }}>
+                  <div className="flex items-center justify-between mb-3.5">
+                    <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--tone-lavender)", letterSpacing: "0.1em" }}>
+                            Selected for publishing ({selectedImages.length})
+                    </p>
+                    <div className="flex items-center gap-2">
+                      {confirmingRemoveAll ? (
+                        <div className="flex items-center gap-1.5">
+                          <span style={{ fontSize: 9, color: "var(--coral-dark)" }}>Remove all?</span>
+                          <button
+                            onClick={() => {
+                              const idsToRemove = selectedImages.map((img) => img.id);
+                              setSelectedImages([]);
+                              idsToRemove.forEach((id) => onRemoveFromPublishSet?.(id));
+                              setConfirmingRemoveAll(false);
+                            }}
+                            className="font-bold"
+                            style={{ fontSize: 9, color: "var(--coral)" }}
+                          >
+                            Yes
+                          </button>
+                          <button
+                            onClick={() => setConfirmingRemoveAll(false)}
+                            style={{ fontSize: 9, color: "var(--pencil)" }}
+                          >
+                            No
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setConfirmingRemoveAll(true)}
+                          className="text-[9px] font-bold"
+                          style={{ color: "var(--coral-dark)" }}
+                        >
+                          Remove all
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setImagesNewestFirst((v) => !v)}
+                        className="w-5 h-5 flex items-center justify-center rounded"
+                        style={{ color: "var(--tone-lavender)" }}
+                        title={imagesNewestFirst ? "Newest on top" : "Oldest on top"}
+                      >
+                        {imagesNewestFirst ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-1.5 overflow-y-auto pr-1" style={{ height: selectedImagesExpanded ? 280 : 140, transition: "height 0.2s ease" }}>
+                    {(imagesNewestFirst ? [...selectedImages].reverse() : selectedImages).map((img, i) => {
+                      const isWarned = warnedImageIds?.includes(img.id) ?? false;
+                      return (
+                      <div key={img.id} className="rounded overflow-hidden shrink-0" style={{ border: isWarned ? "1px solid #c99a4a" : "none" }}>
+                      <div
+                        className="flex items-center gap-2.5 rounded"
+                        style={{
+                          padding: "6px 10px",
+                          background: isWarned ? "#fdf3e2" : "var(--canvas)",
+                          color: isWarned ? "#9c6f1f" : "var(--tone-lavender)",
+                          fontFamily: "ui-monospace, monospace",
+                          fontSize: 10,
+                        }}
+                      >
+                        <b style={{ minWidth: 18, color: "var(--pencil)", fontSize: 9, fontWeight: 500 }}>
+                          {String(i + 1).padStart(2, "0")}
+                        </b>
+                        <span className="truncate flex-1">
+                          {(() => {
+                            const variant = seoData?.content_variants?.find(
+                              (r) => r.subject_name === img.subject && r.variation_text === img.variation_text
+                            );
+                            return variant?.seo_title || `${img.subject}${img.variation_text ? ` — ${img.variation_text}` : ""}`;
+                          })()}
+                        </span>
+                        {removingId === img.id ? (
+                          <div className="flex items-center gap-1 shrink-0">
+                            <span style={{ color: "var(--coral-dark)", fontFamily: "inherit", fontSize: 9 }}>Remove?</span>
+                            <button
+                              onClick={() => {
+                                setSelectedImages((prev) => prev.filter((i2) => i2.id !== img.id));
+                                onRemoveFromPublishSet?.(img.id);
+                                setRemovingId(null);
+                              }}
+                              className="font-bold"
+                              style={{ color: "var(--coral)", fontFamily: "inherit", fontSize: 9 }}
+                            >
+                              Yes
+                            </button>
+                            <button
+                              onClick={() => setRemovingId(null)}
+                              style={{ color: "var(--pencil)", fontFamily: "inherit", fontSize: 9 }}
+                            >
+                              No
+                            </button>
+                          </div>
+                        ) : (
+                          <button onClick={() => setRemovingId(img.id)} className="shrink-0" style={{ color: isWarned ? "#9c6f1f" : "var(--tone-lavender)" }}>
+                            <X size={12} />
+                          </button>
+                        )}
+                      </div>
+                      {isWarned && (
+                        <div className="flex items-center justify-between gap-2" style={{ padding: "5px 10px 5px 28px", background: "#fdf3e2", borderTop: "1px solid #eddcb8" }}>
+                          <span style={{ fontSize: 9, color: "#9c6f1f" }}>Update SEO for this image?</span>
+                          <button
+                            title="Regenerate just this field"
+                            className="disabled:opacity-40"
+                            style={{ color: "#9c6f1f" }}
+                          >
+                            <RotateCw size={11} />
+                          </button>
+                        </div>
+                      )}
+                      </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex justify-end mt-5">
+                    <button
+                      onClick={() => setSelectedImagesExpanded((v) => !v)}
+                      className="w-5 h-5 flex items-center justify-center rounded"
+                      style={{ color: "var(--tone-lavender)" }}
+                      title={selectedImagesExpanded ? "Collapse" : "Expand"}
+                    >
+                      {selectedImagesExpanded ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {languages.length > 0 && (
+                <div className="mx-4 mb-4">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {languages.map((lang) => {
+                      const count = langFileCounts[lang] ?? 0;
+                      const skipped = langSkippedSubjects[lang] ?? [];
+                      const total = selectedImages.length;
+                      const ready = skipped.length === 0;
+                      return (
+                        <button
+                          key={lang}
+                          onClick={() => setSelectedLang(lang)}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[10px] font-bold"
+                          style={{
+                            ...(ready
+                              ? { background: "var(--tone-sage-bg)", color: "var(--tone-sage)" }
+                              : { background: "#fdf3e2", color: "#9c6f1f" }),
+                            outline: selectedLang === lang ? "2px solid var(--ink)" : "none",
+                            outlineOffset: 1,
+                          }}
+                        >
+                          <span className="uppercase">{lang}</span>
+                          <span>{loadingCounts ? "..." : `${count} of ${total} ready`}</span>
+                          {skipped.length > 0 && (
+                            <span onClick={(e) => { e.stopPropagation(); onGoToLanguage(); }} className="underline font-bold ml-1">
+                              Fix
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               <div
                 className="flex items-center justify-between gap-4 px-4 py-3"
                 style={{ borderTop: "1px solid var(--pencil-light)" }}
               >
                 <span className="text-[10px]" style={{ color: "var(--pencil)" }}>
-                  {Object.values(langFileCounts).every((c) => c === 0)
-                    ? "Everything is already built."
-                    : "Review SEO before building the sets."}
+                  {Object.values(langFileCounts).every((c) => c === 0) ? (
+                    "Everything is already built."
+                  ) : (
+                    <>
+                      <strong style={{ color: "var(--ink)" }}>
+                        {loadingCounts ? "..." : Object.values(langFileCounts).reduce((sum, c) => sum + c, 0)}
+                      </strong>{" "}
+                      file{Object.values(langFileCounts).reduce((sum, c) => sum + c, 0) === 1 ? "" : "s"} total ready to build across{" "}
+                      {languages.length} language{languages.length === 1 ? "" : "s"}
+                    </>
+                  )}
                 </span>
                 <button
                   onClick={handleBuildLanguageSets}
@@ -757,24 +811,49 @@ export default function PublishSequencePanel({
                 </div>
               </div>
 
-              {seoData.content_variants.length > 8 && (
-                <input
-                  type="text"
-                spellCheck={true}
-                  value={filter}
-                  onChange={(e) => setFilter(e.target.value)}
-                  placeholder={`Filter ${seoData.content_variants.length} rows...`}
-                  className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-xs mb-2"
-                  style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
-                />
-              )}
+              <div className="flex items-center gap-2 flex-wrap mb-2">
+                <select
+                  value={seoFilterSubject}
+                  onChange={(e) => setSeoFilterSubject(e.target.value)}
+                  className="px-2 py-2 rounded-md text-[10px] font-bold outline-none capitalize"
+                  style={{ border: "1px solid var(--pencil-light)", color: "var(--pencil)", background: "var(--canvas)" }}
+                >
+                  <option value="all">All subjects</option>
+                  {seoSubjects.map((s) => (
+                    <option key={s} value={s} className="capitalize">
+                      {s}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={seoSortView}
+                  onChange={(e) => setSeoSortView(e.target.value as typeof seoSortView)}
+                  className="px-2 py-2 rounded-md text-[10px] font-bold outline-none"
+                  style={{ border: "1px solid var(--pencil-light)", color: "var(--pencil)", background: "var(--canvas)" }}
+                >
+                  <option value="all">All</option>
+                  <option value="latest">Latest</option>
+                  <option value="oldest">Oldest</option>
+                </select>
+                <button
+                  onClick={() => setSeoOnlyNeedsReview((v) => !v)}
+                  className="px-2.5 py-2 rounded-md text-[10px] font-bold"
+                  style={
+                    seoOnlyNeedsReview
+                      ? { background: "var(--tone-blue)", color: "white" }
+                      : { border: "1px solid var(--tone-blue)", color: "var(--tone-blue)" }
+                  }
+                >
+                  Needs SEO review
+                </button>
+              </div>
 
               {seoData.content_variants.length === 0 ? (
                 <p className="text-sm" style={{ color: "var(--pencil)" }}>
                   No generated images for this category yet — go back to Generate first.
                 </p>
               ) : (
-                <div className="space-y-1.5 max-h-[440px] overflow-y-auto pr-1">
+                <div className="space-y-1.5 overflow-y-auto pr-1" style={{ height: seoRowsExpanded ? 680 : 340, transition: "height 0.2s ease" }}>
                   {filteredVariants.map((row) => {
                     const key = `${row.subject_name}::${row.variation_text}`;
                     const isExpanded = expandedRow === key;
@@ -1040,6 +1119,16 @@ export default function PublishSequencePanel({
                   })}
                 </div>
               )}
+              <div className="flex justify-end mt-3">
+                <button
+                  onClick={() => setSeoRowsExpanded((v) => !v)}
+                  className="w-5 h-5 flex items-center justify-center rounded"
+                  style={{ color: "var(--pencil)" }}
+                  title={seoRowsExpanded ? "Collapse" : "Expand"}
+                >
+                  {seoRowsExpanded ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+                </button>
+              </div>
             </>
           ) : (
             <p className="text-sm" style={{ color: "var(--pencil)" }}>

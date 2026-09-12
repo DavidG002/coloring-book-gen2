@@ -103,10 +103,17 @@ class Variation(Base):
 
     id = Column(Integer, primary_key=True)
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=False)
+    subject_id = Column(Integer, ForeignKey("subjects.id"), nullable=True)
+    # NULL = shared/global, usable by any subject in the category (the
+    # future "Mix Up" pool). A real value = owned exclusively by that
+    # one subject — the default, focused behavior for anything created
+    # going forward. See docs/decision-log.md (2026-09-11) for the full
+    # design.
     text = Column(Text, nullable=False)                       # e.g. "facing left, walking pose..."
     order = Column(Integer, nullable=False)                   # cycling order matters
 
     category = relationship("Category", back_populates="variations")
+    subject = relationship("Subject")
     variation_translation_items = relationship(
         "VariationTranslationItem", back_populates="variation", cascade="all, delete-orphan"
     )

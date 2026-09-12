@@ -1,0 +1,276 @@
+=== animals (category id 2) ===
+
+Subjects:
+  - cats
+  - dogs
+  - lion
+
+Variations (currently shared across all subjects above):
+  - facing left, full body side view, walking pose, curious expression
+  - facing right, full body side view, roaring with mouth wide open, excited
+  - front-facing, sitting down, big friendly smile, arms out
+  - three-quarter view from above, looking up at the sky, surprised expression
+  - full body, running pose, leaning forward with speed, determined look
+  - rear three-quarter view, looking back over shoulder with a cheeky grin
+  - low angle view, standing tall and proud, chest out, heroic pose
+  - full body, sleeping or resting, eyes closed, curled up peacefully
+  - jumping or leaping, all four limbs in the air, joyful expression
+  - full body, waving one arm at the viewer, big happy grin
+  - front-facing, arms crossed, pretending to look tough but still cute
+
+
+=== dinosaurs (category id 3) ===
+
+Subjects:
+  - T-Rex
+
+Variations (currently shared across all subjects above):
+  - facing left, full body side view, walking pose, curious expression
+  - facing right, full body side view, roaring with mouth wide open, excited
+  - front-facing, sitting down, big friendly smile, arms out
+  - three-quarter view from above, looking up at the sky, surprised expression
+  - full body, running pose, leaning forward with speed, determined look
+  - rear three-quarter view, looking back over shoulder with a cheeky grin
+  - low angle view, standing tall and proud, chest out, heroic pose
+  - full body, sleeping or resting, eyes closed, curled up peacefully
+  - jumping or leaping, all four limbs in the air, joyful expression
+  - full body, waving one arm at the viewer, big happy grin
+  - side view, head tilted down sniffing the ground, playful pose
+  - front-facing, arms crossed, pretending to look tough but still cute
+
+
+=== dogs (category id 8) ===
+
+Subjects:
+  - Bulgarian sheep dog
+  - Puddle
+  - Puppy
+
+Variations (currently shared across all subjects above):
+  - Sitting and eating ice cream
+  - Eating
+  - jumping
+
+
+=== for boys (category id 27) ===
+
+Subjects:
+  - Fashion
+
+Variations (currently shared across all subjects above):
+  - in baggy clothing
+  - boy in baggy clothing
+
+
+=== for girls (category id 26) ===
+
+Subjects:
+  - Barbey
+  - Fashion
+  - Princess
+  - makeup
+
+Variations (currently shared across all subjects above):
+  - twirling in a flowing ballgown
+  - sitting on a throne wearing a crown
+  - holding hands with a friendly dragon
+  - waving from a castle balcony
+  - modeling a sundress and sunhat
+  - trying on shoes in front of a mirror
+  - wearing a winter coat and scarf
+  - posing with a handbag and sunglasses
+  - handbag and sunglasses
+
+
+=== hello kitty (category id 11) ===
+
+Subjects:
+
+Variations (currently shared across all subjects above):
+
+
+=== holidays (category id 28) ===
+
+Subjects:
+  - Bank Holiday
+  - Christmas
+  - Easter
+  - New Years
+  - Passover
+  - Purim
+  - Ramadan
+  - Rosh Hashana
+  - Sukkot
+  - Thanks Given
+  - Yom Kipor
+
+Variations (currently shared across all subjects above):
+  - UK Bank Holiday
+  - boy in a costume
+  - eating apple dipped in honey
+  - screen full of difference Purim masks
+  - Purim fireworks in the sky
+  - Reading the Purim scroll
+  - Christmas tree
+  - Santa Claus
+  - New years big and small fireworks
+  - New York time square new years ball
+  - family sitting around a table having a thanks given dinner
+  - a pack of matzot
+  - a Jewish Sukkah
+  - Man and wife eating in a Jewish Sukkah surrounded by family and friends  with decorations and festive ornaments
+  - praying in jewish synagogue
+  - bunny
+  - egg
+  - torah book
+  - wailing wall
+
+
+=== ice cream (category id 9) ===
+
+Subjects:
+  - Drip Ice Cream
+  - I Love Ice Cream
+
+Variations (currently shared across all subjects above):
+  - Ice cream cone, fall on floar
+  - Ice cream mountain
+  - Ice cream dog
+  - Ice cream volcano
+
+
+=== nepoleons first battle (category id 19) ===
+
+Subjects:
+
+Variations (currently shared across all subjects above):
+
+
+=== pizza (category id 10) ===
+
+Subjects:
+
+Variations (currently shared across all subjects above):
+
+
+=== princess (category id 4) ===
+
+Subjects:
+  - African Princess
+  - English Princess
+  - Princess
+
+Variations (currently shared across all subjects above):
+  - facing left, full body side view, walking pose, curious expression
+  - facing right, full body side view, roaring with mouth wide open, excited
+  - front-facing, sitting down, big friendly smile, arms out
+
+
+=== root (category id 17) ===
+
+Subjects:
+  - Carrot
+  - Ginger
+  - garlic
+  - onion
+  - poteto
+
+Variations (currently shared across all subjects above):
+  - artistic
+  - artistic and natural full growth with flowrs
+  - cut into different sizes
+  - growing out of the ground with flowers
+
+
+=== siege of toulon — 1793 (category id 20) ===
+
+Subjects:
+  - Building the French Artillery Batteries
+  - Napoleon Directing the Artillery
+  - Young Napoleon Arrives at Toulon
+
+Variations (currently shared across all subjects above):
+  - A 24-year-old Napoleon examining Toulon's harbor from high ground, studying a map with French officers.
+  - Napoleon beside a French artillery battery, pointing toward the enemy positions while artillery crews load and aim large Revolutionary-era cannons
+  - Soldiers constructing gun positions with baskets, earthworks, wooden beams and gabions.
+
+
+=== skateboard (category id 7) ===
+
+Subjects:
+  - Skateboarding
+
+Variations (currently shared across all subjects above):
+
+
+=== sport (category id 14) ===
+
+Subjects:
+  - Basketball
+  - Football
+  - Skateboarding
+
+Variations (currently shared across all subjects above):
+  - dunk
+  - court
+  - Kick flip fakie on a quarter pipe
+  - Mute grab over a fence
+
+
+=== test (category id 23) ===
+
+Subjects:
+
+Variations (currently shared across all subjects above):
+
+
+=== test (category id 29) ===
+
+Subjects:
+  - etet
+
+Variations (currently shared across all subjects above):
+  - etet
+
+
+=== test2 (category id 24) ===
+
+Subjects:
+
+Variations (currently shared across all subjects above):
+
+
+=== test3 (category id 25) ===
+
+Subjects:
+
+Variations (currently shared across all subjects above):
+
+
+=== trees (category id 5) ===
+
+Subjects:
+  - forest trees
+
+Variations (currently shared across all subjects above):
+  - in the wind
+
+
+=== vehicles (category id 1) ===
+
+Subjects:
+  - Airplane
+  - Boat
+  - Car
+  - Jetsky
+  - Skateboard
+  - Truck
+
+Variations (currently shared across all subjects above):
+  - side view on a road
+  - front three-quarter view
+  - aerial top-down view
+  - jumping over a puddle
+  - sleeping on the side road
+
+
