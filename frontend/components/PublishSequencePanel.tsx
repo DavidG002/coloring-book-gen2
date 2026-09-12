@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Send, RotateCw, ArrowUp, ArrowDown, X } from "lucide-react";
+import { Send, RotateCw, ArrowUp, ArrowDown, X, Minimize2, Maximize2 } from "lucide-react";
 import SequencePanel from "./SequencePanel";
 import LanguagePills from "@/components/LanguagePills";
 import { getTranslations, ApiError, type Translation } from "@/lib/api";
@@ -97,7 +97,7 @@ async function planPublishForLang(category: string, lang: string, imageIds?: num
   const res = await fetch(`${API_BASE_URL}/publish/plan`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ category, lang, only_new: true, image_ids: imageIds && imageIds.length > 0 ? imageIds : null }),
+    body: JSON.stringify({ category, lang, only_new: true, image_ids: imageIds !== undefined ? imageIds : null }),
   });
   const data = await res.json();
   if (!res.ok) throw new ApiError(res.status, data.detail);
@@ -107,7 +107,7 @@ async function runPublishForLang(category: string, lang: string, imageIds?: numb
   const res = await fetch(`${API_BASE_URL}/publish/run`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ category, lang, only_new: true, image_ids: imageIds && imageIds.length > 0 ? imageIds : null }),
+    body: JSON.stringify({ category, lang, only_new: true, image_ids: imageIds !== undefined ? imageIds : null }),
   });
   const data = await res.json();
   if (!res.ok) throw new ApiError(res.status, data.detail);
@@ -122,6 +122,7 @@ export default function PublishSequencePanel({
   onSeoChanged,
   publishSetImageIds,
   onRemoveFromPublishSet,
+  warnedImageIds,
 }: {
   categoryId: number;
   categoryName: string;
@@ -130,6 +131,7 @@ export default function PublishSequencePanel({
   onSeoChanged?: () => void;
   publishSetImageIds?: number[] | null;
   onRemoveFromPublishSet?: (imageId: number) => void;
+  warnedImageIds?: number[];
 }) {
   const [languages, setLanguages] = useState<string[]>([]);
   const [loadingLangs, setLoadingLangs] = useState(true);
@@ -177,6 +179,7 @@ export default function PublishSequencePanel({
   const [regeneratingField, setRegeneratingField] = useState<string | null>(null);
   const [autoSeoBanner, setAutoSeoBanner] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<number | null>(null);
+  const [selectedImagesExpanded, setSelectedImagesExpanded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -439,7 +442,7 @@ export default function PublishSequencePanel({
       </div>
 
       {selectedImages.length > 0 && (
-        <div className="mx-6 mb-6 rounded-lg" style={{ padding: "15px 17px", border: "1px solid var(--tone-lavender)", background: "var(--tone-lavender-bg)" }}>
+        <div className="mx-6 mb-6 rounded-lg" style={{ padding: "15px 17px 10px", border: "1px solid var(--tone-lavender)", background: "var(--tone-lavender-bg)" }}>
           <div className="flex items-center justify-between mb-3.5">
             <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--tone-lavender)", letterSpacing: "0.1em" }}>
               Selected for publishing ({selectedImages.length})
@@ -453,17 +456,28 @@ export default function PublishSequencePanel({
               {imagesNewestFirst ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
             </button>
           </div>
-           <div className="grid gap-1.5 overflow-y-auto pr-1" style={{ height: 108, alignContent: "start" }}>
-            {(imagesNewestFirst ? [...selectedImages].reverse() : selectedImages).map((img, i) => (
+           <div className="flex flex-col gap-1.5 overflow-y-auto pr-1" style={{ height: selectedImagesExpanded ? 280 : 140, transition: "height 0.2s ease" }}>
+            {(imagesNewestFirst ? [...selectedImages].reverse() : selectedImages).map((img, i) => {
+              const isWarned = warnedImageIds?.includes(img.id) ?? false;
+              return (
+              <div key={img.id} className="rounded overflow-hidden shrink-0" style={{ border: isWarned ? "1px solid #c99a4a" : "none" }}>
               <div
-                key={img.id}
                 className="flex items-center gap-2.5 rounded"
-                style={{ padding: "6px 10px", background: "var(--canvas)", color: "var(--tone-lavender)", fontFamily: "ui-monospace, monospace", fontSize: 10 }}
+                style={{
+                  padding: "6px 10px",
+                  background: isWarned ? "#fdf3e2" : "var(--canvas)",
+                  color: isWarned ? "#9c6f1f" : "var(--tone-lavender)",
+                  fontFamily: "ui-monospace, monospace",
+                  fontSize: 10,
+                }}
               >
                 <b style={{ minWidth: 18, color: "var(--pencil)", fontSize: 9, fontWeight: 500 }}>
                   {String(i + 1).padStart(2, "0")}
                 </b>
-                <span className="truncate flex-1">{img.filename}</span>
+                <span className="truncate flex-1">
+                  {img.subject}
+                  {img.variation_text ? ` — ${img.variation_text}` : ""}
+                </span>
                 {removingId === img.id ? (
                   <div className="flex items-center gap-1 shrink-0">
                     <span style={{ color: "var(--coral-dark)", fontFamily: "inherit", fontSize: 9 }}>Remove?</span>
@@ -486,12 +500,36 @@ export default function PublishSequencePanel({
                     </button>
                   </div>
                 ) : (
-                  <button onClick={() => setRemovingId(img.id)} className="shrink-0" style={{ color: "var(--tone-lavender)" }}>
+                  <button onClick={() => setRemovingId(img.id)} className="shrink-0" style={{ color: isWarned ? "#9c6f1f" : "var(--tone-lavender)" }}>
                     <X size={12} />
                   </button>
                 )}
               </div>
-            ))}
+              {isWarned && (
+                <div className="flex items-center justify-between gap-2" style={{ padding: "5px 10px 5px 28px", background: "#fdf3e2", borderTop: "1px solid #eddcb8" }}>
+                  <span style={{ fontSize: 9, color: "#9c6f1f" }}>Update SEO for this image?</span>
+                  <button
+                    title="Regenerate just this field"
+                    className="disabled:opacity-40"
+                    style={{ color: "#9c6f1f" }}
+                  >
+                    <RotateCw size={11} />
+                  </button>
+                </div>
+              )}
+              </div>
+              );
+            })}
+          </div>
+          <div className="flex justify-end mt-5">
+            <button
+              onClick={() => setSelectedImagesExpanded((v) => !v)}
+              className="w-5 h-5 flex items-center justify-center rounded"
+              style={{ color: "var(--tone-lavender)" }}
+              title={selectedImagesExpanded ? "Collapse" : "Expand"}
+            >
+              {selectedImagesExpanded ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+            </button>
           </div>
         </div>
       )}

@@ -350,8 +350,42 @@ async function doRegenerate(id: number) {
 }
 
   
-  const subjectsInImages = Array.from(new Set(images.map((img) => img.subject))).sort();
+    const subjectsInImages = Array.from(new Set(images.map((img) => img.subject))).sort();
   const [filterSubject, setFilterSubject] = useState<"all" | string>("all");
+
+  const filtersLoadedRef = useRef(false);
+
+  useEffect(() => {
+    filtersLoadedRef.current = false;
+    const timer = setTimeout(() => {
+      try {
+        const saved = window.localStorage.getItem(`image-filters-${categoryId}`);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed.minimized !== undefined) setMinimized(parsed.minimized);
+          if (parsed.sortBy !== undefined) setSortBy(parsed.sortBy);
+          if (parsed.filterStatus !== undefined) setFilterStatus(parsed.filterStatus);
+          if (parsed.filterBatch !== undefined) setFilterBatch(parsed.filterBatch);
+          if (parsed.filterDate !== undefined) setFilterDate(parsed.filterDate);
+          if (parsed.showOnlyPublishSet !== undefined) setShowOnlyPublishSet(parsed.showOnlyPublishSet);
+          if (parsed.filterSubject !== undefined) setFilterSubject(parsed.filterSubject);
+        }
+      } catch {
+        // corrupted/old data — ignore, start fresh
+      } finally {
+        filtersLoadedRef.current = true;
+      }
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [categoryId]);
+
+  useEffect(() => {
+    if (!filtersLoadedRef.current) return;
+    window.localStorage.setItem(
+      `image-filters-${categoryId}`,
+      JSON.stringify({ minimized, sortBy, filterStatus, filterBatch, filterDate, showOnlyPublishSet, filterSubject })
+    );
+  }, [minimized, sortBy, filterStatus, filterBatch, filterDate, showOnlyPublishSet, filterSubject, categoryId]);
 
   const batchesByDate = (() => {
     const dateToBatchIds = new Map<string, Set<number>>();

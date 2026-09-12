@@ -79,6 +79,7 @@ export default function GenerateSequencePanel({
   onBuildPublishSet,
   publishSetImageIds,
   onReviewPublishSet,
+  onWarnedImagesIdentified,
 }: {
   categoryName: string;
   category: Category;
@@ -91,6 +92,7 @@ export default function GenerateSequencePanel({
   onBuildPublishSet?: (imageIds: number[]) => void;
   publishSetImageIds?: number[];
   onReviewPublishSet?: () => void;
+  onWarnedImagesIdentified?: (imageIds: number[]) => void;
 }) {
   
   const [subjects, setSubjects] = useState<string[]>(category.subjects.map((s) => s.name));
@@ -472,6 +474,10 @@ export default function GenerateSequencePanel({
                         } else {
                           newRows.push({ key, filename: label, tone: "added", message: "Added to your Publish set" });
                         }
+                      }
+
+                      if (warnedIds.length > 0) {
+                        onWarnedImagesIdentified?.(warnedIds.filter((id) => finalIds.includes(id)));
                       }
                     } catch {
                       // best-effort — never block adding over a failed check

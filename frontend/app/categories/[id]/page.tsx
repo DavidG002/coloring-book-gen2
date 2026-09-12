@@ -28,6 +28,7 @@ export default function CategoryDetailPage() {
   const [publishPendingReview, setPublishPendingReview] = useState<string[]>([]);
   const [publishCheckTrigger, setPublishCheckTrigger] = useState(0);
   const [publishSetImageIds, setPublishSetImageIds] = useState<number[] | null>(null);
+  const [warnedPublishImageIds, setWarnedPublishImageIds] = useState<number[]>([]);
   const publishSetLoadedRef = useRef(false);
 
   useEffect(() => {
@@ -36,6 +37,8 @@ export default function CategoryDetailPage() {
       try {
         const saved = window.localStorage.getItem(`publish-set-${categoryId}`);
         if (saved) setPublishSetImageIds(JSON.parse(saved));
+        const savedWarned = window.localStorage.getItem(`publish-set-warned-${categoryId}`);
+        if (savedWarned) setWarnedPublishImageIds(JSON.parse(savedWarned));
       } catch {
         // corrupted/old data — ignore, start fresh
       } finally {
@@ -49,6 +52,11 @@ export default function CategoryDetailPage() {
     if (!publishSetLoadedRef.current) return;
     window.localStorage.setItem(`publish-set-${categoryId}`, JSON.stringify(publishSetImageIds ?? []));
   }, [publishSetImageIds, categoryId]);
+
+  useEffect(() => {
+    if (!publishSetLoadedRef.current) return;
+    window.localStorage.setItem(`publish-set-warned-${categoryId}`, JSON.stringify(warnedPublishImageIds));
+  }, [warnedPublishImageIds, categoryId]);
 
   useEffect(() => {
     if (!category) return;
@@ -262,6 +270,9 @@ export default function CategoryDetailPage() {
                   setPublishSetImageIds((prev) => Array.from(new Set([...(prev ?? []), ...imageIds])));
                 }}
                 onReviewPublishSet={() => goToStep("publish")}
+                onWarnedImagesIdentified={(imageIds) => {
+                  setWarnedPublishImageIds((prev) => Array.from(new Set([...prev, ...imageIds])));
+                }}
               />
             )}
             {activeStep === "language" && (
@@ -286,6 +297,7 @@ export default function CategoryDetailPage() {
                 onRemoveFromPublishSet={(imageId) => {
                   setPublishSetImageIds((prev) => (prev ?? []).filter((id) => id !== imageId));
                 }}
+                warnedImageIds={warnedPublishImageIds}
               />
             )}
             {activeStep === "wordpress" && (
