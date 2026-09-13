@@ -40,6 +40,8 @@ export default function BookDetailPage() {
   const [highlightedCategoryId, setHighlightedCategoryId] = useState<number | null>(null);
   const [prepareCategoryOpen, setPrepareCategoryOpen] = useState(true);
   const [justFinishedWizard, setJustFinishedWizard] = useState(false);
+  const [selectedPreviewCategoryName, setSelectedPreviewCategoryName] = useState("");
+  
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -213,7 +215,7 @@ useEffect(() => {
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6 items-start">
         <div className="space-y-6 min-w-0">
-          <BookPreviewSection bookId={bookId} />
+          <BookPreviewSection bookId={bookId} onCategoryChanged={setSelectedPreviewCategoryName} />
 
           <Panel
             kicker="YOUR COLLECTIONS"
@@ -308,7 +310,7 @@ useEffect(() => {
         </div>
 
         <div className="space-y-6">
-          <BookSettingsFields bookId={bookId} onBookLoaded={setBook} defaultSection={justFinishedWizard ? "knobs" : undefined} />
+          <BookSettingsFields bookId={bookId} onBookLoaded={setBook} defaultSection={justFinishedWizard ? "knobs" : undefined} selectedCategoryName={selectedPreviewCategoryName} />
         </div>
       </div>
 

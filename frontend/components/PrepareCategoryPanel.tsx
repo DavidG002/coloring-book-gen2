@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2, Plus, Minimize2, Maximize2 } from "lucide-react";
 import { getCategory, updateCategory, type CategorySummary, type Category } from "@/lib/api";
 import EditListModal from "./EditListModal";
 
@@ -13,12 +13,12 @@ export default function PrepareCategoryPanel({
   defaultCategoryId?: number;
 }) {
   const [selected, setSelected] = useState<number | undefined>(defaultCategoryId ?? categories[0]?.id);
-  const [subjects, setSubjects] = useState<string[]>([]);
-  const [variations, setVariations] = useState<string[]>([]);
+  const [category, setCategory] = useState<Category | null>(null);
   const [selectedSubject, setSelectedSubject] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editModalKind, setEditModalKind] = useState<"subjects" | "variations" | null>(null);
+  const [listsExpanded, setListsExpanded] = useState(false);
 
   useEffect(() => {
     if (!defaultCategoryId) return;
@@ -30,11 +30,8 @@ export default function PrepareCategoryPanel({
     setLoading(true);
     getCategory(id)
       .then((cat) => {
-        const subjNames = cat.subjects.map((s) => s.name);
-        const varTexts = cat.variations.sort((a, b) => a.order - b.order).map((v) => v.text);
-        setSubjects(subjNames);
-        setVariations(varTexts);
-        setSelectedSubject(subjNames[0] ?? "");
+        setCategory(cat);
+        setSelectedSubject(cat.subjects[0]?.name ?? "");
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -48,27 +45,34 @@ export default function PrepareCategoryPanel({
   }, [selected]);
 
   function handleListSaved(updated: Category) {
-    setSubjects(updated.subjects.map((s) => s.name));
-    setVariations(updated.variations.sort((a, b) => a.order - b.order).map((v) => v.text));
+    setCategory(updated);
   }
+
+  const subjects = category?.subjects.map((s) => s.name) ?? [];
+  const selectedSubjectId = category?.subjects.find((s) => s.name === selectedSubject)?.id;
+  const variations = (category?.variations ?? [])
+    .filter((v) => v.subject_id === selectedSubjectId)
+    .sort((a, b) => a.order - b.order)
+    .map((v) => v.text);
 
   async function handleRemoveSubject(subject: string) {
     if (!selected) return;
     const next = subjects.filter((s) => s !== subject);
-    setSubjects(next);
     try {
-      await updateCategory(selected, { subjects: next });
+      const updated = await updateCategory(selected, { subjects: next });
+      setCategory(updated);
+      if (selectedSubject === subject) setSelectedSubject(updated.subjects[0]?.name ?? "");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to remove subject");
     }
   }
 
   async function handleRemoveVariation(variation: string) {
-    if (!selected) return;
+    if (!selected || !selectedSubjectId) return;
     const next = variations.filter((v) => v !== variation);
-    setVariations(next);
     try {
-      await updateCategory(selected, { variations: next });
+      const updated = await updateCategory(selected, { variations: next, variations_subject_id: selectedSubjectId });
+      setCategory(updated);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to remove variation");
     }
@@ -120,8 +124,22 @@ export default function PrepareCategoryPanel({
           Loading...
         </p>
       ) : (
-        <div className="grid grid-cols-2 rounded-lg overflow-hidden" style={{ border: "1px solid var(--pencil-light)" }}>
-          <div style={{ padding: 16, borderRight: "1px solid var(--pencil-light)", background: "var(--paper)" }}>
+        <>
+        <div className="grid relative rounded-lg" style={{ gridTemplateColumns: "minmax(160px, 0.8fr) 1.6fr", border: "1px solid var(--pencil-light)", background: "#eef2f5cd" }}>
+          <div
+            className="absolute flex items-center justify-center"
+            style={{ gridColumn: "1 / 2", justifySelf: "end", bottom: -13, width: 26, height: 26, position: "absolute", right: -13, zIndex: 10 }}
+          >
+            <button
+              onClick={() => setListsExpanded((v) => !v)}
+              className="flex items-center justify-center rounded-full w-full h-full"
+              style={{ background: "var(--canvas)", border: "1px solid var(--pencil-light)", color: "var(--pencil)", boxShadow: "0 2px 6px rgba(28,27,26,0.12)" }}
+              title={listsExpanded ? "Collapse" : "Expand"}
+            >
+              {listsExpanded ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+            </button>
+          </div>
+          <div className="rounded-l-lg overflow-hidden" style={{ padding: 16, borderRight: "1px solid var(--pencil-light)" }}>
             <div className="flex items-center justify-between mb-3">
               <div>
                 <h4 className="font-display font-normal m-0" style={{ fontSize: 15, color: "var(--ink)" }}>
@@ -139,6 +157,7 @@ export default function PrepareCategoryPanel({
                 <Plus size={12} /> Add
               </button>
             </div>
+            <div className="overflow-y-auto pr-1" style={{ maxHeight: listsExpanded ? 520 : 260, transition: "max-height 0.2s ease" }}>
             {subjects.length === 0 ? (
               <p className="text-xs" style={{ color: "var(--pencil)" }}>
                 No subjects yet.
@@ -174,29 +193,36 @@ export default function PrepareCategoryPanel({
                 );
               })
             )}
+            </div>
           </div>
 
-          <div style={{ padding: 16, background: "var(--paper)" }}>
+          <div className="rounded-r-lg overflow-hidden" style={{ padding: 16 }}>
             <div className="flex items-center justify-between mb-3">
               <div>
                 <h4 className="font-display font-normal m-0" style={{ fontSize: 15, color: "var(--ink)" }}>
                   Variations
                 </h4>
-                <p className="text-[10px] m-0 mt-0.5" style={{ color: "var(--pencil)" }}>
-                  {variations.length} available
+                <p className="text-[10px] m-0 mt-0.5 capitalize" style={{ color: "var(--pencil)" }}>
+                  For {selectedSubject || "—"} · {variations.length} available
                 </p>
               </div>
               <button
                 onClick={() => setEditModalKind("variations")}
-                className="inline-flex items-center gap-1 px-2 py-1.5 rounded-md text-[10px] font-bold"
+                disabled={!selectedSubjectId}
+                className="inline-flex items-center gap-1 px-2 py-1.5 rounded-md text-[10px] font-bold disabled:opacity-40"
                 style={{ border: "1px solid var(--pencil-light)", color: "var(--teal)" }}
               >
                 <Plus size={12} /> Add
               </button>
             </div>
-            {variations.length === 0 ? (
+            <div className="overflow-y-auto pr-1" style={{ maxHeight: listsExpanded ? 520 : 260, transition: "max-height 0.2s ease" }}>
+            {!selectedSubjectId ? (
               <p className="text-xs" style={{ color: "var(--pencil)" }}>
-                No variations yet.
+                Select a subject to manage its variations.
+              </p>
+            ) : variations.length === 0 ? (
+              <p className="text-xs" style={{ color: "var(--pencil)" }}>
+                No variations yet for {selectedSubject}.
               </p>
             ) : (
               variations.map((variation) => (
@@ -216,8 +242,10 @@ export default function PrepareCategoryPanel({
                 </div>
               ))
             )}
+            </div>
           </div>
         </div>
+        </>
       )}
 
       {editModalKind && selected && (
@@ -227,6 +255,7 @@ export default function PrepareCategoryPanel({
           currentItems={editModalKind === "subjects" ? subjects : variations}
           onClose={() => setEditModalKind(null)}
           onSaved={handleListSaved}
+          variationsSubjectId={editModalKind === "variations" ? selectedSubjectId : undefined}
         />
       )}
     </div>

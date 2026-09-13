@@ -48,7 +48,7 @@ def build_task_list(
                 "subject": subject.name,
                 "variation_number": variation_num,
                 "variation_text": modifier.text,
-                "base_prompt": category.book.base_prompt,
+                "base_prompt": category.effective_base_prompt,
                 "knobs": get_book_knobs(category.book),
             })
 
@@ -94,7 +94,7 @@ def build_task_list_from_pairs(db: Session, category_name: str, pairs: list[dict
             "subject": subject_name,
             "variation_number": counters[subject_name],
             "variation_text": pair["variation_text"],
-            "base_prompt": category.book.base_prompt,
+            "base_prompt": category.effective_base_prompt,
             "knobs": get_book_knobs(category.book),
         })
     return tasks
@@ -340,7 +340,7 @@ def build_regenerate_task(db: Session, image_id: int) -> dict:
         "subject": image.subject,
         "variation_number": next_variation,
         "variation_text": image.variation_text,
-        "base_prompt": category.book.base_prompt,  # unused when override_compiled is set, kept for shape consistency
+        "base_prompt": category.effective_base_prompt,  # unused when override_compiled is set, kept for shape consistency
         "knobs": {},  # same — override_compiled takes precedence in generate_image_file
         "override_compiled": compiled,
     }

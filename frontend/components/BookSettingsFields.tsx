@@ -41,18 +41,42 @@ export default function BookSettingsFields({
   bookId,
   onBookLoaded,
   defaultSection,
+  selectedCategoryName,
 }: {
   bookId: number;
   onBookLoaded?: (book: Book) => void;
   defaultSection?: SectionKey;
+  selectedCategoryName?: string;
 }) {
+  
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [book, setBook] = useState<Book | null>(null);
-
   const [name, setName] = useState("");
   const [basePrompt, setBasePrompt] = useState("");
   const [productNoun, setProductNoun] = useState("coloring page");
+
+  useEffect(() => {
+    if (!selectedCategoryName) return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/categories/by-name/${bookId}/${encodeURIComponent(selectedCategoryName)}/base-prompt`
+        );
+        const data = await res.json();
+        if (!cancelled && res.ok) setBasePrompt(data.base_prompt);
+      } catch {
+        // best-effort — keep whatever was showing if this fails
+      }
+    }, 0);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [selectedCategoryName, bookId]);
+
+
   const [canvasWidth, setCanvasWidth] = useState(595);
   const [canvasHeight, setCanvasHeight] = useState(842);
   const [subjectSizeRatio, setSubjectSizeRatio] = useState(0.5);
@@ -220,10 +244,20 @@ function setActiveSection(key: SectionKey) {
     }
     setSavingPrompt(true);
     try {
-      const updated = await updateBook(bookId, { base_prompt: trimmed });
-      setBasePrompt(updated.base_prompt);
-      setBook(updated);
-      onBookLoaded?.(updated);
+      if (selectedCategoryName) {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/categories/by-name/${bookId}/${encodeURIComponent(selectedCategoryName)}/base-prompt`,
+          { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ base_prompt: trimmed }) }
+        );
+        const data = await res.json();
+        if (!res.ok) throw new ApiError(res.status, data.detail);
+        setBasePrompt(data.base_prompt);
+      } else {
+        const updated = await updateBook(bookId, { base_prompt: trimmed });
+        setBasePrompt(updated.base_prompt);
+        setBook(updated);
+        onBookLoaded?.(updated);
+      }
       setPromptSaved(true);
       setTimeout(() => setPromptSaved(false), 2000);
     } catch (err) {

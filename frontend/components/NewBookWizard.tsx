@@ -7,7 +7,7 @@ import { updateBook, createCategory, updateCategory, ApiError, type Book } from 
 import { PAPER_PRESETS } from "./SettingsUI";
 import { FileText } from "lucide-react";
 
-const STEPS = ["Book type", "Creative direction", "Canvas", "First category"];
+const STEPS = ["Book type", "Canvas", "First category"];
 
 const BOOK_TYPES = [
   {
@@ -27,13 +27,6 @@ const BOOK_TYPES = [
   },
 ];
 
-function parseLines(text: string): string[] {
-  return text
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean);
-}
-
 export default function NewBookWizard({
   book,
   onFinished,
@@ -46,15 +39,14 @@ export default function NewBookWizard({
   const [canvasWidth, setCanvasWidth] = useState(book.canvas_width || 595);
   const [canvasHeight, setCanvasHeight] = useState(book.canvas_height || 842);
   const [subjectSizeRatio, setSubjectSizeRatio] = useState(book.subject_size_ratio || 0.5);
-  const [canvasSubStage, setCanvasSubStage] = useState<"shape" | "ratio">("shape");
-  const [basePrompt, setBasePrompt] = useState(book.base_prompt || "");
   const [categoryName, setCategoryName] = useState("");
-  const [subjectsText, setSubjectsText] = useState("");
-  const [variationsText, setVariationsText] = useState("");
+  const [subjectName, setSubjectName] = useState("");
+  const [variationName, setVariationName] = useState("");
+  const [basePrompt, setBasePrompt] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const canContinue = step === 3 ? categoryName.trim().length > 0 : true;
+  const canContinue = step === 2 ? categoryName.trim().length > 0 : true;
 
   async function handleFinish() {
     setError(null);
@@ -65,7 +57,6 @@ export default function NewBookWizard({
         canvas_width: canvasWidth,
         canvas_height: canvasHeight,
         subject_size_ratio: subjectSizeRatio,
-        base_prompt: basePrompt.trim(),
         wizard_completed: true,
         line_weight_enabled: false,
         detail_density_enabled: false,
@@ -78,16 +69,29 @@ export default function NewBookWizard({
 
       const trimmedCategory = categoryName.trim();
       if (trimmedCategory) {
-        const subjects = parseLines(subjectsText);
-        const variations = parseLines(variationsText);
-        const category = await createCategory({
+        const trimmedSubject = subjectName.trim();
+        const trimmedVariation = variationName.trim();
+        const trimmedPrompt = basePrompt.trim();
+        let category = await createCategory({
           name: trimmedCategory.toLowerCase(),
           book_id: book.id,
           subjects: [],
           variations: [],
         });
-        if (subjects.length > 0 || variations.length > 0) {
-          await updateCategory(category.id, { subjects, variations });
+
+        if (trimmedPrompt) {
+          category = await updateCategory(category.id, { base_prompt: trimmedPrompt });
+        }
+
+        if (trimmedSubject) {
+          // Create the subject FIRST, alone, so we get its real ID back —
+          // needed to correctly scope the variation to it in the next
+          // call, rather than saving it as shared/unscoped.
+          category = await updateCategory(category.id, { subjects: [trimmedSubject] });
+          const newSubjectId = category.subjects.find((s) => s.name === trimmedSubject)?.id;
+          if (trimmedVariation && newSubjectId) {
+            category = await updateCategory(category.id, { variations: [trimmedVariation], variations_subject_id: newSubjectId });
+          }
         }
       }
 
@@ -124,6 +128,7 @@ export default function NewBookWizard({
   }
 
   const selectedType = BOOK_TYPES.find((t) => t.key === bookType);
+  const selectedPresetLabel = PAPER_PRESETS.find((p) => p.width === canvasWidth && p.height === canvasHeight)?.label;
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--paper)" }}>
@@ -279,37 +284,6 @@ export default function NewBookWizard({
               {step === 1 && (
                 <div>
                   <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--pencil)", letterSpacing: "0.1em" }}>
-                    Creative direction
-                  </p>
-                  <h2 className="font-display font-normal m-0 mt-1.5 mb-2.5" style={{ fontSize: 27, letterSpacing: "-0.03em", color: "var(--ink)" }}>
-                    Set the world of this book.
-                  </h2>
-                  <p className="text-xs leading-relaxed mb-6" style={{ maxWidth: 460, color: "var(--pencil)" }}>
-                    A short genre or theme — what this book is about, not how it looks. Style, line weight, and detail
-                    are controlled separately, right on the book page.
-                  </p>
-                  <textarea
-                    value={basePrompt}
-                    onChange={(e) => setBasePrompt(e.target.value)}
-                    spellCheck={true}
-                    rows={5}
-                    placeholder="e.g. Fun, wholesome coloring pages for kids ages 3 to 10"
-                    autoFocus
-                    className="w-full px-3 py-2.5 rounded-md border-[1.5px] outline-none text-sm leading-relaxed"
-                    style={{ borderColor: "var(--pencil-light)", background: "var(--paper)" }}
-                  />
-                  <div className="flex gap-2 mt-3 rounded-lg" style={{ padding: 12, border: "1px solid #c9ddd2", background: "var(--teal-tint)" }}>
-                    <Sparkles size={14} style={{ color: "var(--teal-dark)", flexShrink: 0 }} />
-                    <p className="text-[10px] leading-relaxed m-0" style={{ color: "var(--teal-dark)" }}>
-                      This can be left blank — you can always add or change it later from the book page.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {step === 2 && (
-                <div>
-                  <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--pencil)", letterSpacing: "0.1em" }}>
                     Canvas
                   </p>
                   <h2 className="font-display font-normal m-0 mt-1.5 mb-2.5" style={{ fontSize: 27, letterSpacing: "-0.03em", color: "var(--ink)" }}>
@@ -319,137 +293,102 @@ export default function NewBookWizard({
                     This sets the proportions for previews and future exports. You can fine-tune it later on the book
                     page.
                   </p>
-                  {canvasSubStage === "shape" && (
-                  <div className="grid gap-2">
-                    {PAPER_PRESETS.map((preset) => {
-                      const selected = canvasWidth === preset.width && canvasHeight === preset.height;
-                      return (
-                        <button
-                          key={preset.label}
-                          onClick={() => {
-                            setCanvasWidth(preset.width);
-                            setCanvasHeight(preset.height);
-                          }}
-                          className="flex items-center gap-3 text-left rounded-lg"
-                          style={{
-                            padding: 14,
-                            border: `1.5px solid ${selected ? "var(--teal)" : "var(--pencil-light)"}`,
-                            background: selected ? "var(--teal-tint)" : "transparent",
-                          }}
-                        >
-                          <div
-                            className="w-8 h-8 rounded-md flex items-center justify-center shrink-0"
-                            style={{ background: "var(--teal-tint)", color: "var(--teal)" }}
-                          >
-                            <FileText size={15} />
-                          </div>
-                          <p className="text-sm font-bold flex-1 m-0" style={{ color: "var(--ink)" }}>
-                            {preset.label}
-                          </p>
-                          {selected && <Check size={17} style={{ color: "var(--teal)", flexShrink: 0 }} />}
-                        </button>
-                      );
-                    })}
-                    <button
-                      onClick={() => {
+
+                  <label className="block text-[10px] font-bold uppercase mb-1.5" style={{ color: "var(--pencil)", letterSpacing: "0.08em" }}>
+                    Canvas size
+                  </label>
+                  <select
+                    value={canvasWidth === 0 ? "custom" : (selectedPresetLabel ?? "custom")}
+                    onChange={(e) => {
+                      if (e.target.value === "custom") {
                         setCanvasWidth(0);
                         setCanvasHeight(0);
-                      }}
-                      className="flex items-center gap-3 text-left rounded-lg"
-                      style={{
-                        padding: 14,
-                        border: `1.5px solid ${canvasWidth === 0 ? "var(--teal)" : "var(--pencil-light)"}`,
-                        background: canvasWidth === 0 ? "var(--teal-tint)" : "transparent",
-                      }}
-                    >
-                      <div
-                        className="w-8 h-8 rounded-md flex items-center justify-center shrink-0"
-                        style={{ background: "var(--teal-tint)", color: "var(--teal)" }}
-                      >
-                        <FileText size={15} />
-                      </div>
-                      <p className="text-sm font-bold flex-1 m-0" style={{ color: "var(--ink)" }}>
-                        Custom size
-                      </p>
-                      {canvasWidth === 0 && <Check size={17} style={{ color: "var(--teal)", flexShrink: 0 }} />}
-                    </button>
-                    {canvasWidth === 0 && (
-                      <div className="grid grid-cols-2 gap-3 mt-1">
-                        <div>
-                          <label className="block text-[10px] font-bold uppercase mb-1.5" style={{ color: "var(--pencil)", letterSpacing: "0.08em" }}>
-                            Width (px)
-                          </label>
-                          <input
-                            type="number"
-                            value={canvasWidth || ""}
-                            onChange={(e) => setCanvasWidth(parseInt(e.target.value, 10) || 0)}
-                            className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
-                            style={{ borderColor: "var(--pencil-light)", background: "var(--paper)" }}
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold uppercase mb-1.5" style={{ color: "var(--pencil)", letterSpacing: "0.08em" }}>
-                            Height (px)
-                          </label>
-                          <input
-                            type="number"
-                            value={canvasHeight || ""}
-                            onChange={(e) => setCanvasHeight(parseInt(e.target.value, 10) || 0)}
-                            className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
-                            style={{ borderColor: "var(--pencil-light)", background: "var(--paper)" }}
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  )}
+                        return;
+                      }
+                      const preset = PAPER_PRESETS.find((p) => p.label === e.target.value);
+                      if (preset) {
+                        setCanvasWidth(preset.width);
+                        setCanvasHeight(preset.height);
+                      }
+                    }}
+                    className="w-full px-3 py-2.5 rounded-md border-[1.5px] outline-none text-sm mb-3"
+                    style={{ borderColor: "var(--pencil-light)", background: "var(--paper)" }}
+                  >
+                    {PAPER_PRESETS.map((preset) => (
+                      <option key={preset.label} value={preset.label}>
+                        {preset.label}
+                      </option>
+                    ))}
+                    <option value="custom">Custom size</option>
+                  </select>
 
-                  {canvasSubStage === "ratio" && (
-                    <div>
-                      <button
-                        onClick={() => setCanvasSubStage("shape")}
-                        className="inline-flex items-center gap-1 text-[11px] font-medium mb-4"
-                        style={{ color: "var(--pencil)" }}
-                      >
-                        <ArrowLeft size={12} /> Change page shape
-                      </button>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="block text-[10px] font-bold uppercase" style={{ color: "var(--pencil)", letterSpacing: "0.08em" }}>
-                          Subject size
+                  {canvasWidth === 0 && (
+                    <div className="grid grid-cols-2 gap-3 mb-5">
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase mb-1.5" style={{ color: "var(--pencil)", letterSpacing: "0.08em" }}>
+                          Width (px)
                         </label>
-                        <span className="text-[11px] font-bold" style={{ color: "var(--teal)" }}>
-                          {Math.round(subjectSizeRatio * 100)}%
-                        </span>
+                        <input
+                          type="number"
+                          value={canvasWidth || ""}
+                          onChange={(e) => setCanvasWidth(parseInt(e.target.value, 10) || 0)}
+                          className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
+                          style={{ borderColor: "var(--pencil-light)", background: "var(--paper)" }}
+                        />
                       </div>
-                      <p className="text-[11px] leading-relaxed mb-4" style={{ color: "var(--pencil)" }}>
-                        How much of the page your subject fills, leaving room around it. Watch the live preview on
-                        the right.
-                      </p>
-                      <input
-                        type="range"
-                        min={0.2}
-                        max={0.9}
-                        step={0.05}
-                        value={subjectSizeRatio}
-                        onChange={(e) => setSubjectSizeRatio(parseFloat(e.target.value))}
-                        className="w-full"
-                        style={{ accentColor: "var(--teal)" }}
-                      />
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase mb-1.5" style={{ color: "var(--pencil)", letterSpacing: "0.08em" }}>
+                          Height (px)
+                        </label>
+                        <input
+                          type="number"
+                          value={canvasHeight || ""}
+                          onChange={(e) => setCanvasHeight(parseInt(e.target.value, 10) || 0)}
+                          className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
+                          style={{ borderColor: "var(--pencil-light)", background: "var(--paper)" }}
+                        />
+                      </div>
                     </div>
                   )}
+
+                  <div className="flex items-center justify-between mb-1.5 mt-5">
+                    <label className="block text-[10px] font-bold uppercase" style={{ color: "var(--pencil)", letterSpacing: "0.08em" }}>
+                      Subject size
+                    </label>
+                    <span className="text-[11px] font-bold" style={{ color: "var(--teal)" }}>
+                      {Math.round(subjectSizeRatio * 100)}%
+                    </span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed mb-4" style={{ color: "var(--pencil)" }}>
+                    How much of the page your subject fills, leaving room around it. Watch the live preview on the
+                    right.
+                  </p>
+                  <input
+                    type="range"
+                    min={0.2}
+                    max={0.9}
+                    step={0.05}
+                    value={subjectSizeRatio}
+                    onChange={(e) => setSubjectSizeRatio(parseFloat(e.target.value))}
+                    className="w-full"
+                    style={{ accentColor: "var(--teal)" }}
+                  />
                 </div>
               )}
-              {step === 3 && (
+
+              {step === 2 && (
                 <div>
                   <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--pencil)", letterSpacing: "0.1em" }}>
-                    First collection
+                    First category
                   </p>
                   <h2 className="font-display font-normal m-0 mt-1.5 mb-2.5" style={{ fontSize: 27, letterSpacing: "-0.03em", color: "var(--ink)" }}>
                     Start with one category.
                   </h2>
                   <p className="text-xs leading-relaxed mb-6" style={{ maxWidth: 460, color: "var(--pencil)" }}>
-                    Add a few subjects and pose variations now, or skip and add them later from the category page.
+                    Just one subject and one variation to get going — you can add more anytime from the category
+                    page.
                   </p>
+
                   <label className="block text-[10px] font-bold uppercase mb-1.5" style={{ color: "var(--pencil)", letterSpacing: "0.08em" }}>
                     Category name
                   </label>
@@ -463,35 +402,57 @@ export default function NewBookWizard({
                     className="w-full px-3 py-2.5 rounded-md border-[1.5px] outline-none text-sm mb-4"
                     style={{ borderColor: "var(--pencil-light)", background: "var(--paper)" }}
                   />
-                  <div className="grid grid-cols-2 gap-3">
+
+                  <div className="grid grid-cols-2 gap-3 mb-5">
                     <div>
                       <label className="block text-[10px] font-bold uppercase mb-1.5" style={{ color: "var(--pencil)", letterSpacing: "0.08em" }}>
-                        Subjects
+                        Subject
                       </label>
-                      <textarea
-                        value={subjectsText}
-                        onChange={(e) => setSubjectsText(e.target.value)}
+                      <input
+                        type="text"
                         spellCheck={true}
-                        rows={5}
-                        placeholder={"Fox\nOwl\nDeer"}
-                        className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm leading-relaxed"
+                        value={subjectName}
+                        onChange={(e) => setSubjectName(e.target.value)}
+                        placeholder="e.g. Fox"
+                        className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
                         style={{ borderColor: "var(--pencil-light)", background: "var(--paper)" }}
                       />
                     </div>
                     <div>
                       <label className="block text-[10px] font-bold uppercase mb-1.5" style={{ color: "var(--pencil)", letterSpacing: "0.08em" }}>
-                        Variations
+                        Variation
                       </label>
-                      <textarea
-                        value={variationsText}
-                        onChange={(e) => setVariationsText(e.target.value)}
+                      <input
+                        type="text"
                         spellCheck={true}
-                        rows={5}
-                        placeholder={"in a quiet forest\nsleeping curled up"}
-                        className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm leading-relaxed"
+                        value={variationName}
+                        onChange={(e) => setVariationName(e.target.value)}
+                        placeholder="e.g. sleeping curled up"
+                        className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
                         style={{ borderColor: "var(--pencil-light)", background: "var(--paper)" }}
                       />
                     </div>
+                  </div>
+
+                  <label className="block text-[10px] font-bold uppercase mb-1.5" style={{ color: "var(--pencil)", letterSpacing: "0.08em" }}>
+                    Creative direction for this category
+                  </label>
+                  <textarea
+                    value={basePrompt}
+                    onChange={(e) => setBasePrompt(e.target.value)}
+                    spellCheck={true}
+                    rows={4}
+                    placeholder="e.g. Fun, wholesome coloring pages for kids ages 3 to 10"
+                    className="w-full px-3 py-2.5 rounded-md border-[1.5px] outline-none text-sm leading-relaxed mb-3"
+                    style={{ borderColor: "var(--pencil-light)", background: "var(--paper)" }}
+                  />
+                  <div className="flex gap-2 rounded-lg" style={{ padding: 12, border: "1px solid #c9ddd2", background: "var(--teal-tint)" }}>
+                    <Sparkles size={14} style={{ color: "var(--teal-dark)", flexShrink: 0 }} />
+                    <p className="text-[10px] leading-relaxed m-0" style={{ color: "var(--teal-dark)" }}>
+                      This is a short genre or mood, not a visual style — the actual look comes from your subject and
+                      the style knobs on the category page, so this can genuinely stay simple. It quietly shapes the
+                      feel of every page in this category, and you can always refine it later.
+                    </p>
                   </div>
                 </div>
               )}
@@ -508,13 +469,7 @@ export default function NewBookWizard({
                 <div className="flex gap-2">
                   {step > 0 && (
                     <button
-                      onClick={() => {
-                        if (step === 2 && canvasSubStage === "ratio") {
-                          setCanvasSubStage("shape");
-                        } else {
-                          setStep(step - 1);
-                        }
-                      }}
+                      onClick={() => setStep(step - 1)}
                       disabled={saving}
                       className="px-4 py-2.5 rounded-md text-sm font-medium disabled:opacity-60"
                       style={{ color: "var(--pencil)" }}
@@ -524,15 +479,8 @@ export default function NewBookWizard({
                   )}
                   {step < STEPS.length - 1 ? (
                     <button
-                      onClick={() => {
-                        if (step === 2 && canvasSubStage === "shape") {
-                          setCanvasSubStage("ratio");
-                        } else {
-                          setStep(step + 1);
-                          if (step === 2) setCanvasSubStage("shape");
-                        }
-                      }}
-                      disabled={(step === 2 && canvasSubStage === "shape" ? canvasWidth === 0 : !canContinue) || saving}
+                      onClick={() => setStep(step + 1)}
+                      disabled={!canContinue || saving}
                       className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-md text-sm font-bold text-white disabled:opacity-40"
                       style={{ background: "var(--teal)" }}
                     >
@@ -568,7 +516,7 @@ export default function NewBookWizard({
                   boxShadow: "0 12px 25px rgba(32,33,31,0.11)",
                 }}
               >
-                {step === 2 ? (
+                {step === 1 ? (
                   <div
                     className="rounded-sm flex items-center justify-center"
                     style={{
@@ -592,6 +540,7 @@ export default function NewBookWizard({
                   </>
                 )}
               </div>
+
               <div className="grid gap-2.5 mt-auto pt-4" style={{ borderTop: "1px solid var(--pencil-light)" }}>
                 <div className="flex items-center justify-between gap-2">
                   <span className="inline-flex items-center gap-1.5 text-[10px]" style={{ color: "var(--pencil)" }}>
@@ -611,18 +560,18 @@ export default function NewBookWizard({
                 </div>
                 <div className="flex items-center justify-between gap-2">
                   <span className="inline-flex items-center gap-1.5 text-[10px]" style={{ color: "var(--pencil)" }}>
-                    <Sparkles size={12} /> Direction
-                  </span>
-                  <strong className="text-[10px]" style={{ color: "var(--ink)" }}>
-                    {basePrompt.trim() ? "Defined" : "To explore"}
-                  </strong>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="inline-flex items-center gap-1.5 text-[10px]" style={{ color: "var(--pencil)" }}>
                     <ImageIcon size={12} /> Category
                   </span>
                   <strong className="text-[10px] truncate" style={{ color: "var(--ink)", maxWidth: 110 }}>
                     {categoryName || "Not started"}
+                  </strong>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="inline-flex items-center gap-1.5 text-[10px]" style={{ color: "var(--pencil)" }}>
+                    <Sparkles size={12} /> Direction
+                  </span>
+                  <strong className="text-[10px]" style={{ color: "var(--ink)" }}>
+                    {basePrompt.trim() ? "Defined" : "To explore"}
                   </strong>
                 </div>
               </div>

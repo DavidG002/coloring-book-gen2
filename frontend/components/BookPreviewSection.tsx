@@ -78,7 +78,7 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
-export default function BookPreviewSection({ bookId }: { bookId: number }) {
+export default function BookPreviewSection({ bookId, onCategoryChanged }: { bookId: number; onCategoryChanged?: (categoryName: string) => void }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -86,6 +86,10 @@ export default function BookPreviewSection({ bookId }: { bookId: number }) {
   const [eligibleCategories, setEligibleCategories] = useState<string[]>([]);
   const [allCategories, setAllCategories] = useState<string[]>([]);
   const [selectedPreviewCategory, setSelectedPreviewCategory] = useState<string>("");
+
+  useEffect(() => {
+    onCategoryChanged?.(selectedPreviewCategory);
+  }, [selectedPreviewCategory, onCategoryChanged]);
   const [sampleSubject, setSampleSubject] = useState<string | null>(null);
   const [sampleVariation, setSampleVariation] = useState<string | null>(null);
 

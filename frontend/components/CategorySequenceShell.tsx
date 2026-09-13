@@ -188,7 +188,7 @@ const stepIndex = activeStep === "wordpress" ? STEPS.length - 1 : mainStepIndex;
             </p>
           </div>
 
-          {activeStep === "generate" && <BookStyleSidebar bookId={bookId} />}
+          {activeStep === "generate" && <BookStyleSidebar bookId={bookId} categoryName={categoryName} />}
         </aside>
 
         <section className="min-w-0">

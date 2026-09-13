@@ -128,13 +128,7 @@ class CategoryUpdate(BaseModel):
     subjects: Optional[list[str]] = None
     variations: Optional[list[str]] = None
     variations_subject_id: Optional[int] = None
-    # When variations is provided AND variations_subject_id is set, the
-    # update is scoped to just that one subject's own variations —
-    # existing variations belonging to OTHER subjects, or the shared
-    # (NULL subject_id) pool, are left completely untouched. When
-    # variations_subject_id is omitted, behavior is unchanged: operates
-    # on the full category-wide list, matching the original, flat
-    # behavior used by the general Book/Category prep panel.
+    base_prompt: Optional[str] = None
 
 
 class CategoryRead(CategoryBase):
@@ -145,10 +139,9 @@ class CategoryRead(CategoryBase):
     subjects: list[SubjectRead] = []
     variations: list[VariationRead] = []
     auto_translated: dict[str, dict[str, list[str]]] = {}
-    # {lang: {"subjects": [...], "variations": [...]}} — only populated on
-    # the response right after new items were added and auto-translated,
-    # so the frontend can show a real, specific "X items were added and
-    # translated" notification instead of a generic message.
+    base_prompt: Optional[str] = None
+    effective_base_prompt: str = ""
+
 
 
 class CategorySummary(BaseModel):

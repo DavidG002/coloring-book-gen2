@@ -148,7 +148,7 @@ def regenerate_single_field(
         raise ValueError("Subject or variation not found")
 
     new_value = generate_single_field(
-        category.book.base_prompt, category.book.product_noun, category.name,
+        category.effective_base_prompt, category.book.product_noun, category.name,
         subject_name, variation_text, lang, field,
     )
 
@@ -217,7 +217,7 @@ def ensure_content_variant(
     if existing:
         return existing
 
-    generated = generate_content_variant(category.book.base_prompt, category.book.product_noun, category_name, subject_name, variation_text, lang)
+    generated = generate_content_variant(category.effective_base_prompt, category.book.product_noun, category_name, subject_name, variation_text, lang)
 
     record = ContentVariant(
         subject_id=subject.id,
@@ -263,7 +263,7 @@ def auto_generate_seo_for_all_languages(db: Session, category_id: int, subject_n
             continue
 
         generated = generate_content_variant(
-            category.book.base_prompt, category.book.product_noun, category.name, subject_name, variation_text, lang
+            category.effective_base_prompt, category.book.product_noun, category.name, subject_name, variation_text, lang
         )
         record = ContentVariant(
             subject_id=subject.id,
@@ -316,7 +316,7 @@ def ensure_category_description(db: Session, category_id: int, translated_catego
     if existing:
         return existing.description
 
-    description = generate_category_description(category.book.base_prompt, category.book.product_noun, category_name, translated_category_name, lang)
+    description = generate_category_description(category.effective_base_prompt, category.book.product_noun, category_name, translated_category_name, lang)
 
     record = CategoryDescription(category=category_name, category_id=category_id, lang=lang, description=description)
     db.add(record)
@@ -351,7 +351,7 @@ def regenerate_content_variant(
     if not subject or not variation:
         raise ValueError("Subject or variation not found")
 
-    generated = generate_content_variant(category.book.base_prompt, category.book.product_noun, category_name, subject_name, variation_text, lang)
+    generated = generate_content_variant(category.effective_base_prompt, category.book.product_noun, category_name, subject_name, variation_text, lang)
 
     existing = (
         db.query(ContentVariant)
@@ -449,7 +449,7 @@ def regenerate_category_description(db: Session, category_id: int, translated_ca
     category = _get_category_or_raise(db, category_id)
     category_name = category.name
 
-    description = generate_category_description(category.book.base_prompt, category.book.product_noun, category_name, translated_category_name, lang)
+    description = generate_category_description(category.effective_base_prompt, category.book.product_noun, category_name, translated_category_name, lang)
 
     existing = (
         db.query(CategoryDescription)

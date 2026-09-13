@@ -75,8 +75,13 @@ class Category(Base):
     __tablename__ = "categories"
 
     id = Column(Integer, primary_key=True)
-    name = Column(String, nullable=False)       # e.g. "dinosaurs" — unique per book, not globally
+    name = Column(String, nullable=False)   # e.g. "dinosaurs" — unique per book, not globally
     book_id = Column(Integer, ForeignKey("books.id"), nullable=False)
+    base_prompt = Column(Text, nullable=True)
+    # The real creative direction for THIS category, read at generation/
+    # SEO/WordPress-push time — Book.base_prompt is now only a starting
+    # TEMPLATE offered when a new category has never had its own prompt
+    # set (NULL here). See docs/decision-log.md (2026-09-12).
 
     book = relationship("Book", back_populates="categories")
     subjects = relationship("Subject", back_populates="category", cascade="all, delete-orphan", order_by="Subject.id")
@@ -84,6 +89,14 @@ class Category(Base):
     translations = relationship("Translation", back_populates="category", cascade="all, delete-orphan")
 
     __table_args__ = (UniqueConstraint("book_id", "name", name="uq_category_per_book"),)
+
+    @property
+    def effective_base_prompt(self) -> str:
+        """The real creative direction actually used for generation/SEO/
+        WordPress push — this category's own prompt if it has one, else
+        falls back to the Book's (used as a starting template for
+        categories that have never had their own prompt set)."""
+        return self.base_prompt or self.book.base_prompt
 
 class Subject(Base):
     __tablename__ = "subjects"

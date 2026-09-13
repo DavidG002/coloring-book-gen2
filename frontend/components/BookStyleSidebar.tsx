@@ -6,7 +6,7 @@ import { getBook, updateBook, ApiError, type Book } from "@/lib/api";
 import KnobsPanel from "./KnobsPanel";
 import ExpandableTextModal from "./ExpandableTextModal";
 
-export default function BookStyleSidebar({ bookId }: { bookId: number }) {
+export default function BookStyleSidebar({ bookId, categoryName }: { bookId: number; categoryName?: string }) {
   const [book, setBook] = useState<Book | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -26,14 +26,34 @@ export default function BookStyleSidebar({ bookId }: { bookId: number }) {
   const [prefsLoaded, setPrefsLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!categoryName) return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/categories/by-name/${bookId}/${encodeURIComponent(categoryName)}/base-prompt`
+        );
+        const data = await res.json();
+        if (!cancelled && res.ok) setBasePrompt(data.base_prompt);
+      } catch {
+        // best-effort — keep whatever was showing if this fails
+      }
+    }, 0);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [categoryName, bookId]);
+
    useEffect(() => {
     let cancelled = false;
     const timer = setTimeout(async () => {
       try {
-        const data = await getBook(bookId);
+                const data = await getBook(bookId);
         if (cancelled) return;
         setBook(data);
-        setBasePrompt(data.base_prompt);
+        if (!categoryName) setBasePrompt(data.base_prompt);
         setSubjectSizeRatio(data.subject_size_ratio);
         setWhiteThreshold(data.white_clean_threshold);
         setBlackThreshold(data.black_clean_threshold);
@@ -77,9 +97,19 @@ export default function BookStyleSidebar({ bookId }: { bookId: number }) {
     }
     setSavingPrompt(true);
     try {
-      const updated = await updateBook(bookId, { base_prompt: trimmed });
-      setBasePrompt(updated.base_prompt);
-      setBook(updated);
+      if (categoryName) {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/categories/by-name/${bookId}/${encodeURIComponent(categoryName)}/base-prompt`,
+          { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ base_prompt: trimmed }) }
+        );
+        const data = await res.json();
+        if (!res.ok) throw new ApiError(res.status, data.detail);
+        setBasePrompt(data.base_prompt);
+      } else {
+        const updated = await updateBook(bookId, { base_prompt: trimmed });
+        setBasePrompt(updated.base_prompt);
+        setBook(updated);
+      }
       setPromptSaved(true);
       setTimeout(() => setPromptSaved(false), 2000);
     } catch (err) {

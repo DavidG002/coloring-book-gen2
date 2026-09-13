@@ -61,6 +61,7 @@ export interface CategoryUpdateInput {
   subjects?: string[];
   variations?: string[];
   variations_subject_id?: number;
+  base_prompt?: string;
 }
 
 // ---------- Translations ----------

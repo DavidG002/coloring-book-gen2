@@ -6,6 +6,8 @@ from services.book_deletion import get_category_deletion_info, delete_category_c
 from services.translate import auto_translate_new_items
 from schemas import CategoryCreate, CategoryUpdate, CategoryRead, CategorySummary, CategoryDeletionInfo, CategoryDeletionResult
 router = APIRouter(prefix="/categories", tags=["categories"])
+
+
 def _to_category_read(category: Category, auto_translated: dict | None = None) -> CategoryRead:
     return CategoryRead(
         id=category.id,
@@ -15,7 +17,26 @@ def _to_category_read(category: Category, auto_translated: dict | None = None) -
         subjects=category.subjects,
         variations=category.variations,
         auto_translated=auto_translated or {},
+        base_prompt=category.base_prompt,
+        effective_base_prompt=category.effective_base_prompt,
     )
+
+@router.get("/by-name/{book_id}/{category_name}/base-prompt")
+def get_category_base_prompt_by_name(book_id: int, category_name: str, db: Session = Depends(get_db)):
+    category = db.query(Category).filter(Category.book_id == book_id, Category.name == category_name).first()
+    if not category:
+        raise HTTPException(status_code=404, detail=f"Category '{category_name}' not found in book {book_id}")
+    return {"base_prompt": category.base_prompt or ""}
+
+
+@router.put("/by-name/{book_id}/{category_name}/base-prompt")
+def set_category_base_prompt_by_name(book_id: int, category_name: str, payload: dict, db: Session = Depends(get_db)):
+    category = db.query(Category).filter(Category.book_id == book_id, Category.name == category_name).first()
+    if not category:
+        raise HTTPException(status_code=404, detail=f"Category '{category_name}' not found in book {book_id}")
+    category.base_prompt = payload.get("base_prompt", "")
+    db.commit()
+    return {"base_prompt": category.base_prompt}
 
 @router.get("", response_model=list[CategorySummary])
 def list_categories(db: Session = Depends(get_db)):
@@ -71,6 +92,9 @@ def update_category(category_id: int, payload: CategoryUpdate, db: Session = Dep
     category = db.query(Category).filter(Category.id == category_id).first()
     if not category:
         raise HTTPException(status_code=404, detail=f"Category {category_id} not found")
+
+    if payload.base_prompt is not None:
+        category.base_prompt = payload.base_prompt
 
     new_subjects = []
     new_variations = []
@@ -143,3 +167,5 @@ def delete_category(category_id: int, delete_files: bool = False, db: Session = 
         return delete_category_cascade(db, category_id, delete_files)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+ 
