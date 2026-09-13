@@ -322,6 +322,26 @@ class WordPressCategoryTerm(Base):
         UniqueConstraint("category", "lang", "site_url", name="uq_wp_term_per_category_lang_site"),
     )
 
+class WordPressBookTerm(Base):
+    """Tracks the WP top-level Category term ID a Book has been mapped to,
+    per language — created via real, deliberate user action (Account
+    Settings → WordPress mapping), not automatically. A Book with no row
+    here for a given site simply has no top-level wrapper; its Categories
+    push as top-level WordPress terms, matching today's existing
+    behavior."""
+    __tablename__ = "wordpress_book_terms"
+
+    id = Column(Integer, primary_key=True)
+    book_id = Column(Integer, ForeignKey("books.id"), nullable=False)
+    lang = Column(String, nullable=False)
+    wp_term_id = Column(Integer, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    site_url = Column(String, nullable=False, default="")
+
+    __table_args__ = (
+        UniqueConstraint("book_id", "lang", "site_url", name="uq_wp_term_per_book_lang_site"),
+    )
+
 class WordPressSubjectTerm(Base):
     """Tracks the WP taxonomy term ID created for a given (category, subject,
     language) triple — a real WordPress subcategory nested under the

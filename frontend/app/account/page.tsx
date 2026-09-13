@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ShieldCheck, UserRound, KeyRound, Sparkles, ChevronRight } from "lucide-react";
 import { ApiError } from "@/lib/api";
 import { AccountSection, SubCard, SaveRow, Toggle } from "@/components/SettingsUI";
+import BookWordPressMapping from "@/components/BookWordPressMapping";
 import AppShell from "@/components/AppShell";
 import type { components } from "@/lib/api/generated-types";
 
@@ -358,6 +359,15 @@ export default function AccountPage() {
                         </div>
                         <Toggle checked={wpUsePolylang} onChange={setWpUsePolylang} />
                       </div>
+                    </SubCard>
+                  </div>
+
+                  <div className="mt-5 pt-4 border-t-[1.5px]" style={{ borderColor: "var(--pencil-light)" }}>
+                    <h3 className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: "var(--pencil)" }}>
+                      Book mapping
+                    </h3>
+                    <SubCard title="WordPress categories">
+                      <BookWordPressMapping />
                     </SubCard>
                   </div>
                 </SubCard>

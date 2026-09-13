@@ -123,7 +123,9 @@ export default function DeleteBookModal({ bookId, onClose }: { bookId: number; o
                 style={{ background: "var(--coral-light)", color: "var(--coral-dark)", border: "1px solid var(--coral)" }}
               >
                 This book has content already pushed to WordPress. That content will <strong>not</strong> be
-                deleted — remove it manually in wp-admin if needed.
+                deleted or changed — but the app will lose its own record of hat&apos;s already live, so avoid
+                republishing these exact files later, since it could create duplicate posts. Remove content on
+                WordPress manually in wp-admin if needed.
               </div>
             )}
 

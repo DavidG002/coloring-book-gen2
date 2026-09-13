@@ -7,7 +7,7 @@ from services.content_variants import ensure_content_variant, ensure_category_de
 
 from models import (
     WordPressIntegration, WordPressCategoryTerm, WordPressSubjectTerm, WordPressPublishedItem,
-    GenerationImage, PublishedFile, PublishRun,
+    WordPressBookTerm, GenerationImage, PublishedFile, PublishRun,
 )
 
 
@@ -20,6 +20,54 @@ def _get_wp_config(db: Session) -> WordPressIntegration:
 
 def _auth(config: WordPressIntegration) -> tuple[str, str]:
     return (config.username, config.app_password)
+
+
+def list_wordpress_categories(config: WordPressIntegration) -> list[dict]:
+    """Fetches every real, live top-level WordPress category from the
+    connected site — used by the Book-mapping setup screen so the person
+    can pick an existing one instead of accidentally creating a
+    duplicate."""
+    url = config.site_url.rstrip("/") + "/wp-json/wp/v2/categories"
+    response = httpx.get(url, auth=_auth(config), params={"per_page": 100, "parent": 0}, timeout=15.0)
+    if response.status_code != 200:
+        raise RuntimeError(f"Failed to fetch WordPress categories: {response.status_code} {response.text}")
+    return [{"id": term["id"], "name": term["name"]} for term in response.json()]
+
+
+def map_book_to_term(
+    db: Session,
+    config: WordPressIntegration,
+    book_id: int,
+    lang: str,
+    wp_term_id: int | None = None,
+    term_name: str | None = None,
+) -> int:
+    """Creates the real (book_id, lang, site) mapping — either adopting an
+    existing WordPress term (wp_term_id given) or creating a genuinely new
+    one (term_name given). This is the one, deliberate, manual action that
+    establishes a Book's top-level WordPress wrapper; nothing else in the
+    app creates these rows automatically."""
+    existing = (
+        db.query(WordPressBookTerm)
+        .filter(WordPressBookTerm.book_id == book_id, WordPressBookTerm.lang == lang, WordPressBookTerm.site_url == config.site_url)
+        .first()
+    )
+    if existing:
+        raise ValueError("This book is already mapped for this language — unmap first to remap.")
+
+    if wp_term_id is None:
+        if not term_name:
+            raise ValueError("Either wp_term_id or term_name must be provided.")
+        url = config.site_url.rstrip("/") + "/wp-json/wp/v2/categories"
+        response = httpx.post(url, auth=_auth(config), json={"name": term_name}, timeout=15.0)
+        if response.status_code not in (200, 201):
+            raise RuntimeError(f"Failed to create WordPress category '{term_name}': {response.status_code} {response.text}")
+        wp_term_id = response.json()["id"]
+
+    record = WordPressBookTerm(book_id=book_id, lang=lang, wp_term_id=wp_term_id, site_url=config.site_url)
+    db.add(record)
+    db.commit()
+    return wp_term_id
 
 
 TAXONOMY_REST_BASE = {"category": "categories", "post_tag": "tags"}
@@ -111,6 +159,7 @@ def ensure_category_term(
     lang: str,
     translated_name: str,
     description: str | None = None,
+    book_id: int | None = None,
 ) -> int:
     """Returns the WP term ID for this category+language+site, creating it on
     WordPress only the first time it's ever needed for this specific site.
@@ -159,6 +208,24 @@ def ensure_category_term(
     payload = {"name": translated_name}
     if description:
         payload["description"] = description
+
+    # If this Book has been deliberately mapped to a real WordPress
+    # top-level term (via Account Settings), nest this category's term
+    # under it. A Book with no such mapping simply creates a top-level
+    # term, matching the original, unwrapped behavior.
+    if book_id is not None:
+        from models import WordPressBookTerm
+        book_term = (
+            db.query(WordPressBookTerm)
+            .filter(
+                WordPressBookTerm.book_id == book_id,
+                WordPressBookTerm.lang == lang,
+                WordPressBookTerm.site_url == config.site_url,
+            )
+            .first()
+        )
+        if book_term:
+            payload["parent"] = book_term.wp_term_id
 
     if config.use_polylang_linking:
         payload["lang"] = lang
@@ -667,7 +734,7 @@ def push_batch_to_wordpress(
         skipped_count = len(all_files) - len(files_to_push)
 
     category_description = ensure_category_description(db, category.id, translation.category_translated, lang)
-    term_id = ensure_category_term(db, config, category.id, category_name, lang, translation.category_translated, description=category_description)
+    term_id = ensure_category_term(db, config, category.id, category_name, lang, translation.category_translated, description=category_description, book_id=category.book_id)
     translation_items_by_subject = {item.subject_id: item.translated_text for item in translation.items}
     pushed_items = []
     failed_items = []
