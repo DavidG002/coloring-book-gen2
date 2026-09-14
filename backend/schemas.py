@@ -567,6 +567,8 @@ class WordPressVerifyRequest(BaseModel):
 class WordPressVerifyResponse(BaseModel):
     checked_count: int
     removed_count: int
+    terms_checked_count: int = 0
+    terms_removed_count: int = 0
     
 # ---------- Languages ----------
 

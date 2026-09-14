@@ -513,12 +513,80 @@ def get_already_pushed_paths(db: Session, category_id: int, lang: str, site_url:
     return {r[0] for r in rows}
 
 
+def _check_term_exists(config: WordPressIntegration, wp_term_id: int, rest_base: str) -> bool:
+    url = config.site_url.rstrip("/") + f"/wp-json/wp/v2/{rest_base}/{wp_term_id}"
+    try:
+        response = httpx.get(url, auth=_auth(config), timeout=15.0)
+    except Exception:
+        return True  # network hiccup — don't wrongly clear a real term on a fluke
+    return response.status_code == 200
+
+
+def verify_and_clean_stale_terms(db: Session, category_id: int, lang: str, site_url: str) -> dict:
+    """Checks every tracked WordPress term (this category's own term, its
+    subjects', and its book's, if mapped) against the real site — if a
+    restore, manual deletion, or any other change outside our app removed
+    one, we clear our stale local record so the next push correctly
+    creates a fresh, correctly-nested term instead of silently pointing
+    at something that no longer exists (which is what led WordPress to
+    fall back to 'Uncategorized' or no category at all)."""
+    config = _get_wp_config(db)
+    category_rest_base = TAXONOMY_REST_BASE.get("category", "categories")
+
+    checked_count = 0
+    removed_count = 0
+
+    category = db.query(Category).filter(Category.id == category_id).first()
+
+    if category:
+        book_term = (
+            db.query(WordPressBookTerm)
+            .filter(WordPressBookTerm.book_id == category.book_id, WordPressBookTerm.lang == lang, WordPressBookTerm.site_url == site_url)
+            .first()
+        )
+        if book_term:
+            checked_count += 1
+            if not _check_term_exists(config, book_term.wp_term_id, category_rest_base):
+                db.delete(book_term)
+                removed_count += 1
+
+    cat_term = (
+        db.query(WordPressCategoryTerm)
+        .filter(WordPressCategoryTerm.category_id == category_id, WordPressCategoryTerm.lang == lang, WordPressCategoryTerm.site_url == site_url)
+        .first()
+    )
+    if cat_term:
+        checked_count += 1
+        if not _check_term_exists(config, cat_term.wp_term_id, category_rest_base):
+            db.delete(cat_term)
+            removed_count += 1
+
+    subject_terms = (
+        db.query(WordPressSubjectTerm)
+        .filter(WordPressSubjectTerm.category_id == category_id, WordPressSubjectTerm.lang == lang, WordPressSubjectTerm.site_url == site_url)
+        .all()
+    )
+    for term in subject_terms:
+        checked_count += 1
+        if not _check_term_exists(config, term.wp_term_id, category_rest_base):
+            db.delete(term)
+            removed_count += 1
+
+    db.commit()
+    return {"checked_count": checked_count, "removed_count": removed_count}
+
+
 def verify_and_clean_stale_pushes(db: Session, category_id: int, lang: str, site_url: str) -> dict:
-    """Checks every tracked 'already pushed' item against the real
-    WordPress site — if a post was deleted there directly (not through
-    our app), WordPress returns 404 and we clear our stale local record,
-    making that file pushable again. This is the only way our app can
-    find out about a deletion that happened outside it."""
+    """Checks every tracked term AND every tracked 'already pushed' item
+    against the real WordPress site — terms first, since a post can't
+    correctly exist without valid terms underneath it. If anything was
+    deleted or changed on WordPress directly (not through our app —
+    including a full site restore), we clear our stale local records so
+    everything becomes correctly pushable/recreatable again. This is the
+    only way our app can find out about changes that happened outside
+    it."""
+    term_result = verify_and_clean_stale_terms(db, category_id, lang, site_url)
+
     config = _get_wp_config(db)
     post_rest_base = POST_TYPE_REST_BASE.get(config.post_type, config.post_type)
 
@@ -550,7 +618,12 @@ def verify_and_clean_stale_pushes(db: Session, category_id: int, lang: str, site
                 removed_count += 1
 
     db.commit()
-    return {"checked_count": checked_count, "removed_count": removed_count}
+    return {
+        "checked_count": checked_count,
+        "removed_count": removed_count,
+        "terms_checked_count": term_result["checked_count"],
+        "terms_removed_count": term_result["removed_count"],
+    }
 
 
 def get_locally_published_paths(db: Session, category: str, lang: str) -> set[str]:

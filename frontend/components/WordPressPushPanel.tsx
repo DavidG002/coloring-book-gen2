@@ -285,7 +285,7 @@ export default function WordPressPushPanel({ categoryId, categoryName }: { categ
       const data = await res.json();
       throw new Error(data.detail || "Failed to verify");
     }
-    return res.json() as Promise<{ checked_count: number; removed_count: number }>;
+    return res.json() as Promise<{ checked_count: number; removed_count: number; terms_checked_count?: number; terms_removed_count?: number }>;
   }
 
   async function handleVerify() {
@@ -294,15 +294,20 @@ export default function WordPressPushPanel({ categoryId, categoryName }: { categ
     setError(null);
     try {
       let totalRemoved = 0;
+      let totalTermsRemoved = 0;
       for (const lang of languages) {
         const result = await verifyPushes(categoryId, lang);
         totalRemoved += result.removed_count;
+        totalTermsRemoved += result.terms_removed_count ?? 0;
       }
-      setVerifyResult(
-        totalRemoved > 0
-          ? `Found ${totalRemoved} post${totalRemoved === 1 ? "" : "s"} removed from WordPress — they're pushable again.`
-          : "Everything checks out — no changes on the WordPress side."
-      );
+      const parts: string[] = [];
+      if (totalTermsRemoved > 0) {
+        parts.push(`${totalTermsRemoved} category/subject link${totalTermsRemoved === 1 ? "" : "s"} reset — new terms will be created next push`);
+      }
+      if (totalRemoved > 0) {
+        parts.push(`${totalRemoved} post${totalRemoved === 1 ? "" : "s"} removed from WordPress, pushable again`);
+      }
+      setVerifyResult(parts.length > 0 ? `Found: ${parts.join("; ")}.` : "Everything checks out — no changes on the WordPress side.");
       loadAll();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to verify against WordPress");
