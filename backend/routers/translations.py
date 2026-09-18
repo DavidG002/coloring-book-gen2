@@ -28,6 +28,7 @@ def _to_translation_read(translation: Translation) -> TranslationRead:
     return TranslationRead(
         id=translation.id,
         category_id=translation.category_id,
+        active=translation.active,
         lang=translation.lang,
         category_translated=translation.category_translated,
         filename_template=translation.filename_template,
@@ -57,9 +58,23 @@ def _to_translation_read(translation: Translation) -> TranslationRead:
 
 
 @router.get("", response_model=list[TranslationRead])
-def list_translations(category_id: int, db: Session = Depends(get_db)):
+def list_translations(category_id: int, active_only: bool = False, db: Session = Depends(get_db)):
     category = _get_category_or_404(category_id, db)
-    return [_to_translation_read(t) for t in category.translations]
+    translations = category.translations
+    if active_only:
+        translations = [t for t in translations if t.active]
+    return [_to_translation_read(t) for t in translations]
+
+
+@router.post("/{lang}/set-active")
+def set_translation_active(category_id: int, lang: str, active: bool, db: Session = Depends(get_db)):
+    category = _get_category_or_404(category_id, db)
+    translation = next((t for t in category.translations if t.lang == lang), None)
+    if not translation:
+        raise HTTPException(status_code=404, detail=f"No '{lang}' translation for '{category.name}'")
+    translation.active = active
+    db.commit()
+    return {"lang": lang, "active": translation.active}
 
 
 @router.get("/{lang}", response_model=TranslationRead)

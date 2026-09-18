@@ -1,8 +1,8 @@
 import { apiRequest } from "./client";
 import type { Translation, TranslationCreateInput, TranslationUpdateInput } from "./types";
 
-export function getTranslations(categoryId: number) {
-  return apiRequest<Translation[]>(`/categories/${categoryId}/translations`);
+export function getTranslations(categoryId: number, activeOnly?: boolean) {
+  return apiRequest<Translation[]>(`/categories/${categoryId}/translations${activeOnly ? "?active_only=true" : ""}`);
 }
 
 export function getTranslation(categoryId: number, lang: string) {

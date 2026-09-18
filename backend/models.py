@@ -141,6 +141,12 @@ class Translation(Base):
     filename_template = Column(Text, nullable=False)
     alt_template = Column(Text, nullable=False)
     title_template = Column(Text, nullable=False)
+    active = Column(Boolean, nullable=False, default=True)
+    # False = "removed" from this category's active language set — the
+    # real translation data stays fully intact, just excluded from
+    # anything Publish-facing (language lists, build sets). Distinct
+    # from the older, purely local/per-browser hiddenLangs UI state,
+    # which never reached the backend at all.
 
     category = relationship("Category", back_populates="translations")
     items = relationship("TranslationItem", back_populates="translation", cascade="all, delete-orphan")

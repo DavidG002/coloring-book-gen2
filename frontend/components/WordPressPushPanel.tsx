@@ -92,7 +92,7 @@ export default function WordPressPushPanel({ categoryId, categoryName }: { categ
   function loadAll() {
     setLoading(true);
     setError(null);
-    getTranslations(categoryId)
+    getTranslations(categoryId, true)
       .then(async (data: Translation[]) => {
         const langs = data.map((t) => t.lang);
         setLanguages(langs);

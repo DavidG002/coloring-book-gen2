@@ -223,6 +223,7 @@ class TranslationRead(TranslationBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     category_id: int
+    active: bool = True
     items: list[TranslationItemRead] = []
     variation_items: list[VariationTranslationItemRead] = []
 

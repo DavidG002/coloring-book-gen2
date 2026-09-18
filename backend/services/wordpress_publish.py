@@ -1,4 +1,5 @@
 import os
+from turtle import title
 import httpx
 from sqlalchemy.orm import Session
 from models import Category, Translation, Subject
@@ -136,12 +137,15 @@ def _set_term_language_and_translations(
             f"{response.status_code} {response.text}"
         )
 
-def _find_existing_term_by_name(config: WordPressIntegration, translated_name: str) -> int | None:
+def _find_existing_term_by_name(config: WordPressIntegration, translated_name: str, rest_base: str | None = None) -> int | None:
     """Checks WordPress directly for a term with this exact name, regardless
     of whether OUR app ever created it — so pushing to a site with
-    pre-existing categories (created manually, or by someone else) adopts
-    them instead of failing with a duplicate-name error."""
-    rest_base = TAXONOMY_REST_BASE.get(config.taxonomy, config.taxonomy)
+    pre-existing categories/tags (created manually, or by someone else)
+    adopts them instead of failing with a duplicate-name error. Defaults
+    to the configured post-taxonomy (categories) when rest_base isn't
+    given explicitly."""
+    if rest_base is None:
+        rest_base = TAXONOMY_REST_BASE.get(config.taxonomy, config.taxonomy)
     url = config.site_url.rstrip("/") + f"/wp-json/wp/v2/{rest_base}"
     response = httpx.get(url, auth=_auth(config), params={"search": translated_name}, timeout=15.0)
     if response.status_code != 200:
@@ -150,6 +154,39 @@ def _find_existing_term_by_name(config: WordPressIntegration, translated_name: s
         if term.get("name", "").strip().lower() == translated_name.strip().lower():
             return term["id"]
     return None
+
+
+def _get_term_language(config: WordPressIntegration, term_id: int) -> str | None:
+    """The term's current, real language on WordPress, if it has one set —
+    None if unassigned. Used before adopting an existing term by name, to
+    distinguish a genuine cross-language collision (already belongs to a
+    DIFFERENT language) from a safe, legitimate re-adopt."""
+    url = config.site_url.rstrip("/") + "/wp-json/zuzuplug/v1/get-term-language"
+    try:
+        response = httpx.get(url, auth=_auth(config), params={"term_id": term_id}, timeout=15.0)
+    except Exception:
+        return "UNKNOWN"  # network hiccup — treat as unsafe, fall through to creating fresh
+    if response.status_code != 200:
+        return "UNKNOWN"
+    return response.json().get("lang")
+
+
+def _get_term_translations(config: WordPressIntegration, term_id: int) -> dict[str, int]:
+    """Every language a term is currently linked to, as a real
+    {lang: term_id} map — used to auto-discover a genuine, already-linked
+    sibling in a different language, rather than requiring a person to
+    manually map every language one at a time. Real data-structure
+    concern only (which WordPress terms are each other's translations) —
+    separate from any front-end language-switcher/presentation work."""
+    url = config.site_url.rstrip("/") + "/wp-json/zuzuplug/v1/get-term-translations"
+    try:
+        response = httpx.get(url, auth=_auth(config), params={"term_id": term_id}, timeout=15.0)
+    except Exception:
+        return {}
+    if response.status_code != 200:
+        return {}
+    return response.json().get("translations", {})
+
 
 def ensure_category_term(
     db: Session,
@@ -224,6 +261,28 @@ def ensure_category_term(
             )
             .first()
         )
+        if not book_term:
+            # No DIRECT mapping for this specific language — check
+            # whether a real, already-linked Polylang sibling exists via
+            # any OTHER language this Book IS mapped for. If found,
+            # auto-adopt it as this language's own mapping too, so the
+            # person never has to manually repeat the same decision once
+            # per language. Falls through to today's original,
+            # unwrapped (top-level) behavior if no real sibling exists.
+            other_book_terms = (
+                db.query(WordPressBookTerm)
+                .filter(WordPressBookTerm.book_id == book_id, WordPressBookTerm.site_url == config.site_url)
+                .all()
+            )
+            for other in other_book_terms:
+                siblings = _get_term_translations(config, other.wp_term_id)
+                if lang in siblings:
+                    book_term = WordPressBookTerm(
+                        book_id=book_id, lang=lang, wp_term_id=siblings[lang], site_url=config.site_url,
+                    )
+                    db.add(book_term)
+                    db.commit()
+                    break
         if book_term:
             payload["parent"] = book_term.wp_term_id
 
@@ -256,12 +315,15 @@ def ensure_subject_term(
     lang: str,
     translated_name: str,
 ) -> int:
-    """Returns the WP term ID for this subject+language+site, creating it as
-    a real WordPress subcategory nested under the category's own term
-    (parent_term_id) the first time it's ever needed for this specific
-    site. This is what makes 'Princess' a genuine child category of
-    'For Girls' on the real site, matching WordPress's own category
-    hierarchy rather than a flat tag."""
+    """Returns the WP TAG term ID for this subject+language+site, creating
+    it the first time it's ever needed for this specific site. Subject is
+    a flat WordPress Tag (post_tag), not a subcategory — matching last
+    night's real design decision (2026-09-11/12): a post lives directly in
+    its Category, carrying its Subject as a Tag alongside it, which is
+    both a better SEO/navigation fit and what makes one image able to
+    honestly belong under more than one grouping later. parent_term_id is
+    kept in the signature for call-site compatibility but is no longer
+    used — tags have no parent concept in WordPress."""
     existing = (
         db.query(WordPressSubjectTerm)
         .filter(
@@ -274,26 +336,21 @@ def ensure_subject_term(
     if existing:
         return existing.wp_term_id
 
-    # Only adopt an existing same-named WordPress term if we've never
-    # created ANY term for this subject before, in any language — this is
-    # the "site already had this category" case (e.g. 'for boys'). Once we
-    # have our own first term for this subject, every later language MUST
-    # get its own genuinely new term, never adopted by name — otherwise a
-    # subject whose translated name happens to repeat across languages
-    # (e.g. 'Purim' staying 'Purim' in Spanish) would collide two
-    # different-language posts onto one shared term, corrupting its
-    # language assignment.
-    any_existing_for_subject = (
-        db.query(WordPressSubjectTerm)
-        .filter(
-            WordPressSubjectTerm.subject_id == subject_id,
-            WordPressSubjectTerm.site_url == config.site_url,
-        )
-        .first()
-    )
-    if not any_existing_for_subject:
-        existing_wp_term_id = _find_existing_term_by_name(config, translated_name)
-        if existing_wp_term_id is not None:
+    tags_rest_base = TAXONOMY_REST_BASE["post_tag"]
+
+    # Real, precise collision guard: only skip auto-adopt when the
+    # CANDIDATE term itself is already linked to a DIFFERENT language —
+    # not just because some other language happens to have its own term
+    # for this subject. This correctly allows re-adopting a real,
+    # already-correctly-named term after local tracking was reset (a
+    # genuine, live incident from 2026-09-14 — see docs/decision-log.md),
+    # while still refusing to adopt a term that's genuinely owned by a
+    # different language.
+    existing_wp_term_id = _find_existing_term_by_name(config, translated_name, rest_base=tags_rest_base)
+    if existing_wp_term_id is not None:
+        candidate_lang = _get_term_language(config, existing_wp_term_id) if config.use_polylang_linking else None
+        safe_to_adopt = candidate_lang is None or candidate_lang == lang
+        if safe_to_adopt:
             record = WordPressSubjectTerm(
                 category=category_name, category_id=category_id, subject=subject_name,
                 subject_id=subject_id, lang=lang, wp_term_id=existing_wp_term_id, site_url=config.site_url,
@@ -302,17 +359,16 @@ def ensure_subject_term(
             db.commit()
             return existing_wp_term_id
 
-    rest_base = TAXONOMY_REST_BASE.get(config.taxonomy, config.taxonomy)
-    url = config.site_url.rstrip("/") + f"/wp-json/wp/v2/{rest_base}"
+    url = config.site_url.rstrip("/") + f"/wp-json/wp/v2/{tags_rest_base}"
 
-    payload = {"name": translated_name, "parent": parent_term_id}
+    payload = {"name": translated_name}
 
     if config.use_polylang_linking:
         payload["lang"] = lang
 
     response = httpx.post(url, auth=_auth(config), json=payload, timeout=15.0)
     if response.status_code not in (200, 201):
-        raise RuntimeError(f"Failed to create subcategory term '{translated_name}': {response.status_code} {response.text}")
+        raise RuntimeError(f"Failed to create tag '{translated_name}': {response.status_code} {response.text}")
 
     term_id = response.json()["id"]
 
@@ -331,6 +387,28 @@ def ensure_subject_term(
     db.add(record)
     db.commit()
     return term_id
+
+def rename_subject_term(db: Session, subject_id: int, lang: str, new_name: str, site_url: str) -> dict:
+    """Renames a subject's already-live WordPress tag in place — same
+    real term ID, so nothing else (already-tagged posts, local tracking)
+    needs to change at all. The clean, direct fix for a corrected
+    translation, replacing the old delete-and-recreate workaround."""
+    config = _get_wp_config(db)
+    term = (
+        db.query(WordPressSubjectTerm)
+        .filter(WordPressSubjectTerm.subject_id == subject_id, WordPressSubjectTerm.lang == lang, WordPressSubjectTerm.site_url == site_url)
+        .first()
+    )
+    if not term:
+        return {"renamed": False, "reason": "No live WordPress tag exists yet for this subject/language — nothing to rename."}
+
+    tags_rest_base = TAXONOMY_REST_BASE["post_tag"]
+    url = config.site_url.rstrip("/") + f"/wp-json/wp/v2/{tags_rest_base}/{term.wp_term_id}"
+    response = httpx.post(url, auth=_auth(config), json={"name": new_name}, timeout=15.0)
+    if response.status_code != 200:
+        raise RuntimeError(f"Failed to rename tag: {response.status_code} {response.text}")
+
+    return {"renamed": True, "wp_term_id": term.wp_term_id, "new_name": new_name}
 
 
 def upload_media(config: WordPressIntegration, file_path: str, filename: str, alt_text: str, title: str) -> int:
@@ -374,13 +452,19 @@ def create_post(
     yoast_title: str | None = None,
     yoast_meta_description: str | None = None,
     focus_keyphrase: str | None = None,
+    tag_term_id: int | None = None,
 ) -> dict:
     """Note: Yoast SEO's own fields (_yoast_wpseo_title, _yoast_wpseo_metadesc,
     _yoast_wpseo_focuskw) are NOT writable via the REST API by default — the
     target WordPress site needs a small one-time snippet registering them
     with show_in_rest=True (see docs/wordpress-integration.md). If that
     snippet isn't installed, sending these is harmless — WordPress will
-    silently ignore unknown meta keys rather than erroring."""
+    silently ignore unknown meta keys rather than erroring.
+
+    term_id is always the post's real Category (the Category's own
+    WordPress term). tag_term_id, when given, is the Subject's real
+    WordPress Tag — set alongside the category, not nested inside it.
+    See docs/decision-log.md (2026-09-11/12) for the real design."""
     post_rest_base = POST_TYPE_REST_BASE.get(config.post_type, config.post_type)
     url = config.site_url.rstrip("/") + f"/wp-json/wp/v2/{post_rest_base}"
 
@@ -392,6 +476,8 @@ def create_post(
         "featured_media": media_id,
         taxonomy_field: [term_id],
     }
+    if tag_term_id is not None:
+        payload[TAXONOMY_REST_BASE["post_tag"]] = [tag_term_id]
 
     meta: dict = {}
     if yoast_title:
@@ -566,9 +652,10 @@ def verify_and_clean_stale_terms(db: Session, category_id: int, lang: str, site_
         .filter(WordPressSubjectTerm.category_id == category_id, WordPressSubjectTerm.lang == lang, WordPressSubjectTerm.site_url == site_url)
         .all()
     )
+    tags_rest_base = TAXONOMY_REST_BASE["post_tag"]
     for term in subject_terms:
         checked_count += 1
-        if not _check_term_exists(config, term.wp_term_id, category_rest_base):
+        if not _check_term_exists(config, term.wp_term_id, tags_rest_base):
             db.delete(term)
             removed_count += 1
 
@@ -834,20 +921,20 @@ def push_batch_to_wordpress(
                 title=variant.seo_title,
             )
 
-            # Each image's Subject becomes its real WordPress term, nested
-            # under the Category's own term — so "Princess" is a genuine
-            # subcategory of "For Girls", not just tagged with the parent.
+                     # The post lives directly in the Category's own term; its
+            # Subject becomes a real WordPress Tag alongside it — flat,
+            # not nested. Matches WordPress's own semantics (a post can
+            # carry several tags) and last night's real design decision.
             subject_record = db.query(Subject).filter(
                 Subject.category_id == category.id, Subject.name == image_record.subject
             ).first()
+            post_tag_term_id = None
             if subject_record:
                 subject_translated = translation_items_by_subject.get(subject_record.id, subject_record.name)
-                post_term_id = ensure_subject_term(
+                post_tag_term_id = ensure_subject_term(
                     db, config, category.id, category_name, term_id,
                     subject_record.id, subject_record.name, lang, subject_translated,
                 )
-            else:
-                post_term_id = term_id  # fallback: legacy image with no matching Subject record
 
             post_lang = None
             post_translations = None
@@ -860,7 +947,8 @@ def push_batch_to_wordpress(
                 config,
                 title=variant.seo_title,
                 media_id=media_id,
-                term_id=post_term_id,
+                term_id=term_id,
+                tag_term_id=post_tag_term_id,
                 status=status,
                 content=variant.seo_content,
                 excerpt=variant.seo_excerpt,

@@ -189,7 +189,7 @@ export default function PublishSequencePanel({
   useEffect(() => {
     let cancelled = false;
     const timer = setTimeout(() => {
-      getTranslations(categoryId)
+      getTranslations(categoryId, true)
         .then((data: Translation[]) => {
           if (cancelled) return;
           const langs = data.map((t) => t.lang);

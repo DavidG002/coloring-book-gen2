@@ -7,6 +7,7 @@ from models import GenerationImage
 from services.wordpress_publish import (
     push_batch_to_wordpress, preview_wordpress_push, sync_pushed_item_to_wordpress,
     verify_and_clean_stale_pushes, _get_wp_config, list_wordpress_categories, map_book_to_term,
+    rename_subject_term,
 )
 from models import WordPressBookTerm
 from schemas import (
@@ -62,6 +63,23 @@ def get_book_mapping(book_id: int, lang: str, db: Session = Depends(get_db)):
         .first()
     )
     return {"wp_term_id": mapping.wp_term_id if mapping else None}
+
+
+class RenameSubjectTagRequest(BaseModel):
+    subject_id: int
+    lang: str
+    new_name: str
+
+
+@router.post("/rename-subject-tag")
+def rename_subject_tag(payload: RenameSubjectTagRequest, db: Session = Depends(get_db)):
+    try:
+        config = _get_wp_config(db)
+        return rename_subject_term(db, payload.subject_id, payload.lang, payload.new_name, config.site_url)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
 
 
 @router.post("/push", response_model=WordPressPushResponse)

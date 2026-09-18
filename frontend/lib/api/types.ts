@@ -84,6 +84,7 @@ export interface VariationTranslationItem {
 export interface Translation {
   id: number;
   category_id: number;
+  active: boolean;
   lang: string;
   category_translated: string;
   filename_template: string;

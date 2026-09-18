@@ -132,13 +132,23 @@ export default function LanguageSequencePanel({
     }
   }
 
-  function hideLang(code: string) {
+  async function hideLang(code: string) {
     persistHidden(new Set(hiddenLangs).add(code));
+    try {
+      await fetch(`${API_BASE_URL}/categories/${categoryId}/translations/${code}/set-active?active=false`, { method: "POST" });
+    } catch {
+      // best-effort — local hide still works even if the sync fails
+    }
   }
-  function unhideLang(code: string) {
+  async function unhideLang(code: string) {
     const next = new Set(hiddenLangs);
     next.delete(code);
     persistHidden(next);
+    try {
+      await fetch(`${API_BASE_URL}/categories/${categoryId}/translations/${code}/set-active?active=true`, { method: "POST" });
+    } catch {
+      // best-effort
+    }
   }
 
   async function generateLanguage(lang: string) {

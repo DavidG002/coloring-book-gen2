@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X, Pencil } from "lucide-react";
+import { X, Pencil, RotateCw } from "lucide-react";
 import TemplateField, { type TemplateToken } from "@/components/TemplateField";
 import { markTranslationReviewed } from "@/lib/api/translations";
 import {
@@ -93,7 +93,33 @@ export default function TranslationEditorModal({
   const [autoTranslateResultSubjects, setAutoTranslateResultSubjects] = useState<string | null>(null);
   const [autoTranslatingVariations, setAutoTranslatingVariations] = useState(false);
   const [autoTranslateResultVariations, setAutoTranslateResultVariations] = useState<string | null>(null);
-  const [variationFilter, setVariationFilter] = useState("");
+    const [variationFilter, setVariationFilter] = useState("");
+  const [syncingTagFor, setSyncingTagFor] = useState<number | null>(null);
+  const [syncResult, setSyncResult] = useState<Record<number, string>>({});
+
+  async function handleSyncWordPressTag(subjectId: number, subjectName: string) {
+    setSyncingTagFor(subjectId);
+    setSyncResult((prev) => ({ ...prev, [subjectId]: "" }));
+    try {
+      const newName = (form.itemsBySubject[subjectName] ?? "").trim();
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/wordpress/rename-subject-tag`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subject_id: subjectId, lang, new_name: newName }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Failed to update WordPress tag");
+      setSyncResult((prev) => ({
+        ...prev,
+        [subjectId]: data.renamed ? "✓ WordPress tag updated" : data.reason || "Nothing to update",
+      }));
+    } catch (err) {
+      setSyncResult((prev) => ({ ...prev, [subjectId]: err instanceof Error ? err.message : "Failed to update" }));
+    } finally {
+      setSyncingTagFor(null);
+      setTimeout(() => setSyncResult((prev) => ({ ...prev, [subjectId]: "" })), 5000);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -469,6 +495,22 @@ export default function TranslationEditorModal({
                               className="flex-1 px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
                               style={{ borderColor: isEmpty ? "var(--coral)" : "var(--pencil-light)", background: "var(--paper)", cursor: locked ? "default" : "text" }}
                             />
+                            {!locked && !isEmpty && (
+                              <button
+                                onClick={() => handleSyncWordPressTag(s.id, s.name)}
+                                disabled={syncingTagFor === s.id}
+                                title="Update the live WordPress tag to match this translation"
+                                className="shrink-0 disabled:opacity-40"
+                                style={{ color: "var(--teal)" }}
+                              >
+                                <RotateCw size={13} className={syncingTagFor === s.id ? "animate-spin" : ""} />
+                              </button>
+                            )}
+                            {syncResult[s.id] && (
+                              <span className="text-[10px] shrink-0" style={{ color: syncResult[s.id].startsWith("✓") ? "var(--teal)" : "var(--coral-dark)" }}>
+                                {syncResult[s.id]}
+                              </span>
+                            )}
                           </div>
                         );
                       })}

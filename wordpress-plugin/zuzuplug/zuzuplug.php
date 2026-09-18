@@ -57,6 +57,22 @@ add_action('rest_api_init', function () {
             return current_user_can('edit_posts');
         },
     ]);
+
+    register_rest_route('zuzuplug/v1', '/get-term-language', [
+        'methods' => 'GET',
+        'callback' => 'zuzuplug_get_term_language',
+        'permission_callback' => function () {
+            return current_user_can('edit_posts');
+        },
+    ]);
+
+    register_rest_route('zuzuplug/v1', '/get-term-translations', [
+        'methods' => 'GET',
+        'callback' => 'zuzuplug_get_term_translations',
+        'permission_callback' => function () {
+            return current_user_can('edit_posts');
+        },
+    ]);
 });
 
 /**
@@ -128,6 +144,44 @@ function zuzuplug_set_post_language($request) {
     return ['success' => true, 'post_id' => $post_id, 'lang' => $lang];
 }
 
+/**
+ * Returns a term's CURRENT real language, if it has one set — used
+ * before adopting an existing term by name, so the app can tell a
+ * genuine cross-language collision (a candidate term already belongs
+ * to a DIFFERENT language) apart from a safe, legitimate re-adopt (the
+ * term is unassigned, or already correctly belongs to the language
+ * being pushed right now).
+ */
+function zuzuplug_get_term_language($request) {
+    if (!function_exists('pll_get_term_language')) {
+        return new WP_Error('polylang_missing', __('Polylang is not active on this site.', 'zuzuplug'), ['status' => 400]);
+    }
+
+    $term_id = (int) $request->get_param('term_id');
+    $lang = pll_get_term_language($term_id);
+
+    return ['term_id' => $term_id, 'lang' => $lang === false ? null : $lang];
+}
+
+/**
+ * Returns EVERY language a term is currently linked to, as a real
+ * {lang: term_id} map — used to auto-discover a genuine, already-linked
+ * sibling in a different language, rather than requiring a person to
+ * manually map every language one at a time. Real data-structure
+ * concern only (which WordPress terms are each other's translations) —
+ * separate from any front-end language-switcher/presentation work.
+ */
+function zuzuplug_get_term_translations($request) {
+    if (!function_exists('pll_get_term_translations')) {
+        return new WP_Error('polylang_missing', __('Polylang is not active on this site.', 'zuzuplug'), ['status' => 400]);
+    }
+
+    $term_id = (int) $request->get_param('term_id');
+    $translations = pll_get_term_translations($term_id);
+
+    return ['term_id' => $term_id, 'translations' => $translations ?: []];
+}
+
 function zuzuplug_set_term_language($request) {
     if (!function_exists('pll_set_term_language')) {
         return new WP_Error('polylang_missing', __('Polylang is not active on this site.', 'zuzuplug'), ['status' => 400]);
@@ -136,6 +190,18 @@ function zuzuplug_set_term_language($request) {
     $term_id = (int) $request->get_param('term_id');
     $lang = sanitize_text_field($request->get_param('lang'));
     $translations = $request->get_param('translations');
+
+    if (function_exists('pll_languages_list') && !in_array($lang, pll_languages_list(), true)) {
+        return new WP_Error(
+            'language_not_configured',
+            sprintf(
+                /* translators: %s: the language code that was requested */
+                __('"%s" is not a language configured in Polylang on this site.', 'zuzuplug'),
+                $lang
+            ),
+            ['status' => 400]
+        );
+    }
 
     pll_set_term_language($term_id, $lang);
 
