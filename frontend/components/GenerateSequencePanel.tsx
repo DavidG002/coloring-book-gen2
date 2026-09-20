@@ -435,7 +435,7 @@ export default function GenerateSequencePanel({
                     try {
                       const [newImagesRes, translationsRes] = await Promise.all([
                         fetch(`${API_BASE_URL}/review/images-by-ids?ids=${candidateIds.join(",")}`).then((r) => r.json()),
-                        fetch(`${API_BASE_URL}/categories/${category.id}/translations`).then((r) => r.json()),
+                        fetch(`${API_BASE_URL}/categories/${category.id}/translations?active_only=true`).then((r) => r.json()),
                       ]);
                       const langs = translationsRes.map((t: { lang: string }) => t.lang);
                       const imagesById: Record<number, { id: number; filename: string; subject: string; variation_text: string | null }> = {};

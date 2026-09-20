@@ -3,11 +3,12 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
 from database import get_db
-from models import GenerationImage
+import httpx
+from models import GenerationImage, Category, WordPressSubjectTerm
 from services.wordpress_publish import (
     push_batch_to_wordpress, preview_wordpress_push, sync_pushed_item_to_wordpress,
     verify_and_clean_stale_pushes, _get_wp_config, list_wordpress_categories, map_book_to_term,
-    rename_subject_term,
+    rename_subject_term, TAXONOMY_REST_BASE,
 )
 from models import WordPressBookTerm
 from schemas import (
@@ -69,6 +70,18 @@ class RenameSubjectTagRequest(BaseModel):
     subject_id: int
     lang: str
     new_name: str
+    update_slug: bool = False
+
+
+@router.post("/rename-subject-tag")
+def rename_subject_tag(payload: RenameSubjectTagRequest, db: Session = Depends(get_db)):
+    try:
+        config = _get_wp_config(db)
+        return rename_subject_term(db, payload.subject_id, payload.lang, payload.new_name, config.site_url, payload.update_slug)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
 
 
 @router.post("/rename-subject-tag")
@@ -80,6 +93,78 @@ def rename_subject_tag(payload: RenameSubjectTagRequest, db: Session = Depends(g
         raise HTTPException(status_code=400, detail=str(e))
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.get("/subject-tags")
+def get_subject_tags(category_id: int, lang: str, db: Session = Depends(get_db)):
+    """Real, live per-subject WordPress Tag status for one category+language.
+    Lets the Language page show which subjects are already live tags on the
+    real site, which are new and not pushed yet, and whether a live tag's
+    name has drifted from the current local translation (e.g. a bad
+    auto-translation that got corrected here but was never synced to the
+    live site) — surfaced directly instead of discovered after publishing."""
+    category = db.query(Category).filter(Category.id == category_id).first()
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    try:
+        config = _get_wp_config(db)
+    except ValueError:
+        return {"configured": False, "site_url": None, "subjects": []}
+
+    if not config.site_url:
+        return {"configured": False, "site_url": None, "subjects": []}
+
+    translation = next((t for t in category.translations if t.lang == lang), None)
+    translated_by_subject = {}
+    if translation:
+        for item in translation.items:
+            translated_by_subject[item.subject_id] = item.translated_text
+
+    tags_rest_base = TAXONOMY_REST_BASE["post_tag"]
+    results = []
+    for subject in category.subjects:
+        term = (
+            db.query(WordPressSubjectTerm)
+            .filter(
+                WordPressSubjectTerm.subject_id == subject.id,
+                WordPressSubjectTerm.lang == lang,
+                WordPressSubjectTerm.site_url == config.site_url,
+            )
+            .first()
+        )
+        translated_text = translated_by_subject.get(subject.id, "")
+        entry = {
+            "subject_id": subject.id,
+            "subject_name": subject.name,
+            "translated_text": translated_text,
+            "live": False,
+            "wp_term_id": None,
+            "live_name": None,
+            "live_slug": None,
+            "live_count": 0,
+            "out_of_sync": False,
+        }
+        if term:
+            entry["live"] = True
+            entry["wp_term_id"] = term.wp_term_id
+            url = config.site_url.rstrip("/") + f"/wp-json/wp/v2/{tags_rest_base}/{term.wp_term_id}"
+            try:
+                resp = httpx.get(url, timeout=10.0)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    live_name = data.get("name", "")
+                    entry["live_name"] = live_name
+                    entry["live_slug"] = data.get("slug")
+                    entry["live_count"] = data.get("count", 0)
+                    if translated_text and live_name and translated_text != live_name:
+                        entry["out_of_sync"] = True
+            except Exception:
+                pass
+        results.append(entry)
+
+    site_label = config.site_url.replace("https://", "").replace("http://", "").rstrip("/")
+    return {"configured": True, "site_url": site_label, "subjects": results}
 
 
 @router.post("/push", response_model=WordPressPushResponse)

@@ -81,6 +81,13 @@ async function regenerateOne(categoryId: number, lang: string, subjectName: stri
   });
   return res.json();
 }
+async function acknowledgeTagSync(categoryId: number, lang: string, subjectName: string, variationText: string): Promise<void> {
+  await fetch(`${API_BASE_URL}/categories/${categoryId}/seo/${lang}/content/acknowledge-tag-sync`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ subject_name: subjectName, variation_text: variationText }),
+  });
+}
 
 async function regenerateField(categoryId: number, lang: string, subjectName: string, variationText: string, field: string): Promise<string> {
   const res = await fetch(`${API_BASE_URL}/categories/${categoryId}/seo/${lang}/content/regenerate-field`, {
@@ -123,6 +130,8 @@ export default function PublishSequencePanel({
   publishSetImageIds,
   onRemoveFromPublishSet,
   warnedImageIds,
+  initialLang,
+  initialOnlyNeedsReview,
 }: {
   categoryId: number;
   categoryName: string;
@@ -132,6 +141,8 @@ export default function PublishSequencePanel({
   publishSetImageIds?: number[] | null;
   onRemoveFromPublishSet?: (imageId: number) => void;
   warnedImageIds?: number[];
+  initialLang?: string;
+  initialOnlyNeedsReview?: boolean;
 }) {
   const [languages, setLanguages] = useState<string[]>([]);
   const [loadingLangs, setLoadingLangs] = useState(true);
@@ -166,6 +177,8 @@ export default function PublishSequencePanel({
   const [regeneratingRow, setRegeneratingRow] = useState<string | null>(null);
   const [dirtyRows, setDirtyRows] = useState<Set<string>>(new Set());
   const [generatingMissing, setGeneratingMissing] = useState(false);
+  const [regeneratingAllFlagged, setRegeneratingAllFlagged] = useState(false);
+  const [markingAllReviewed, setMarkingAllReviewed] = useState(false);
   const [missingResult, setMissingResult] = useState<string | null>(null);
 
   const [langFileCounts, setLangFileCounts] = useState<Record<string, number>>({});
@@ -183,7 +196,7 @@ export default function PublishSequencePanel({
   const [confirmingRemoveAll, setConfirmingRemoveAll] = useState(false);
   const [seoFilterSubject, setSeoFilterSubject] = useState<"all" | string>("all");
   const [seoSortView, setSeoSortView] = useState<"all" | "latest" | "oldest">("all");
-  const [seoOnlyNeedsReview, setSeoOnlyNeedsReview] = useState(false);
+  const [seoOnlyNeedsReview, setSeoOnlyNeedsReview] = useState(!!initialOnlyNeedsReview);
   const [seoRowsExpanded, setSeoRowsExpanded] = useState(false);
 
   useEffect(() => {
@@ -194,7 +207,9 @@ export default function PublishSequencePanel({
           if (cancelled) return;
           const langs = data.map((t) => t.lang);
           setLanguages(langs);
-          if (langs.length > 0) setSelectedLang(langs[0]);
+          if (langs.length > 0) {
+            setSelectedLang(initialLang && langs.includes(initialLang) ? initialLang : langs[0]);
+          }
         })
         .catch((err) => {
           if (!cancelled) setError(err instanceof ApiError ? err.message : "Failed to load languages");
@@ -333,6 +348,8 @@ export default function PublishSequencePanel({
     });
   }
 
+  const [acknowledgingRow, setAcknowledgingRow] = useState<string | null>(null);
+
   async function handleSaveRow(row: ContentVariantRow) {
     const key = `${row.subject_name}::${row.variation_text}`;
     setSavingRow(key);
@@ -357,6 +374,28 @@ export default function PublishSequencePanel({
       setError("Failed to save");
     } finally {
       setSavingRow(null);
+    }
+  }
+
+  async function handleAcknowledgeTagSync(row: ContentVariantRow) {
+    const key = `${row.subject_name}::${row.variation_text}`;
+    setAcknowledgingRow(key);
+    try {
+      await acknowledgeTagSync(categoryId, selectedLang, row.subject_name, row.variation_text);
+      setSeoData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          content_variants: prev.content_variants.map((r) =>
+            r.subject_name === row.subject_name && r.variation_text === row.variation_text ? { ...r, needs_tag_sync: false } : r
+          ),
+        };
+      });
+      onSeoChanged?.();
+    } catch {
+      setError("Failed to mark reviewed");
+    } finally {
+      setAcknowledgingRow(null);
     }
   }
 
@@ -425,6 +464,59 @@ export default function PublishSequencePanel({
     }
   }
 
+  async function handleRegenerateAllFlagged() {
+    const targets = filteredVariants.filter((r) => r.needs_tag_sync || r.pending_review);
+    if (targets.length === 0) return;
+    setRegeneratingAllFlagged(true);
+    try {
+      for (const row of targets) {
+        const result = await regenerateOne(categoryId, selectedLang, row.subject_name, row.variation_text);
+        setSeoData((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            content_variants: prev.content_variants.map((r) =>
+              r.subject_name === row.subject_name && r.variation_text === row.variation_text
+                ? { ...r, ...result, generated: true, needs_tag_sync: false }
+                : r
+            ),
+          };
+        });
+      }
+      onSeoChanged?.();
+    } catch {
+      setError("Failed to regenerate all flagged items");
+    } finally {
+      setRegeneratingAllFlagged(false);
+    }
+  }
+
+  async function handleMarkAllReviewed() {
+    const targets = filteredVariants.filter((r) => r.needs_tag_sync);
+    if (targets.length === 0) return;
+    setMarkingAllReviewed(true);
+    try {
+      for (const row of targets) {
+        await acknowledgeTagSync(categoryId, selectedLang, row.subject_name, row.variation_text);
+      }
+      const targetKeys = new Set(targets.map((r) => `${r.subject_name}::${r.variation_text}`));
+      setSeoData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          content_variants: prev.content_variants.map((r) =>
+            targetKeys.has(`${r.subject_name}::${r.variation_text}`) ? { ...r, needs_tag_sync: false } : r
+          ),
+        };
+      });
+      onSeoChanged?.();
+    } catch {
+      setError("Failed to mark all reviewed");
+    } finally {
+      setMarkingAllReviewed(false);
+    }
+  }
+
   const descriptionDirty = description !== savedDescriptionSnapshot;
   const seoSubjects = Array.from(new Set((seoData?.content_variants ?? []).map((r) => r.subject_name))).sort();
   const filteredVariants = (() => {
@@ -438,7 +530,7 @@ export default function PublishSequencePanel({
           .filter((img) => warnedImageIds?.includes(img.id))
           .map((img) => `${img.subject}::${img.variation_text}`)
       );
-      rows = rows.filter((r) => r.pending_review || warnedPairings.has(`${r.subject_name}::${r.variation_text}`));
+      rows = rows.filter((r) => r.pending_review || r.needs_tag_sync || warnedPairings.has(`${r.subject_name}::${r.variation_text}`));
     }
     if (seoSortView === "latest") {
       rows = [...rows].sort((a, b) => b.sample_image_id - a.sample_image_id);
@@ -808,6 +900,26 @@ export default function PublishSequencePanel({
                   >
                     {generatingMissing ? "Generating..." : "Generate missing"}
                   </button>
+                  {filteredVariants.some((r) => r.needs_tag_sync || r.pending_review) && (
+                    <button
+                      onClick={handleRegenerateAllFlagged}
+                      disabled={regeneratingAllFlagged}
+                      className="px-2.5 py-1 rounded-full text-[10px] font-bold disabled:opacity-60"
+                      style={{ border: "1px solid #9c6f1f", color: "#9c6f1f" }}
+                    >
+                      {regeneratingAllFlagged ? "Regenerating..." : "Regenerate all flagged"}
+                    </button>
+                  )}
+                  {filteredVariants.some((r) => r.needs_tag_sync) && (
+                    <button
+                      onClick={handleMarkAllReviewed}
+                      disabled={markingAllReviewed}
+                      className="px-2.5 py-1 rounded-full text-[10px] font-bold disabled:opacity-60"
+                      style={{ border: "1px solid #9c6f1f", color: "#9c6f1f" }}
+                    >
+                      {markingAllReviewed ? "Marking..." : "Mark all reviewed"}
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -864,7 +976,7 @@ export default function PublishSequencePanel({
                         className="rounded-lg overflow-hidden"
                         style={{
                           border: `1.5px solid ${
-                            !row.generated ? "var(--coral)" : row.pending_review ? "var(--tone-blue)" : "var(--pencil-light)"
+                            !row.generated ? "var(--coral)" : row.needs_tag_sync ? "#9c6f1f" : row.pending_review ? "var(--tone-blue)" : "var(--pencil-light)"
                           }`,
                         }}
                       >
@@ -1106,6 +1218,16 @@ export default function PublishSequencePanel({
                               >
                                 {regeneratingRow === key ? "Regenerating..." : "Regenerate"}
                               </button>
+                              {row.needs_tag_sync && (
+                                <button
+                                  onClick={() => handleAcknowledgeTagSync(row)}
+                                  disabled={acknowledgingRow === key}
+                                  className="px-3 py-1.5 rounded-md text-[10px] font-bold disabled:opacity-60"
+                                  style={{ color: "#9c6f1f", border: "1px solid #9c6f1f" }}
+                                >
+                                  {acknowledgingRow === key ? "Marking..." : "Mark reviewed"}
+                                </button>
+                              )}
                               {isDirty && (
                                 <span className="text-[10px] font-bold" style={{ color: "var(--coral-dark)" }}>
                                   Unsaved

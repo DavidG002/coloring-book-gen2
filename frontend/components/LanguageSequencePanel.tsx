@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { WandSparkles, RotateCw, Check, X, Plus, ChevronRight } from "lucide-react";
+import { WandSparkles, RotateCw, Check, X, Plus, ChevronRight, Info, Pencil } from "lucide-react";
 import SequencePanel from "./SequencePanel";
 import TranslationEditorModal from "./TranslationEditorModal";
 import {
@@ -52,6 +52,41 @@ async function translateVariations(categoryId: number, lang: string) {
   return data.translated_count as number;
 }
 
+interface SubjectTagStatus {
+  subject_id: number;
+  subject_name: string;
+  translated_text: string;
+  live: boolean;
+  wp_term_id: number | null;
+  live_name: string | null;
+  live_slug: string | null;
+  live_count: number;
+  out_of_sync: boolean;
+}
+interface SubjectTagsResponse {
+  configured: boolean;
+  site_url: string | null;
+  subjects: SubjectTagStatus[];
+}
+async function getSubjectTags(categoryId: number, lang: string): Promise<SubjectTagsResponse> {
+  const res = await fetch(`${API_BASE_URL}/wordpress/subject-tags?category_id=${categoryId}&lang=${encodeURIComponent(lang)}`);
+  const data = await res.json();
+  if (!res.ok) throw new ApiError(res.status, data.detail);
+  return data;
+}
+function langHasTagIssue(entries: SubjectTagStatus[] | undefined): boolean {
+  if (!entries) return false;
+  return entries.some((e) => e.out_of_sync || !e.live);
+}
+function sortLangCodesByTagStatus(byLang: Record<string, SubjectTagStatus[]>, codes: string[]): string[] {
+  return [...codes].sort((a, b) => {
+    const aIssue = langHasTagIssue(byLang[a]);
+    const bIssue = langHasTagIssue(byLang[b]);
+    if (aIssue !== bIssue) return aIssue ? -1 : 1;
+    return a.localeCompare(b);
+  });
+}
+
 type Completeness = "none" | "partial" | "ready";
 
 function computeCompleteness(t: Translation | undefined, subjects: Subject[]): Completeness {
@@ -70,6 +105,9 @@ export default function LanguageSequencePanel({
   variations,
   onContinue,
   onTranslationsChanged,
+  onTagSynced,
+  languagesNeedingSeoReview,
+  onReviewLanguage,
 }: {
   categoryId: number;
   categoryName: string;
@@ -78,6 +116,9 @@ export default function LanguageSequencePanel({
   variations: Variation[];
   onContinue: () => void;
   onTranslationsChanged?: () => void;
+  onTagSynced?: () => void;
+  languagesNeedingSeoReview?: string[];
+  onReviewLanguage?: (lang: string) => void;
 }) {
   const [supported, setSupported] = useState<SupportedLanguage[]>([]);
   const [translations, setTranslations] = useState<Record<string, Translation>>({});
@@ -91,6 +132,19 @@ export default function LanguageSequencePanel({
   const [newCode, setNewCode] = useState("");
   const [newName, setNewName] = useState("");
   const [addingLang, setAddingLang] = useState(false);
+
+  const [subjectTags, setSubjectTags] = useState<Record<string, SubjectTagStatus[]>>({});
+  const [subjectTagsConfigured, setSubjectTagsConfigured] = useState(false);
+  const [subjectTagsSiteUrl, setSubjectTagsSiteUrl] = useState<string | null>(null);
+  const [subjectTagsLoading, setSubjectTagsLoading] = useState(false);
+  const [tagsLangView, setTagsLangView] = useState<string | null>(null);
+  const [syncingSubjectId, setSyncingSubjectId] = useState<number | null>(null);
+  const [tagSyncResult, setTagSyncResult] = useState<Record<number, string>>({});
+  const [updateSlugFor, setUpdateSlugFor] = useState<Record<number, boolean>>({});
+  const [recentlyChangedSubjectIds, setRecentlyChangedSubjectIds] = useState<Set<number>>(new Set());
+  const [editingSubjectId, setEditingSubjectId] = useState<number | null>(null);
+  const [editingSubjectText, setEditingSubjectText] = useState("");
+  const [inlineSavingSubjectId, setInlineSavingSubjectId] = useState<number | null>(null);
 
   const hiddenKey = `hidden-langs-${categoryName}`;
 
@@ -125,7 +179,150 @@ export default function LanguageSequencePanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [categoryId]);
 
-  function persistHidden(next: Set<string>) {
+   useEffect(() => {
+      const activeCodes = supported.filter((l) => !hiddenLangs.has(l.code)).map((l) => l.code);
+      if (activeCodes.length === 0) {
+        setSubjectTagsConfigured(false);
+        setSubjectTags({});
+        return;
+      }
+      let cancelled = false;
+      setSubjectTagsLoading(true);
+      Promise.all(
+        activeCodes.map((code) =>
+          getSubjectTags(categoryId, code)
+            .then((data) => [code, data] as const)
+            .catch(() => [code, null] as const)
+        )
+      )
+        .then((entries) => {
+          if (cancelled) return;
+          const byLang: Record<string, SubjectTagStatus[]> = {};
+          let configured = false;
+          let siteUrl: string | null = null;
+          for (const [code, data] of entries) {
+            if (!data) continue;
+            if (data.configured) {
+              configured = true;
+              siteUrl = data.site_url;
+            }
+            byLang[code] = data.subjects;
+          }
+          setSubjectTags(byLang);
+          setSubjectTagsConfigured(configured);
+          setSubjectTagsSiteUrl(siteUrl);
+          setTagsLangView((prev) => (prev && activeCodes.includes(prev) ? prev : sortLangCodesByTagStatus(byLang, activeCodes)[0] ?? null));
+        })
+        .finally(() => {
+          if (!cancelled) setSubjectTagsLoading(false);
+        });
+      return () => {
+        cancelled = true;
+      };
+
+    }, [categoryId, supported, hiddenLangs]);
+
+    async function refreshSubjectTagsForLang(lang: string, opts?: { switchTo?: boolean }) {
+      try {
+        const data = await getSubjectTags(categoryId, lang);
+        setSubjectTags((prev) => {
+          const prevEntries = prev[lang] ?? [];
+          const changedIds = new Set<number>();
+          for (const entry of data.subjects) {
+            const prevEntry = prevEntries.find((e) => e.subject_id === entry.subject_id);
+            if (!prevEntry || prevEntry.translated_text !== entry.translated_text) {
+              changedIds.add(entry.subject_id);
+            }
+          }
+          if (changedIds.size > 0) {
+            setRecentlyChangedSubjectIds(changedIds);
+            setTimeout(() => setRecentlyChangedSubjectIds(new Set()), 6000);
+          }
+          return { ...prev, [lang]: data.subjects };
+        });
+        if (data.configured) {
+          setSubjectTagsConfigured(true);
+          setSubjectTagsSiteUrl(data.site_url);
+        }
+        if (opts?.switchTo) {
+          setTagsLangView(lang);
+        }
+      } catch {
+        // best-effort — Tags section just won't refresh this time
+      }
+    }
+
+    async function handleInlineSaveSubjectTranslation(subjectId: number, subjectName: string, lang: string, newText: string) {
+      setInlineSavingSubjectId(subjectId);
+      try {
+        const current = await getTranslation(categoryId, lang);
+        const hasItem = current.items.some((i) => i.subject_name === subjectName);
+        const nextItems = hasItem
+          ? current.items.map((i) => ({
+              subject_name: i.subject_name,
+              translated_text: i.subject_name === subjectName ? newText : i.translated_text,
+            }))
+          : [...current.items.map((i) => ({ subject_name: i.subject_name, translated_text: i.translated_text })), { subject_name: subjectName, translated_text: newText }];
+        await updateTranslation(categoryId, lang, {
+          category_translated: current.category_translated,
+          filename_template: current.filename_template,
+          alt_template: current.alt_template,
+          title_template: current.title_template,
+          items: nextItems,
+          variation_items: current.variation_items.map((i) => ({ variation_text: i.variation_text, translated_text: i.translated_text })),
+        });
+        const refreshedTranslation = await getTranslation(categoryId, lang).catch(() => null);
+        if (refreshedTranslation) setTranslations((prev) => ({ ...prev, [lang]: refreshedTranslation }));
+        await refreshSubjectTagsForLang(lang);
+        setEditingSubjectId(null);
+        onTranslationsChanged?.();
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : "Failed to save translation");
+      } finally {
+        setInlineSavingSubjectId(null);
+      }
+    }
+
+    
+
+    async function handleSyncSubjectTag(subjectId: number, newName: string) {
+      if (!tagsLangView) return;
+      setSyncingSubjectId(subjectId);
+      setTagSyncResult((prev) => ({ ...prev, [subjectId]: "" }));
+      try {
+        const res = await fetch(`${API_BASE_URL}/wordpress/rename-subject-tag`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            subject_id: subjectId,
+            lang: tagsLangView,
+            new_name: newName,
+            update_slug: !!updateSlugFor[subjectId],
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Failed to update WordPress tag");
+        setTagSyncResult((prev) => ({ ...prev, [subjectId]: data.renamed ? "✓ Synced" : data.reason || "Nothing to update" }));
+        if (data.renamed) {
+          setSubjectTags((prev) => ({
+            ...prev,
+            [tagsLangView]: (prev[tagsLangView] ?? []).map((e) =>
+              e.subject_id === subjectId ? { ...e, live_name:newName, out_of_sync: false } : e
+            ),
+          }));
+          if (data.flagged_variants > 0) {
+            onTagSynced?.();
+          }
+        }
+      } catch (err) {
+        setTagSyncResult((prev) => ({ ...prev, [subjectId]: err instanceof Error ? err.message : "Failed to sync" }));
+      } finally {
+        setSyncingSubjectId(null);
+        setTimeout(() => setTagSyncResult((prev) => ({ ...prev, [subjectId]: "" })), 5000);
+      }
+    }
+
+    function persistHidden(next: Set<string>) {
     setHiddenLangs(next);
     if (typeof window !== "undefined") {
       window.localStorage.setItem(hiddenKey, JSON.stringify(Array.from(next)));
@@ -440,26 +637,199 @@ export default function LanguageSequencePanel({
           })}
         </div>
       )}
-      <div className="mx-6 mb-6 rounded-lg flex items-center justify-between gap-4" style={{ padding: "16px 18px", border: "1px solid var(--pencil-light)", background: "var(--paper)" }}>
-        <div>
-          <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--pencil)", letterSpacing: "0.1em" }}>
-            Next - SEO
-          </p>
-          <p className="font-display font-normal m-0 mt-1" style={{ fontSize: 17, color: "var(--ink)" }}>
-            Tag your images
-          </p>
-          <p className="text-[11px] m-0 mt-1" style={{ color: "var(--pencil)" }}>
-            Translations are ready to review. Continue to create titles and alt text for each selected page.
-          </p>
+        <div className="mx-6 mb-6 rounded-lg" style={{ padding: "16px 18px", border: "1px solid var(--pencil-light)", background: "var(--paper)" }}>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--pencil)", letterSpacing: "0.1em" }}>
+                Next - SEO
+              </p>
+              <p className="font-display font-normal m-0 mt-1" style={{ fontSize: 17, color: "var(--ink)" }}>
+                Subject Tags
+              </p>
+              <p className="text-[11px] m-0 mt-1" style={{ color: "var(--pencil)" }}>
+                Review your live tags below, and update them anytime. 
+              </p>
+              {languagesNeedingSeoReview && languagesNeedingSeoReview.length > 0 && (
+                <div
+                  className="flex items-center gap-2 mt-2 px-2.5 py-1.5 rounded-md text-[11px] font-medium flex-wrap"
+                  style={{ background: "#fbf0da", color: "#9c6f1f", width: "fit-content" }}
+                >
+                  <span>SEO content needs review in {languagesNeedingSeoReview.map((l) => l.toUpperCase()).join(", ")}</span>
+                  {languagesNeedingSeoReview.map((l) => (
+                    <button
+                      key={l}
+                      onClick={() => onReviewLanguage?.(l)}
+                      className="underline font-bold"
+                      style={{ color: "#9c6f1f" }}
+                    >
+                      Review {l.toUpperCase()} →
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button
+              onClick={onContinue}
+              className="inline-flex items-center gap-1 text-[11px] font-medium shrink-0"
+              style={{ color: "var(--pencil)" }}
+            >
+              Continue to SEO <ChevronRight size={12} />
+            </button>
+          </div>
+
+          {subjectTagsConfigured && (
+            <div className="mt-4 pt-4" style={{ borderTop: "1px solid var(--pencil-light)" }}>
+              <p className="text-[10px] uppercase font-bold m-0 mb-2.5" style={{ color: "var(--pencil)", letterSpacing: "0.1em" }}>
+                {subjectTagsSiteUrl} / Tags
+              </p>
+
+              <div className="flex items-center gap-2 flex-wrap mb-3">
+                {sortLangCodesByTagStatus(subjectTags, Object.keys(subjectTags)).map((code) => {
+                  const entries = subjectTags[code] ?? [];
+                  const hasOutOfSync = entries.some((e) => e.out_of_sync);
+                  const hasNew = entries.some((e) => !e.live);
+                  return (
+                    <button
+                      key={code}
+                      onClick={() => setTagsLangView(code)}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[10px] font-bold uppercase"
+                      style={{
+                        background: "var(--canvas)",
+                        color: "var(--pencil)",
+                        outline: tagsLangView === code ? "2px solid var(--ink)" : "none",
+                        outlineOffset: 1,
+                      }}
+                    >
+                      {hasOutOfSync && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: "#9c6f1f" }} />}
+                      {!hasOutOfSync && hasNew && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: "var(--teal)" }} />}
+                      {code}
+                    </button>
+                  );
+                })}
+                {subjectTagsLoading && (
+                  <span className="text-[10px]" style={{ color: "var(--pencil)" }}>Loading...</span>
+                )}
+              </div>
+
+              {tagsLangView && (subjectTags[tagsLangView]?.length ?? 0) > 0 ? (
+                <div className="space-y-1.5">
+                  {subjectTags[tagsLangView].map((entry) => (
+                    <div
+                      key={entry.subject_id}
+                      className="flex items-center justify-between gap-3 px-3 py-2 rounded-md"
+                      style={{
+                        background: "var(--canvas)",
+                        outline: recentlyChangedSubjectIds.has(entry.subject_id) ? "2px solid var(--teal)" : "none",
+                        outlineOffset: 1,
+                      }}
+                    >
+                      <div className="min-w-0 flex-1">
+                        {editingSubjectId === entry.subject_id ? (
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              autoFocus
+                              value={editingSubjectText}
+                              onChange={(e) => setEditingSubjectText(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") handleInlineSaveSubjectTranslation(entry.subject_id, entry.subject_name, tagsLangView!, editingSubjectText.trim());
+                                if (e.key === "Escape") setEditingSubjectId(null);
+                              }}
+                              className="px-2 py-1 rounded-md text-xs outline-none flex-1"
+                              style={{ border: "1px solid var(--teal)", background: "var(--paper)" }}
+                            />
+                            <button
+                              onClick={() => handleInlineSaveSubjectTranslation(entry.subject_id, entry.subject_name, tagsLangView!, editingSubjectText.trim())}
+                              disabled={inlineSavingSubjectId === entry.subject_id}
+                              className="text-[10px] font-bold shrink-0 disabled:opacity-50"
+                              style={{ color: "var(--teal)" }}
+                            >
+                              {inlineSavingSubjectId === entry.subject_id ? "..." : "Save"}
+                            </button>
+                            <button onClick={() => setEditingSubjectId(null)} className="text-[10px] shrink-0" style={{ color: "var(--pencil)" }}>
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-medium capitalize" style={{ color: "var(--ink)" }}>
+                              {entry.translated_text || entry.subject_name}
+                            </span>
+                            <button
+                              onClick={() => {
+                                setEditingSubjectId(entry.subject_id);
+                                setEditingSubjectText(entry.translated_text || entry.subject_name);
+                              }}
+                              className="shrink-0"
+                              style={{ color: "var(--pencil)" }}
+                              title="Edit this subject's translation"
+                            >
+                              <Pencil size={11} />
+                            </button>
+                          </div>
+                        )}
+                        {entry.out_of_sync && (
+                          <span className="block text-[10px] mt-0.5" style={{ color: "#9c6f1f" }}>
+                            Live tag reads &quot;{entry.live_name}&quot; — doesn&apos;t match current translation
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {entry.live ? (
+                          entry.out_of_sync ? (
+                            <div className="flex flex-col items-end gap-1">
+                              <label className="flex items-center gap-1.5 text-[9px]" style={{ color: "var(--pencil)" }}>
+                                <input
+                                  type="checkbox"
+                                  checked={!!updateSlugFor[entry.subject_id]}
+                                  onChange={(e) =>
+                                    setUpdateSlugFor((prev) => ({ ...prev, [entry.subject_id]: e.target.checked }))
+                                  }
+                                  className="w-3 h-3"
+                                />
+                                Update tag archive page URL
+                                <span
+                                  className="inline-flex shrink-0"
+                                  title={`Only changes the /tag/... listing page's own URL (its "slug"). Your ${entry.live_count} published coloring page${entry.live_count === 1 ? "" : "s"} and their individual URLs are never affected either way.`}
+                                >
+                                  <Info size={11} style={{ color: "var(--pencil)" }} />
+                                </span>
+                              </label>
+                              <button
+                                onClick={() => handleSyncSubjectTag(entry.subject_id, entry.translated_text)}
+                                disabled={syncingSubjectId === entry.subject_id}
+                                className="px-2 py-1 rounded-md text-[10px] font-bold disabled:opacity-50"
+                                style={{ border: "1px solid #9c6f1f", color: "#9c6f1f" }}
+                              >
+                                {syncingSubjectId === entry.subject_id ? "Syncing..." : "Sync"}
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="px-2 py-1 rounded-full text-[9px] font-bold" style={{ background: "var(--tone-sage-bg)", color: "var(--tone-sage)" }}>
+                              Live
+                            </span>
+                          )
+                        ) : (
+                          <span className="px-2 py-1 rounded-full text-[9px] font-bold" style={{ background: "var(--teal-tint)", color: "var(--teal-dark)" }}>
+                            New
+                          </span>
+                        )}
+                        {tagSyncResult[entry.subject_id] && (
+                          <span className="text-[10px]" style={{ color: tagSyncResult[entry.subject_id].startsWith("✓") ? "var(--teal)" : "var(--coral-dark)" }}>
+                            {tagSyncResult[entry.subject_id]}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[11px] m-0" style={{ color: "var(--pencil)" }}>
+                  No subjects yet for this language.
+                </p>
+              )}
+            </div>
+          )}
         </div>
-        <button
-          onClick={onContinue}
-          className="inline-flex items-center gap-1 text-[11px] font-medium shrink-0"
-          style={{ color: "var(--pencil)" }}
-        >
-          Continue to SEO <ChevronRight size={12} />
-        </button>
-      </div>
 
       {modalLang && (
         <TranslationEditorModal
@@ -468,12 +838,13 @@ export default function LanguageSequencePanel({
           lang={modalLang}
           subjects={subjects}
           variations={variations}
-          onClose={async () => {
-            const refreshed = await getTranslation(categoryId, modalLang).catch(() => null);
-            if (refreshed) setTranslations((prev) => ({ ...prev, [modalLang]: refreshed }));
-            setModalLang(null);
-            onTranslationsChanged?.();
-          }}
+            onClose={async () => {
+              const refreshed = await getTranslation(categoryId, modalLang).catch(() => null);
+              if (refreshed) setTranslations((prev) => ({ ...prev, [modalLang]: refreshed }));
+              await refreshSubjectTagsForLang(modalLang, { switchTo: true });
+              setModalLang(null);
+              onTranslationsChanged?.();
+            }}
           onSaved={() => {}}
           onDeleted={() => setTranslations((prev) => { const next = { ...prev }; delete next[modalLang]; return next; })}
         />

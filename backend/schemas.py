@@ -600,6 +600,7 @@ class SeoContentVariantRow(BaseModel):
     generated: bool
     sample_image_id: int
     pending_review: bool = False
+    needs_tag_sync: bool = False
 
 
 class SeoContentVariantUpdate(BaseModel):

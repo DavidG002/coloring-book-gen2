@@ -4,6 +4,24 @@
  */
 
 export interface paths {
+    "/categories/by-name/{book_id}/{category_name}/base-prompt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Category Base Prompt By Name */
+        get: operations["get_category_base_prompt_by_name_categories_by_name__book_id___category_name__base_prompt_get"];
+        /** Set Category Base Prompt By Name */
+        put: operations["set_category_base_prompt_by_name_categories_by_name__book_id___category_name__base_prompt_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/categories": {
         parameters: {
             query?: never;
@@ -70,6 +88,23 @@ export interface paths {
         put?: never;
         /** Create Translation */
         post: operations["create_translation_categories__category_id__translations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/categories/{category_id}/translations/{lang}/set-active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Set Translation Active */
+        post: operations["set_translation_active_categories__category_id__translations__lang__set_active_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -443,6 +478,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/publish/pairing-published": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Check Pairing Published
+         * @description Real, per-pairing check — has ANY image of this (subject, variation)
+         *     combination been published in this language before, regardless of
+         *     which specific file. Temporary debug/test endpoint for Layer 1 of
+         *     the pairing-level publish tracking design.
+         */
+        get: operations["check_pairing_published_publish_pairing_published_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/publish/check-fully-published": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check Fully Published
+         * @description Given a category and a list of images (each with an id, source_path,
+         *     subject, variation_text), plus the real languages configured for that
+         *     category, returns two things per image:
+         *     - exact_file_blocked: this EXACT file is already live in every given
+         *       language — genuinely nothing new to offer, caller should PREVENT
+         *       adding it at all.
+         *     - pairing_warning: a DIFFERENT file of the same pairing is already
+         *       live in every given language — real, legitimate new content
+         *       (different picture), caller should WARN but still allow adding.
+         */
+        post: operations["check_fully_published_publish_check_fully_published_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/books/{book_id}/language-templates/{lang}": {
         parameters: {
             query?: never;
@@ -504,6 +590,28 @@ export interface paths {
         };
         /** List Job Images */
         get: operations["list_job_images_review_jobs__category_name___job_id__images_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/review/images-by-ids": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Images By Ids
+         * @description Resolves a comma-separated list of real image IDs into their full
+         *     details — used by the Publish page's selected-images preview, which
+         *     only carries raw IDs forward from Generate's selection checkboxes.
+         */
+        get: operations["get_images_by_ids_review_images_by_ids_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -843,6 +951,87 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/wordpress/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Wordpress Categories
+         * @description Real, live top-level WordPress categories from the connected site —
+         *     used by the Book-mapping setup screen.
+         */
+        get: operations["get_wordpress_categories_wordpress_categories_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/wordpress/books/{book_id}/mapping": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Book Mapping */
+        get: operations["get_book_mapping_wordpress_books__book_id__mapping_get"];
+        put?: never;
+        /** Create Book Mapping */
+        post: operations["create_book_mapping_wordpress_books__book_id__mapping_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/wordpress/rename-subject-tag": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rename Subject Tag */
+        post: operations["rename_subject_tag_wordpress_rename_subject_tag_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/wordpress/subject-tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Subject Tags
+         * @description Real, live per-subject WordPress Tag status for one category+language.
+         *     Lets the Language page show which subjects are already live tags on the
+         *     real site, which are new and not pushed yet, and whether a live tag's
+         *     name has drifted from the current local translation (e.g. a bad
+         *     auto-translation that got corrected here but was never synced to the
+         *     live site) — surfaced directly instead of discovered after publishing.
+         */
+        get: operations["get_subject_tags_wordpress_subject_tags_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/wordpress/push": {
         parameters: {
             query?: never;
@@ -922,6 +1111,33 @@ export interface paths {
         put?: never;
         /** Verify Push */
         post: operations["verify_push_wordpress_verify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/categories/{category_id}/seo/pending-review-count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Seo Pending Review Count
+         * @description A lightweight aggregate check — how many ContentVariant rows across
+         *     ALL languages are currently pending_review for this category. Used by
+         *     the Generate page to show a real-time banner right when a generation
+         *     job completes, without needing to know which languages exist or fetch
+         *     full SEO data for each. Registered before the /{lang} route below,
+         *     since FastAPI matches routes in registration order — a later position
+         *     here would have "pending-review-count" incorrectly matched as if it
+         *     were a language code.
+         */
+        get: operations["get_seo_pending_review_count_categories__category_id__seo_pending_review_count_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1362,6 +1578,15 @@ export interface components {
             /** Deleted File Count */
             deleted_file_count: number;
         };
+        /** BookMappingRequest */
+        BookMappingRequest: {
+            /** Lang */
+            lang: string;
+            /** Wp Term Id */
+            wp_term_id?: number | null;
+            /** Term Name */
+            term_name?: string | null;
+        };
         /** BookPreviewAvailability */
         BookPreviewAvailability: {
             /** Available */
@@ -1736,6 +1961,13 @@ export interface components {
                     [key: string]: string[];
                 };
             };
+            /** Base Prompt */
+            base_prompt?: string | null;
+            /**
+             * Effective Base Prompt
+             * @default
+             */
+            effective_base_prompt: string;
         };
         /** CategorySummary */
         CategorySummary: {
@@ -1758,6 +1990,10 @@ export interface components {
             subjects?: string[] | null;
             /** Variations */
             variations?: string[] | null;
+            /** Variations Subject Id */
+            variations_subject_id?: number | null;
+            /** Base Prompt */
+            base_prompt?: string | null;
         };
         /** ExcludeRequest */
         ExcludeRequest: {
@@ -1981,6 +2217,8 @@ export interface components {
              * @default false
              */
             only_new: boolean;
+            /** Image Ids */
+            image_ids?: number[] | null;
         };
         /** PublishRunResponse */
         PublishRunResponse: {
@@ -2033,6 +2271,20 @@ export interface components {
         RejectImageRequest: {
             /** Reason */
             reason?: string | null;
+        };
+        /** RenameSubjectTagRequest */
+        RenameSubjectTagRequest: {
+            /** Subject Id */
+            subject_id: number;
+            /** Lang */
+            lang: string;
+            /** New Name */
+            new_name: string;
+            /**
+             * Update Slug
+             * @default false
+             */
+            update_slug: boolean;
         };
         /** ReviewImage */
         ReviewImage: {
@@ -2092,6 +2344,11 @@ export interface components {
              * @default false
              */
             pending_review: boolean;
+            /**
+             * Needs Tag Sync
+             * @default false
+             */
+            needs_tag_sync: boolean;
         };
         /** SeoContentVariantUpdate */
         SeoContentVariantUpdate: {
@@ -2265,6 +2522,11 @@ export interface components {
             /** Category Id */
             category_id: number;
             /**
+             * Active
+             * @default true
+             */
+            active: boolean;
+            /**
              * Items
              * @default []
              */
@@ -2311,6 +2573,8 @@ export interface components {
             order: number;
             /** Id */
             id: number;
+            /** Subject Id */
+            subject_id?: number | null;
         };
         /** VariationTranslationItemInput */
         VariationTranslationItemInput: {
@@ -2546,6 +2810,16 @@ export interface components {
             checked_count: number;
             /** Removed Count */
             removed_count: number;
+            /**
+             * Terms Checked Count
+             * @default 0
+             */
+            terms_checked_count: number;
+            /**
+             * Terms Removed Count
+             * @default 0
+             */
+            terms_removed_count: number;
         };
     };
     responses: never;
@@ -2556,6 +2830,76 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    get_category_base_prompt_by_name_categories_by_name__book_id___category_name__base_prompt_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                book_id: number;
+                category_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_category_base_prompt_by_name_categories_by_name__book_id___category_name__base_prompt_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                book_id: number;
+                category_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_categories_categories_get: {
         parameters: {
             query?: never;
@@ -2741,7 +3085,9 @@ export interface operations {
     };
     list_translations_categories__category_id__translations_get: {
         parameters: {
-            query?: never;
+            query?: {
+                active_only?: boolean;
+            };
             header?: never;
             path: {
                 category_id: number;
@@ -2792,6 +3138,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TranslationRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_translation_active_categories__category_id__translations__lang__set_active_post: {
+        parameters: {
+            query: {
+                active: boolean;
+            };
+            header?: never;
+            path: {
+                category_id: number;
+                lang: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -3587,6 +3967,75 @@ export interface operations {
             };
         };
     };
+    check_pairing_published_publish_pairing_published_get: {
+        parameters: {
+            query: {
+                category_id: number;
+                subject: string;
+                variation_text: string;
+                lang: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_fully_published_publish_check_fully_published_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_language_template_books__book_id__language_templates__lang__get: {
         parameters: {
             query?: never;
@@ -3726,6 +4175,37 @@ export interface operations {
                 category_name: string;
                 job_id: number;
             };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewImage"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_images_by_ids_review_images_by_ids_get: {
+        parameters: {
+            query: {
+                ids: string;
+            };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -4559,6 +5039,159 @@ export interface operations {
             };
         };
     };
+    get_wordpress_categories_wordpress_categories_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_book_mapping_wordpress_books__book_id__mapping_get: {
+        parameters: {
+            query: {
+                lang: string;
+            };
+            header?: never;
+            path: {
+                book_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_book_mapping_wordpress_books__book_id__mapping_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                book_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BookMappingRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rename_subject_tag_wordpress_rename_subject_tag_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameSubjectTagRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_subject_tags_wordpress_subject_tags_get: {
+        parameters: {
+            query: {
+                category_id: number;
+                lang: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     push_to_wordpress_wordpress_push_post: {
         parameters: {
             query?: never;
@@ -4711,6 +5344,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WordPressVerifyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_seo_pending_review_count_categories__category_id__seo_pending_review_count_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                category_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

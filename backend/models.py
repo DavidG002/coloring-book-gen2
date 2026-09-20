@@ -415,6 +415,14 @@ class ContentVariant(Base):
     seo_excerpt = Column(Text, nullable=False)
     seo_content = Column(Text, nullable=False)
     pending_review = Column(Boolean, nullable=False, default=False)
+    # Distinct from pending_review, which is a transient "FYI, this was
+    # auto-generated" flag that the SEO page auto-clears just from being
+    # viewed (see mark_seo_reviewed). needs_tag_sync means something more
+    # consequential happened — the live WordPress tag for this subject
+    # was renamed — and should persist as a real to-do until the content
+    # is actually regenerated/edited or pushed to already-live posts,
+    # regardless of how many times the page is opened in between.
+    needs_tag_sync = Column(Boolean, nullable=False, default=False)
 
     created_at = Column(DateTime, default=datetime.utcnow)
 

@@ -22,6 +22,14 @@ def translate_phrases(phrases: list[str], target_lang: str) -> dict[str, str]:
     if not phrases:
         return {}
 
+    if target_lang.lower() == "en":
+        # The source text IS English already — asking the model to
+        # "translate English into English" is a degenerate request that
+        # produces unwanted stylistic rewrites (e.g. "Cute Butterfly" ->
+        # "Adorable Butterfly") instead of a no-op. Same reasoning as
+        # translate_template_structure_for_book's existing en shortcut.
+        return {phrase: phrase for phrase in phrases}
+
     language_name = LANGUAGE_NAMES.get(target_lang.lower(), target_lang)
 
     numbered = "\n".join(f"{i+1}. {p}" for i, p in enumerate(phrases))
@@ -114,6 +122,8 @@ def auto_translate_new_items(db, category, new_subjects: list, new_variations: l
         return result
 
     for translation in category.translations:
+        if not translation.active:
+            continue
         lang = translation.lang
         touched = {"subjects": [], "variations": []}
 

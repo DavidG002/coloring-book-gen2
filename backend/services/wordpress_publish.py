@@ -8,7 +8,7 @@ from services.content_variants import ensure_content_variant, ensure_category_de
 
 from models import (
     WordPressIntegration, WordPressCategoryTerm, WordPressSubjectTerm, WordPressPublishedItem,
-    WordPressBookTerm, GenerationImage, PublishedFile, PublishRun,
+    WordPressBookTerm, GenerationImage, PublishedFile, PublishRun, ContentVariant,
 )
 
 
@@ -388,11 +388,25 @@ def ensure_subject_term(
     db.commit()
     return term_id
 
-def rename_subject_term(db: Session, subject_id: int, lang: str, new_name: str, site_url: str) -> dict:
+def rename_subject_term(db: Session, subject_id: int, lang: str, new_name: str, site_url: str, update_slug: bool = False) -> dict:
     """Renames a subject's already-live WordPress tag in place — same
     real term ID, so nothing else (already-tagged posts, local tracking)
     needs to change at all. The clean, direct fix for a corrected
-    translation, replacing the old delete-and-recreate workaround."""
+    translation, replacing the old delete-and-recreate workaround.
+
+    By default preserves the term's existing slug/URL, since WordPress
+    otherwise regenerates the slug from the new name — silently moving
+    the tag's live URL (e.g. /tag/cute-butterfly/ -> /tag/adorable-butterfly/)
+    and breaking any existing links or search index entries pointing at
+    the old one. Pass update_slug=True to let WordPress recompute the
+    slug from the new name instead — reasonable for a tag with few or no
+    live posts under it yet.
+
+    Also flags every ContentVariant for this subject+language as
+    pending_review: a real rename means the title/alt/excerpt text
+    already baked into any already-published posts for this subject may
+    now read like the old name, and that's worth a human look rather
+    than silently drifting out of sync."""
     config = _get_wp_config(db)
     term = (
         db.query(WordPressSubjectTerm)
@@ -404,11 +418,46 @@ def rename_subject_term(db: Session, subject_id: int, lang: str, new_name: str, 
 
     tags_rest_base = TAXONOMY_REST_BASE["post_tag"]
     url = config.site_url.rstrip("/") + f"/wp-json/wp/v2/{tags_rest_base}/{term.wp_term_id}"
-    response = httpx.post(url, auth=_auth(config), json={"name": new_name}, timeout=15.0)
+
+    # Always fetch the term's current live name (+ slug) first — needed both
+    # to detect a true no-op rename and to preserve the slug by default.
+    existing_name = None
+    existing_slug = None
+    try:
+        get_response = httpx.get(url, timeout=15.0)
+        if get_response.status_code == 200:
+            current = get_response.json()
+            existing_name = current.get("name")
+            existing_slug = current.get("slug")
+    except Exception:
+        pass
+
+    if existing_name is not None and existing_name.strip() == new_name.strip():
+        return {
+            "renamed": False,
+            "reason": "New name matches the tag's current live name — nothing to update.",
+            "wp_term_id": term.wp_term_id,
+            "new_name": new_name,
+        }
+
+    payload = {"name": new_name}
+    if not update_slug and existing_slug:
+        payload["slug"] = existing_slug
+
+    response = httpx.post(url, auth=_auth(config), json=payload, timeout=15.0)
     if response.status_code != 200:
         raise RuntimeError(f"Failed to rename tag: {response.status_code} {response.text}")
 
-    return {"renamed": True, "wp_term_id": term.wp_term_id, "new_name": new_name}
+    variants = (
+        db.query(ContentVariant)
+        .filter(ContentVariant.subject_id == subject_id, ContentVariant.lang == lang)
+        .all()
+    )
+    for variant in variants:
+        variant.needs_tag_sync = True
+    db.commit()
+
+    return {"renamed": True, "wp_term_id": term.wp_term_id, "new_name": new_name, "flagged_variants": len(variants)}
 
 
 def upload_media(config: WordPressIntegration, file_path: str, filename: str, alt_text: str, title: str) -> int:

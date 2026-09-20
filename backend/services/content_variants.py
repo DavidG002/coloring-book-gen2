@@ -441,6 +441,7 @@ def list_content_variants(db: Session, category_id: int, lang: str) -> list[dict
                 "generated": existing is not None,
                 "sample_image_id": representative.id,
                 "pending_review": existing.pending_review if existing else False,
+                "needs_tag_sync": existing.needs_tag_sync if existing else False,
             })
     return rows
 

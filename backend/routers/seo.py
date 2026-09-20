@@ -64,12 +64,18 @@ def update_description(category_id: int, lang: str, payload: CategoryDescription
     category = _get_category_or_404(db, category_id)
     existing = db.query(CategoryDescription).filter(CategoryDescription.category == category.name, CategoryDescription.lang == lang).first()
     if not existing:
-        existing = CategoryDescription(category=category.name, lang=lang, description=payload.description)
+        existing = ContentVariant(subject_id=subject.id, variation_id=variation.id, lang=lang, seo_title="", seo_alt_text="", seo_excerpt="", seo_content="")
         db.add(existing)
-    else:
-        existing.description = payload.description
+    existing.seo_title = payload.seo_title
+    existing.seo_alt_text = payload.seo_alt_text
+    existing.seo_excerpt = payload.seo_excerpt
+    existing.seo_content = payload.seo_content
+    existing.focus_keyphrase = payload.focus_keyphrase
+    existing.yoast_title = payload.yoast_title
+    existing.yoast_meta_description = payload.yoast_meta_description
+    existing.needs_tag_sync = False
     db.commit()
-    return {"description": existing.description}
+    return {"status": "saved"}
 
 
 @router.post("/{lang}/description/regenerate")
@@ -110,6 +116,30 @@ def update_content_variant(category_id: int, lang: str, payload: SeoContentVaria
     return {"status": "saved"}
 
 
+@router.post("/{lang}/content/acknowledge-tag-sync")
+def acknowledge_tag_sync(category_id: int, lang: str, payload: dict, db: Session = Depends(get_db)):
+    """Clears needs_tag_sync on one ContentVariant row without touching its
+    content — for the case where a tag rename didn't actually require any
+    SEO text change, and a human just needs to confirm that and move on."""
+    category = _get_category_or_404(db, category_id)
+    subject_name = payload.get("subject_name")
+    variation_text = payload.get("variation_text")
+    subject = db.query(Subject).filter(Subject.category_id == category.id, Subject.name == subject_name).first()
+    variation = db.query(Variation).filter(Variation.category_id == category.id, Variation.text == variation_text).first()
+    if not subject or not variation:
+        raise HTTPException(status_code=400, detail="Subject or variation not found in this category")
+
+    existing = (
+        db.query(ContentVariant)
+        .filter(ContentVariant.subject_id == subject.id, ContentVariant.variation_id == variation.id, ContentVariant.lang == lang)
+        .first()
+    )
+    if existing:
+        existing.needs_tag_sync = False
+        db.commit()
+    return {"status": "acknowledged"}
+
+
 @router.post("/{lang}/content/generate-missing")
 def generate_missing_content(category_id: int, lang: str, db: Session = Depends(get_db)):
     category = _get_category_or_404(db, category_id)
@@ -132,6 +162,8 @@ def regen_one_content(category_id: int, lang: str, payload: SeoRegenerateRequest
         variant = regenerate_content_variant(db, category.id, payload.subject_name, payload.variation_text, lang)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    variant.needs_tag_sync = False
+    db.commit()
     return {
         "seo_title": variant.seo_title,
         "seo_alt_text": variant.seo_alt_text,

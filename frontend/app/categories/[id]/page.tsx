@@ -27,6 +27,8 @@ export default function CategoryDetailPage() {
   const [publishNeedsAttention, setPublishNeedsAttention] = useState(false);
   const [publishPendingReview, setPublishPendingReview] = useState<string[]>([]);
   const [publishCheckTrigger, setPublishCheckTrigger] = useState(0);
+  const [publishJumpLang, setPublishJumpLang] = useState<string | null>(null);
+  const [publishJumpReviewOnly, setPublishJumpReviewOnly] = useState(false);
   const [publishSetImageIds, setPublishSetImageIds] = useState<number[] | null>(null);
   const [warnedPublishImageIds, setWarnedPublishImageIds] = useState<number[]>([]);
   const publishSetLoadedRef = useRef(false);
@@ -63,7 +65,7 @@ export default function CategoryDetailPage() {
     let cancelled = false;
     const timer = setTimeout(async () => {
       try {
-        const translations = await getTranslations(categoryId);
+        const translations = await getTranslations(categoryId, true);
         if (cancelled) return;
         if (translations.length === 0) {
           setLanguageNeedsAttention(false);
@@ -96,7 +98,7 @@ export default function CategoryDetailPage() {
     const timer = setTimeout(async () => {
       try {
         const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-        const translations = await getTranslations(categoryId);
+        const translations = await getTranslations(categoryId, true);
         if (translations.length === 0) {
           if (!cancelled) setPublishNeedsAttention(false);
           return;
@@ -113,7 +115,7 @@ export default function CategoryDetailPage() {
           if (data.content_variants?.some((v: { generated: boolean }) => !v.generated)) {
             incomplete = true;
           }
-          if (data.content_variants?.some((v: { pending_review: boolean }) => v.pending_review)) {
+          if (data.content_variants?.some((v: { pending_review: boolean; needs_tag_sync?: boolean }) => v.pending_review || v.needs_tag_sync)) {
             langsWithPendingReview.push(t.lang);
           }
         }
@@ -246,10 +248,14 @@ export default function CategoryDetailPage() {
       publishPendingReview={publishPendingReview}
     >
       {(activeStep, setActiveStep) => {
-        const goToStep = (step: StepId) => {
+        const goToStep = (step: StepId, opts?: { lang?: string; onlyNeedsReview?: boolean }) => {
           if (step === "generate") {
             setLanguageCheckTrigger((n) => n + 1);
             setPublishCheckTrigger((n) => n + 1);
+          }
+          if (step === "publish") {
+            setPublishJumpLang(opts?.lang ?? null);
+            setPublishJumpReviewOnly(!!opts?.onlyNeedsReview);
           }
           setActiveStep(step);
         };
@@ -284,6 +290,9 @@ export default function CategoryDetailPage() {
                 variations={category.variations}
                 onContinue={() => goToStep("publish")}
                 onTranslationsChanged={() => setLanguageCheckTrigger((n) => n + 1)}
+                onTagSynced={() => setPublishCheckTrigger((n) => n + 1)}
+                languagesNeedingSeoReview={publishPendingReview}
+                onReviewLanguage={(lang) => goToStep("publish", { lang, onlyNeedsReview: true })}
             />
             )}
             {activeStep === "publish" && (
@@ -292,12 +301,14 @@ export default function CategoryDetailPage() {
                 categoryName={category.name}
                 onGoToWordPress={() => goToStep("wordpress")}
                 onGoToLanguage={() => goToStep("language")}
-                onSeoChanged={() => setPublishCheckTrigger((n) => n + 1)}
+                onSeoChanged={() => setPublishCheckTrigger((n) =>n + 1)}
                 publishSetImageIds={publishSetImageIds}
                 onRemoveFromPublishSet={(imageId) => {
                   setPublishSetImageIds((prev) => (prev ?? []).filter((id) => id !== imageId));
                 }}
                 warnedImageIds={warnedPublishImageIds}
+                initialLang={publishJumpLang ?? undefined}
+                initialOnlyNeedsReview={publishJumpReviewOnly}
               />
             )}
             {activeStep === "wordpress" && (
