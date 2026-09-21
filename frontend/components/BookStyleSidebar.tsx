@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { ChevronDown, Palette } from "lucide-react";
 import { getBook, updateBook, ApiError, type Book } from "@/lib/api";
+import { PAPER_PRESETS } from "./SettingsUI";
 import KnobsPanel from "./KnobsPanel";
 import ExpandableTextModal from "./ExpandableTextModal";
 
@@ -14,6 +15,8 @@ export default function BookStyleSidebar({ bookId, categoryName }: { bookId: num
   const [savingPrompt, setSavingPrompt] = useState(false);
   const [promptSaved, setPromptSaved] = useState(false);
 
+  const [canvasWidth, setCanvasWidth] = useState(595);
+  const [canvasHeight, setCanvasHeight] = useState(842);
   const [subjectSizeRatio, setSubjectSizeRatio] = useState(0.5);
   const [whiteThreshold, setWhiteThreshold] = useState(245);
   const [blackThreshold, setBlackThreshold] = useState(10);
@@ -54,6 +57,8 @@ export default function BookStyleSidebar({ bookId, categoryName }: { bookId: num
         if (cancelled) return;
         setBook(data);
         if (!categoryName) setBasePrompt(data.base_prompt);
+        setCanvasWidth(data.canvas_width);
+        setCanvasHeight(data.canvas_height);
         setSubjectSizeRatio(data.subject_size_ratio);
         setWhiteThreshold(data.white_clean_threshold);
         setBlackThreshold(data.black_clean_threshold);
@@ -76,6 +81,7 @@ export default function BookStyleSidebar({ bookId, categoryName }: { bookId: num
       cancelled = true;
       clearTimeout(timer);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookId]);
 
   useEffect(() => {
@@ -124,6 +130,8 @@ export default function BookStyleSidebar({ bookId, categoryName }: { bookId: num
     setSavingImageSettings(true);
     try {
       const updated = await updateBook(bookId, {
+        canvas_width: canvasWidth,
+        canvas_height: canvasHeight,
         subject_size_ratio: subjectSizeRatio,
         white_clean_threshold: whiteThreshold,
         black_clean_threshold: blackThreshold,
@@ -138,6 +146,8 @@ export default function BookStyleSidebar({ bookId, categoryName }: { bookId: num
       setSavingImageSettings(false);
     }
   }
+
+  const selectedPresetLabel = PAPER_PRESETS.find((p) => p.width === canvasWidth && p.height === canvasHeight)?.label;
 
   if (loading || !book) {
     return null;
@@ -215,67 +225,170 @@ export default function BookStyleSidebar({ bookId, categoryName }: { bookId: num
         </button>
         {imageSettingsOpen && (
         <>
-        <div className="grid grid-cols-2 gap-2.5">
-          <div>
-            <label className="block text-[9px] mb-1" style={{ color: "var(--pencil)" }}>
-              Subject size ratio
-            </label>
-            <input
-              type="number"
-              step={0.05}
-              min={0}
-              max={1}
-              value={subjectSizeRatio}
-              onChange={(e) => setSubjectSizeRatio(parseFloat(e.target.value) || 0)}
-              className="w-full px-2 py-1.5 rounded text-[10px] outline-none"
-              style={{ border: "1px solid var(--pencil-light)", background: "var(--canvas)" }}
-            />
+        <div className="mb-4 pb-4" style={{ borderBottom: "1px solid var(--pencil-light)" }}>
+          <p className="text-[9px] uppercase font-bold mb-2" style={{ color: "var(--pencil)", letterSpacing: "0.08em" }}>
+            Paper size
+          </p>
+          <select
+            value={canvasWidth === 0 ? "custom" : (selectedPresetLabel ?? "custom")}
+            onChange={(e) => {
+              if (e.target.value === "custom") {
+                setCanvasWidth(0);
+                setCanvasHeight(0);
+                return;
+              }
+              const preset = PAPER_PRESETS.find((p) => p.label === e.target.value);
+              if (preset) {
+                setCanvasWidth(preset.width);
+                setCanvasHeight(preset.height);
+              }
+            }}
+            className="w-full px-2 py-1.5 rounded text-[10px] outline-none"
+            style={{ border: "1px solid var(--pencil-light)", background: "var(--canvas)" }}
+          >
+            {PAPER_PRESETS.map((preset) => (
+              <option key={preset.label} value={preset.label}>
+                {preset.label}
+              </option>
+            ))}
+            <option value="custom">Custom size</option>
+          </select>
+
+          {canvasWidth === 0 && (
+            <div className="grid grid-cols-2 gap-2.5 mt-2">
+              <div>
+                <label className="block text-[9px] mb-1" style={{ color: "var(--pencil)" }}>
+                  Width (px)
+                </label>
+                <input
+                  type="number"
+                  value={canvasWidth || ""}
+                  onChange={(e) => setCanvasWidth(parseInt(e.target.value, 10) || 0)}
+                  className="w-full px-2 py-1.5 rounded text-[10px] outline-none"
+                  style={{ border: "1px solid var(--pencil-light)", background: "var(--canvas)" }}
+                />
+              </div>
+              <div>
+                <label className="block text-[9px] mb-1" style={{ color: "var(--pencil)" }}>
+                  Height (px)
+                </label>
+                <input
+                  type="number"
+                  value={canvasHeight || ""}
+                  onChange={(e) => setCanvasHeight(parseInt(e.target.value, 10) || 0)}
+                  className="w-full px-2 py-1.5 rounded text-[10px] outline-none"
+                  style={{ border: "1px solid var(--pencil-light)", background: "var(--canvas)" }}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="mb-4 pb-4" style={{ borderBottom: "1px solid var(--pencil-light)" }}>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[9px] uppercase font-bold m-0" style={{ color: "var(--pencil)", letterSpacing: "0.08em" }}>
+              Subject size
+            </p>
+            <span className="text-[11px] font-bold" style={{ color: "var(--tone-lavender)" }}>
+              {Math.round(subjectSizeRatio * 100)}%
+            </span>
           </div>
-          <div>
-            <label className="block text-[9px] mb-1" style={{ color: "var(--pencil)" }}>
-              Palette colors
-            </label>
+          <input
+            type="range"
+            min={0.2}
+            max={0.9}
+            step={0.05}
+            value={subjectSizeRatio}
+            onChange={(e) => setSubjectSizeRatio(parseFloat(e.target.value))}
+            className="w-full"
+            style={{ accentColor: "var(--tone-lavender)" }}
+          />
+          <div className="flex items-center justify-between mt-0.5">
+            <span className="text-[9px]" style={{ color: "var(--pencil)" }}>Small on page</span>
+            <span className="text-[9px]" style={{ color: "var(--pencil)" }}>Fills the page</span>
+          </div>
+        </div>
+
+        <div className="mb-2">
+          <p className="text-[9px] uppercase font-bold mb-2" style={{ color: "var(--pencil)", letterSpacing: "0.08em" }}>
+            Fine-tuning
+          </p>
+
+          <div className="mb-3">
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-[9px]" style={{ color: "var(--pencil)" }}>
+                Shading detail
+              </label>
+              <span className="text-[10px] font-bold" style={{ color: "var(--teal)" }}>
+                {paletteColors}
+              </span>
+            </div>
             <input
-              type="number"
-              step={1}
+              type="range"
               min={2}
+              max={24}
+              step={1}
               value={paletteColors}
-              onChange={(e) => setPaletteColors(parseInt(e.target.value, 10) || 2)}
-              className="w-full px-2 py-1.5 rounded text-[10px] outline-none"
-              style={{ border: "1px solid var(--pencil-light)", background: "var(--canvas)" }}
+              onChange={(e) => setPaletteColors(parseInt(e.target.value, 10))}
+              className="w-full"
+              style={{ accentColor: "var(--teal)" }}
             />
+            <div className="flex items-center justify-between mt-0.5">
+              <span className="text-[9px]" style={{ color: "var(--pencil)" }}>Flat black & white</span>
+              <span className="text-[9px]" style={{ color: "var(--pencil)" }}>Soft shading</span>
+            </div>
           </div>
-          <div>
-            <label className="block text-[9px] mb-1" style={{ color: "var(--pencil)" }}>
-              Black threshold
-            </label>
+
+          <div className="mb-3">
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-[9px]" style={{ color: "var(--pencil)" }}>
+                Line boldness
+              </label>
+              <span className="text-[10px] font-bold" style={{ color: "var(--teal)" }}>
+                {blackThreshold}
+              </span>
+            </div>
             <input
-              type="number"
-              step={1}
+              type="range"
               min={0}
-              max={255}
+              max={60}
+              step={1}
               value={blackThreshold}
-              onChange={(e) => setBlackThreshold(parseInt(e.target.value, 10) || 0)}
-              className="w-full px-2 py-1.5 rounded text-[10px] outline-none"
-              style={{ border: "1px solid var(--pencil-light)", background: "var(--canvas)" }}
+              onChange={(e) => setBlackThreshold(parseInt(e.target.value, 10))}
+              className="w-full"
+              style={{ accentColor: "var(--teal)" }}
             />
+            <div className="flex items-center justify-between mt-0.5">
+              <span className="text-[9px]" style={{ color: "var(--pencil)" }}>Preserve soft detail</span>
+              <span className="text-[9px]" style={{ color: "var(--pencil)" }}>Bold solid lines</span>
+            </div>
           </div>
-          <div>
-            <label className="block text-[9px] mb-1" style={{ color: "var(--pencil)" }}>
-              White threshold
-            </label>
+
+          <div className="mb-1">
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-[9px]" style={{ color: "var(--pencil)" }}>
+                Background cleanup
+              </label>
+              <span className="text-[10px] font-bold" style={{ color: "var(--teal)" }}>
+                {whiteThreshold}
+              </span>
+            </div>
             <input
-              type="number"
-              step={1}
-              min={0}
+              type="range"
+              min={200}
               max={255}
+              step={1}
               value={whiteThreshold}
-              onChange={(e) => setWhiteThreshold(parseInt(e.target.value, 10) || 0)}
-              className="w-full px-2 py-1.5 rounded text-[10px] outline-none"
-              style={{ border: "1px solid var(--pencil-light)", background: "var(--canvas)" }}
+              onChange={(e) => setWhiteThreshold(parseInt(e.target.value, 10))}
+              className="w-full"
+              style={{ accentColor: "var(--teal)" }}
             />
+            <div className="flex items-center justify-between mt-0.5">
+              <span className="text-[9px]" style={{ color: "var(--pencil)" }}>Aggressive cleanup</span>
+              <span className="text-[9px]" style={{ color: "var(--pencil)" }}>Preserve light detail</span>
+            </div>
           </div>
-                </div>
+        </div>
         <div className="flex items-center gap-2 mt-2">
           <button
             onClick={handleSaveImageSettings}

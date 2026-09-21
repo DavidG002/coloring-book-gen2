@@ -9,8 +9,8 @@ import NewCategoryModal from "@/components/NewCategoryModal";
 import DeleteBookModal from "@/components/DeleteBookModal";
 import BookSettingsFields from "@/components/BookSettingsFields";
 import BookPreviewSection from "@/components/BookPreviewSection";
-import PrepareCategoryPanel from "@/components/PrepareCategoryPanel";
-import { Panel, PanelSection } from "@/components/SettingsUI";
+
+import { Panel } from "@/components/SettingsUI";
 import AppShell from "@/components/AppShell";
 import DeleteCategoryModal from "@/components/DeleteCategoryModal";
 import NewBookWizard from "@/components/NewBookWizard";
@@ -38,7 +38,7 @@ export default function BookDetailPage() {
   const [lastCreatedCategoryId, setLastCreatedCategoryId] = useState<number | undefined>(undefined);
   const [deletingCategory, setDeletingCategory] = useState<CategorySummary | null>(null);
   const [highlightedCategoryId, setHighlightedCategoryId] = useState<number | null>(null);
-  const [prepareCategoryOpen, setPrepareCategoryOpen] = useState(true);
+  
   const [justFinishedWizard, setJustFinishedWizard] = useState(false);
   const [selectedPreviewCategoryName, setSelectedPreviewCategoryName] = useState("");
   
@@ -55,18 +55,6 @@ export default function BookDetailPage() {
     return () => clearTimeout(timer);
   }, [bookId]);
 
-  
-  useEffect(() => {
-  const timer = setTimeout(() => {
-    const saved = window.localStorage.getItem(`prepare-category-open-${bookId}`);
-    if (saved !== null) setPrepareCategoryOpen(saved === "1");
-  }, 0);
-  return () => clearTimeout(timer);
-}, [bookId]);
-
-useEffect(() => {
-  window.localStorage.setItem(`prepare-category-open-${bookId}`, prepareCategoryOpen ? "1" : "0");
-}, [prepareCategoryOpen, bookId]);
   
   useEffect(() => {
     let cancelled = false;
@@ -215,7 +203,13 @@ useEffect(() => {
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6 items-start">
         <div className="space-y-6 min-w-0">
-          <BookPreviewSection bookId={bookId} onCategoryChanged={setSelectedPreviewCategoryName} />
+          <BookPreviewSection
+            bookId={bookId}
+            onCategoryChanged={setSelectedPreviewCategoryName}
+            book={book}
+            categories={categories}
+            lastCreatedCategoryId={lastCreatedCategoryId}
+          />
 
           <Panel
             kicker="YOUR COLLECTIONS"
@@ -299,13 +293,6 @@ useEffect(() => {
               <ArrowUpRight size={14} />
             </button>
 
-              <PanelSection
-                label="Prepare a category"
-                open={prepareCategoryOpen}
-                onToggle={() => setPrepareCategoryOpen((v) => !v)}
-              >
-              <PrepareCategoryPanel categories={categories} defaultCategoryId={lastCreatedCategoryId} />
-            </PanelSection>
           </Panel>
         </div>
 

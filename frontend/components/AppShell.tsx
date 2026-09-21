@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
-  BookOpen, LayoutDashboard, Library, Grid2X2, Settings, Sparkles, ArrowUpRight, ChevronDown, ChevronLeft,
+  BookOpen, LayoutDashboard, Library, Grid2X2, Printer, Settings, Sparkles,ArrowUpRight, ChevronDown, ChevronLeft,
 } from "lucide-react";
 import { getBooks } from "@/lib/api";
 import NewBookModal from "./NewBookModal";
@@ -13,7 +13,7 @@ export default function AppShell({
   breadcrumb,
   children,
 }: {
-  active: "Overview" | "Books" | "Categories";
+  active: "Overview" | "Books" | "Categories" | "Print";
   breadcrumb: string;
   children: React.ReactNode;
 }) {
@@ -155,8 +155,22 @@ export default function AppShell({
                 : { color: "var(--pencil)" }
             }
           >
-            <Grid2X2 size={16} />
+           <Grid2X2 size={16} />
             {!collapsed && "Categories"}
+          </Link>
+          <Link
+            href="/print"
+            onClick={() => collapsed && toggleCollapsed()}
+            title={collapsed ? "Print" : undefined}
+            className={`nav-hover flex items-center gap-2.5 rounded-lg text-[13px] ${collapsed ? "justify-center px-0 py-2.5" : "px-3 py-2.5"}`}
+            style={
+              active === "Print"
+                ? { background: "var(--teal-tint)", color: "var(--teal-dark)", fontWeight: 700 }
+                : { color: "var(--pencil)" }
+            }
+          >
+            <Printer size={16} />
+            {!collapsed && "Print"}
           </Link>
           </nav>
 

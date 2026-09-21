@@ -7,24 +7,17 @@ import EditListModal from "./EditListModal";
 
 export default function PrepareCategoryPanel({
   categories,
-  defaultCategoryId,
+  selectedCategoryId,
 }: {
   categories: CategorySummary[];
-  defaultCategoryId?: number;
+  selectedCategoryId?: number;
 }) {
-  const [selected, setSelected] = useState<number | undefined>(defaultCategoryId ?? categories[0]?.id);
   const [category, setCategory] = useState<Category | null>(null);
   const [selectedSubject, setSelectedSubject] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editModalKind, setEditModalKind] = useState<"subjects" | "variations" | null>(null);
   const [listsExpanded, setListsExpanded] = useState(false);
-
-  useEffect(() => {
-    if (!defaultCategoryId) return;
-    const timer = setTimeout(() => setSelected(defaultCategoryId), 0);
-    return () => clearTimeout(timer);
-  }, [defaultCategoryId]);
 
   function loadCategory(id: number) {
     setLoading(true);
@@ -38,11 +31,16 @@ export default function PrepareCategoryPanel({
   }
 
   useEffect(() => {
-    if (!selected) return;
-    const timer = setTimeout(() => loadCategory(selected), 0);
+    if (!selectedCategoryId) {
+      const timer = setTimeout(() => {
+        setCategory(null);
+        setSelectedSubject("");
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+    const timer = setTimeout(() => loadCategory(selectedCategoryId), 0);
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected]);
+  }, [selectedCategoryId]);
 
   function handleListSaved(updated: Category) {
     setCategory(updated);
@@ -56,10 +54,10 @@ export default function PrepareCategoryPanel({
     .map((v) => v.text);
 
   async function handleRemoveSubject(subject: string) {
-    if (!selected) return;
+    if (!selectedCategoryId) return;
     const next = subjects.filter((s) => s !== subject);
     try {
-      const updated = await updateCategory(selected, { subjects: next });
+      const updated = await updateCategory(selectedCategoryId, { subjects: next });
       setCategory(updated);
       if (selectedSubject === subject) setSelectedSubject(updated.subjects[0]?.name ?? "");
     } catch (err) {
@@ -68,10 +66,10 @@ export default function PrepareCategoryPanel({
   }
 
   async function handleRemoveVariation(variation: string) {
-    if (!selected || !selectedSubjectId) return;
+    if (!selectedCategoryId || !selectedSubjectId) return;
     const next = variations.filter((v) => v !== variation);
     try {
-      const updated = await updateCategory(selected, { variations: next, variations_subject_id: selectedSubjectId });
+      const updated = await updateCategory(selectedCategoryId, { variations: next, variations_subject_id: selectedSubjectId });
       setCategory(updated);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to remove variation");
@@ -100,24 +98,6 @@ export default function PrepareCategoryPanel({
           {error}
         </div>
       )}
-
-      <div className="mb-4">
-        <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--ink)" }}>
-          Category
-        </label>
-        <select
-          value={selected ?? ""}
-          onChange={(e) => setSelected(parseInt(e.target.value, 10))}
-          className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm capitalize"
-          style={{ borderColor: "var(--pencil-light)", background: "var(--paper)" }}
-        >
-          {categories.map((c) => (
-            <option key={c.id} value={c.id} className="capitalize">
-              {c.name}
-            </option>
-          ))}
-        </select>
-      </div>
 
       {loading ? (
         <p className="text-sm" style={{ color: "var(--pencil)" }}>
@@ -248,9 +228,9 @@ export default function PrepareCategoryPanel({
         </>
       )}
 
-      {editModalKind && selected && (
+      {editModalKind && selectedCategoryId && (
         <EditListModal
-          categoryId={selected}
+          categoryId={selectedCategoryId}
           kind={editModalKind}
           currentItems={editModalKind === "subjects" ? subjects : variations}
           onClose={() => setEditModalKind(null)}

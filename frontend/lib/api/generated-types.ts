@@ -1212,6 +1212,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/categories/{category_id}/seo/{lang}/content/acknowledge-tag-sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Acknowledge Tag Sync
+         * @description Clears needs_tag_sync on one ContentVariant row without touching its
+         *     content — for the case where a tag rename didn't actually require any
+         *     SEO text change, and a human just needs to confirm that and move on.
+         */
+        post: operations["acknowledge_tag_sync_categories__category_id__seo__lang__content_acknowledge_tag_sync_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/categories/{category_id}/seo/{lang}/content/generate-missing": {
         parameters: {
             query?: never;
@@ -2697,6 +2719,12 @@ export interface components {
              * @default false
              */
             needs_update: boolean;
+            /** Image Id */
+            image_id?: number | null;
+            /** Subject */
+            subject?: string | null;
+            /** Variation Text */
+            variation_text?: string | null;
         };
         /** WordPressPreviewRequest */
         WordPressPreviewRequest: {
@@ -5501,6 +5529,44 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["SeoContentVariantUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    acknowledge_tag_sync_categories__category_id__seo__lang__content_acknowledge_tag_sync_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                category_id: number;
+                lang: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {

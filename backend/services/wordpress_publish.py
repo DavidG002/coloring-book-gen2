@@ -875,6 +875,9 @@ def preview_wordpress_push(db: Session, category_id: int, lang: str) -> dict:
             "published_at": publish_file_record.run.created_at.isoformat() if publish_file_record else None,
             "seo_error": seo_error,
             "needs_update": needs_update,
+            "image_id": image_record.id if image_record else None,
+            "subject": image_record.subject if image_record else None,
+            "variation_text": image_record.variation_text if image_record else None,
         })
 
     new_count = sum(1 for f in files_info if not f["already_pushed"])

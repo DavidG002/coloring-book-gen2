@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useRef } from "react";
 import { FileText, WandSparkles } from "lucide-react";
-import { getBook, ApiError } from "@/lib/api";
+import { getBook, ApiError, type Book, type CategorySummary } from "@/lib/api";
 import { Panel, PanelSection } from "./SettingsUI";
+import PrepareCategoryPanel from "./PrepareCategoryPanel";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -78,13 +79,25 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
-export default function BookPreviewSection({ bookId, onCategoryChanged }: { bookId: number; onCategoryChanged?: (categoryName: string) => void }) {
+export default function BookPreviewSection({
+  bookId,
+  onCategoryChanged,
+  book,
+  categories,
+  lastCreatedCategoryId,
+}: {
+  bookId: number;
+  onCategoryChanged?: (categoryName: string) => void;
+  book?: Book | null;
+  categories: CategorySummary[];
+  lastCreatedCategoryId?: number;
+}) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [previewAvailable, setPreviewAvailable] = useState(false);
   const [eligibleCategories, setEligibleCategories] = useState<string[]>([]);
-  const [allCategories, setAllCategories] = useState<string[]>([]);
+  
   const [selectedPreviewCategory, setSelectedPreviewCategory] = useState<string>("");
 
   useEffect(() => {
@@ -109,6 +122,53 @@ export default function BookPreviewSection({ bookId, onCategoryChanged }: { book
   const viewerRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const dragStart = useRef({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 });
+
+  const wheelRef = useRef<HTMLDivElement>(null);
+  const wheelDragStart = useRef({ x: 0, scrollLeft: 0 });
+  const wheelDragMoved = useRef(false);
+  const [isDraggingWheel, setIsDraggingWheel] = useState(false);
+
+  function handleWheelMouseDown(e: React.MouseEvent) {
+    if (!wheelRef.current) return;
+    setIsDraggingWheel(true);
+    wheelDragMoved.current = false;
+    wheelDragStart.current = { x: e.pageX, scrollLeft: wheelRef.current.scrollLeft };
+  }
+
+  const WHEEL_DRAG_MULTIPLIER = 2.5;
+
+  function handleWheelMouseMove(e: React.MouseEvent) {
+    if (!isDraggingWheel || !wheelRef.current) return;
+    e.preventDefault();
+    const dx = e.pageX - wheelDragStart.current.x;
+    if (Math.abs(dx) > 3) wheelDragMoved.current = true;
+    wheelRef.current.scrollLeft = wheelDragStart.current.scrollLeft - dx * WHEEL_DRAG_MULTIPLIER;
+  }
+
+  function handleWheelMouseUp() {
+    setIsDraggingWheel(false);
+  }
+
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  function handleWheelScroll() {
+    if (!wheelRef.current || !canvasDisplayWidth) return;
+    const idx = Math.round(wheelRef.current.scrollLeft / canvasDisplayWidth);
+    setActiveIndex(idx);
+  }
+
+  useEffect(() => {
+    const el = wheelRef.current;
+    if (!el) return;
+    function onNativeWheel(e: WheelEvent) {
+      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+        e.preventDefault();
+        el!.scrollLeft += e.deltaY * 2.5;
+      }
+    }
+    el.addEventListener("wheel", onNativeWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onNativeWheel);
+  }, [loading]);
 
   const [previewHistory, setPreviewHistory] = useState<BookPreviewHistoryItem[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
@@ -144,7 +204,6 @@ export default function BookPreviewSection({ bookId, onCategoryChanged }: { book
         if (cancelled) return;
         setPreviewAvailable(availability.available);
         setEligibleCategories(availability.eligible_categories);
-        setAllCategories(availability.all_categories);
         setSampleSubject(availability.sample_subject ?? null);
         setSampleVariation(availability.sample_variation ?? null);
         setSelectedPreviewCategory(availability.sample_category ?? "");
@@ -162,6 +221,15 @@ export default function BookPreviewSection({ bookId, onCategoryChanged }: { book
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookId]);
+
+  useEffect(() => {
+    if (!lastCreatedCategoryId) return;
+    const match = categories.find((c) => c.id === lastCreatedCategoryId);
+    if (!match) return;
+    const timer = setTimeout(() => setSelectedPreviewCategory(match.name), 0);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastCreatedCategoryId]);
 
   useEffect(() => {
     if (!selectedPreviewCategory || !eligibleCategories.includes(selectedPreviewCategory)) {
@@ -260,7 +328,20 @@ export default function BookPreviewSection({ bookId, onCategoryChanged }: { book
     return <p className="text-sm" style={{ color: "var(--pencil)" }}>Loading...</p>;
   }
 
-  
+  const canvasW = book?.canvas_width || lastCanvasWidth || 595;
+  const canvasH = book?.canvas_height || lastCanvasHeight || 842;
+  const subjectRatio = book?.subject_size_ratio ?? 0.5;
+  const CANVAS_PREVIEW_MAX = 380;
+  const canvasRatio = canvasW / canvasH;
+  let canvasDisplayWidth = CANVAS_PREVIEW_MAX;
+  let canvasDisplayHeight = CANVAS_PREVIEW_MAX / canvasRatio;
+  if (canvasDisplayHeight > CANVAS_PREVIEW_MAX) {
+    canvasDisplayHeight = CANVAS_PREVIEW_MAX;
+    canvasDisplayWidth = CANVAS_PREVIEW_MAX * canvasRatio;
+  }
+  const subjectSquarePx = canvasDisplayHeight * subjectRatio;
+  const reversedHistory = [...previewHistory].reverse();
+  const selectedCategoryId = categories.find((c) => c.name === selectedPreviewCategory)?.id;
 
   return (
     <div className="space-y-6">
@@ -280,51 +361,162 @@ export default function BookPreviewSection({ bookId, onCategoryChanged }: { book
         right={
           <span className="inline-flex items-center gap-1.5 text-[10px] font-bold" style={{ color: "var(--teal)" }}>
             <span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--teal)" }} />
-            {previewImageUrl ? "Preview ready" : "Ready to create"}
+            {previewHistory.length > 0 ? `${previewHistory.length} preview${previewHistory.length === 1 ? "" : "s"}` : "Ready to create"}
           </span>
         }
       >
-          {/* flex-wrap + gap so a future multi-preview comparison view can drop
-              additional images in here as siblings, laid out side by side, without
-              restructuring this container */}
           <div
-            className="rounded-lg flex flex-wrap items-center justify-center gap-4"
-            style={{ minHeight: 480, background: "var(--teal-tint)", padding: 20 }}
+            className="rounded-lg"
+            style={{ background: "var(--teal-tint)", padding: "16px 20px 20px" }}
           >
-          {previewState === "loading" ? (
-            <p className="text-sm" style={{ color: "var(--teal-dark)" }}>
-              Generating...
-            </p>
-          ) : previewImageUrl ? (
-            <img
-              src={previewImageUrl}
-              alt="Settings preview"
-              onClick={() => {
-                setLightboxImageUrl(previewImageUrl);
-                setShowFullSize(true);
-              }}
-              className="cursor-pointer hover:opacity-90 transition-opacity rounded"
-              style={{ maxHeight: 260, boxShadow: "0 0 0 1px rgba(0,0,0,0.08)" }}
-            />
-          ) : (
-            <div
-              className="flex flex-col items-center justify-center text-center"
-              style={{ width: "min(76%, 390px)", aspectRatio: "1.42", border: "1px solid var(--teal)", opacity: 0.75, borderRadius: 6 }}
+            <span
+              className="inline-flex items-center gap-1.5 text-[11px] mb-3"
+              style={{ color: "var(--teal-dark)" }}
             >
-              <span className="font-display" style={{ fontSize: 62, lineHeight: 1, color: "var(--teal)" }}>
-                {"\u2726"}
-              </span>
-              <p className="font-display m-0 mt-2.5" style={{ fontSize: 20, color: "var(--teal-dark)" }}>
-                No preview yet
-              </p>
-              <p className="text-[10px] m-0 mt-1 px-4" style={{ color: "var(--teal-dark)", opacity: 0.75 }}>
-                {previewAvailable
-                  ? "Choose a subject below and generate one"
-                  : "Add a subject and a pose variation to any category to enable a preview"}
-              </p>
+              <FileText size={13} />
+              {activeIndex > 0 && reversedHistory[activeIndex - 1]
+                ? `${reversedHistory[activeIndex - 1].subject} — ${reversedHistory[activeIndex - 1].variation_text}`
+                : "Canvas"}
+            </span>
+            <div
+              ref={wheelRef}
+              onMouseDown={handleWheelMouseDown}
+              onMouseMove={handleWheelMouseMove}
+              onMouseUp={handleWheelMouseUp}
+              onMouseLeave={handleWheelMouseUp}
+              onScroll={handleWheelScroll}
+              className="preview-wheel flex items-center"
+              style={{
+                width: canvasDisplayWidth,
+                maxWidth: "100%",
+                margin: "0 auto",
+                minHeight: canvasDisplayHeight,
+                overflowX: "auto",
+                overflowY: "hidden",
+                cursor: isDraggingWheel ? "grabbing" : "grab",
+                scrollbarWidth: "none",
+                msOverflowStyle: "none",
+                scrollSnapType: "x mandatory",
+              }}
+            >
+            <div
+              style={{
+                width: canvasDisplayWidth,
+                height: canvasDisplayHeight,
+                background: "white",
+                border: "1px solid var(--pencil-light)",
+                boxShadow: "0 1px 4px rgba(0,0,0,0.1)",
+                borderRadius: 4,
+                position: "relative",
+                flexShrink: 0,
+                scrollSnapAlign: "center",
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  position: "absolute",
+                  top: "50%",
+                  left: "50%",
+                  width: subjectSquarePx,
+                  height: subjectSquarePx,
+                  transform: "translate(-50%, -50%)",
+                  border: "1.5px dashed var(--teal)",
+                  borderRadius: 4,
+                }}
+              />
             </div>
-          )}
+
+            {reversedHistory.map((p) => (
+              <div
+                key={p.id}
+                style={{
+                  position: "relative",
+                  width: canvasDisplayWidth,
+                  height: canvasDisplayHeight,
+                  flexShrink: 0,
+                  scrollSnapAlign: "center",
+                  overflow: "hidden",
+                }}
+              >
+                <img
+                  src={previewFileUrl(p.id)}
+                  alt={`${p.subject} preview`}
+                  draggable={false}
+                  onClick={() => {
+                    if (wheelDragMoved.current) return;
+                    setLightboxImageUrl(previewFileUrl(p.id));
+                    setShowFullSize(true);
+                  }}
+                  style={{
+                    width: canvasDisplayWidth,
+                    height: canvasDisplayHeight,
+                    objectFit: "contain",
+                    background: "white",
+                    boxShadow: "0 1px 4px rgba(0,0,0,0.1)",
+                    borderRadius: 4,
+                    cursor: "pointer",
+                  }}
+                />
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "50%",
+                    left: "50%",
+                    width: canvasDisplayHeight * p.subject_size_ratio,
+                    height: canvasDisplayHeight * p.subject_size_ratio,
+                    transform: "translate(-50%, -50%)",
+                    border: "1.5px dashed var(--teal)",
+                    borderRadius: 4,
+                    pointerEvents: "none",
+                  }}
+                />
+              </div>
+            ))}
+
+            {previewState === "loading" && (
+              <div
+                className="flex items-center justify-center"
+                style={{
+                  width: canvasDisplayWidth,
+                  height: canvasDisplayHeight,
+                  background: "white",
+                  border: "1px dashed var(--teal)",
+                  borderRadius: 4,
+                  flexShrink: 0,
+                  scrollSnapAlign: "center",
+                }}
+              >
+                <p className="text-xs" style={{ color: "var(--teal-dark)" }}>
+                  Generating...
+                </p>
+              </div>
+            )}
+          </div>
         </div>
+
+          <p className="text-[10px] m-0 mt-2 text-center" style={{ color: "var(--pencil)" }}>
+            {activeIndex === 0 || !reversedHistory[activeIndex - 1] ? (
+              <>Canvas · {canvasW}×{canvasH}px · subject fills {Math.round(subjectRatio * 100)}% of the page</>
+            ) : (
+              (() => {
+                const active = reversedHistory[activeIndex - 1];
+                return (
+                  <>
+                    {active.canvas_width}×{active.canvas_height}px · subject fills{" "}
+                    {Math.round(active.subject_size_ratio * 100)}% · shading {active.palette_colors} · line{" "}
+                    {active.black_clean_threshold} · cleanup {active.white_clean_threshold}
+                  </>
+                );
+              })()
+            )}
+          </p>
+
+          <style jsx>{`
+            .preview-wheel::-webkit-scrollbar {
+              display: none;
+            }
+          `}</style>
 
         <div className="flex items-center justify-between gap-3.5 mt-4">
           <span className="inline-flex items-center gap-1.5 text-[11px]" style={{ color: "var(--pencil)" }}>
@@ -375,9 +567,9 @@ export default function BookPreviewSection({ bookId, onCategoryChanged }: { book
               className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm capitalize"
               style={{ borderColor: "var(--pencil-light)", background: "var(--paper)" }}
             >
-              {allCategories.map((cat) => (
-                <option key={cat} value={cat} className="capitalize">
-                  {cat}
+              {categories.map((c) => (
+                <option key={c.id} value={c.name} className="capitalize">
+                  {c.name}
                 </option>
               ))}
             </select>
@@ -433,6 +625,10 @@ export default function BookPreviewSection({ bookId, onCategoryChanged }: { book
             This category has no subject and variation yet — add at least one of each before previewing.
           </p>
         )}
+
+        <PanelSection label="Prepare a category" defaultOpen>
+          <PrepareCategoryPanel categories={categories} selectedCategoryId={selectedCategoryId} />
+        </PanelSection>
 
         <PanelSection label={`Preview history (${previewHistory.length})`}>
           {loadingHistory ? (

@@ -1,8 +1,10 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import BookSettingsFields from "@/components/BookSettingsFields";
 import BookPreviewSection from "@/components/BookPreviewSection";
+import { getCategories, type CategorySummary } from "@/lib/api";
 
 export default function BookSettingsPage() {
   const router = useRouter();
@@ -10,6 +12,13 @@ export default function BookSettingsPage() {
   const bookId = parseInt(params.id, 10);
   const searchParams = useSearchParams();
   const fromPath = searchParams.get("from");
+  const [categories, setCategories] = useState<CategorySummary[]>([]);
+
+  useEffect(() => {
+    getCategories()
+      .then((all) => setCategories(all.filter((c) => c.book_id === bookId)))
+      .catch(() => {});
+  }, [bookId]);
 
   return (
     <main className="min-h-screen px-8 py-12 max-w-3xl mx-auto">
@@ -28,7 +37,7 @@ export default function BookSettingsPage() {
 
       <div className="space-y-10">
         <BookSettingsFields bookId={bookId} />
-        <BookPreviewSection bookId={bookId} />
+        <BookPreviewSection bookId={bookId} categories={categories} />
       </div>
     </main>
   );

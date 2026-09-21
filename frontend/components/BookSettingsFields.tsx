@@ -197,6 +197,8 @@ function setActiveSection(key: SectionKey) {
     setCanvasHeight(preset.height);
   }
 
+  const isCustomCanvasSize = canvasWidth === 0 || !PAPER_PRESETS.some((p) => p.width === canvasWidth && p.height === canvasHeight);
+
   async function handleSaveName() {
     setError(null);
     const trimmed = name.trim();
@@ -488,44 +490,143 @@ function setActiveSection(key: SectionKey) {
         </PanelSection>
 
         <PanelSection label="Image settings" open={activeSection === "image"} onToggle={() => toggleSection("image")}>
-        <div className="mb-4">
-          <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--ink)" }}>
-            Paper size preset
-          </label>
+        <div className="mb-5 pb-5" style={{ borderBottom: "1px solid var(--pencil-light)" }}>
+          <p className="text-[10px] uppercase font-bold mb-2" style={{ color: "var(--pencil)", letterSpacing: "0.1em" }}>
+            Paper size
+          </p>
           <select
-            value={PAPER_PRESETS.find((p) => p.width === canvasWidth && p.height === canvasHeight)?.label ?? "custom"}
-            onChange={(e) => e.target.value !== "custom" && applyPreset(e.target.value)}
+            value={isCustomCanvasSize ? "custom" : (PAPER_PRESETS.find((p) => p.width === canvasWidth && p.height === canvasHeight)?.label ?? "custom")}
+            onChange={(e) => {
+              if (e.target.value === "custom") {
+                setCanvasWidth(0);
+                setCanvasHeight(0);
+                return;
+              }
+              applyPreset(e.target.value);
+            }}
             className="w-full px-2.5 py-1.5 rounded-md border-[1.5px] outline-none text-xs"
             style={{ borderColor: "var(--pencil-light)", background: "var(--paper)" }}
           >
-            <option value="custom" disabled>
-              {PAPER_PRESETS.some((p) => p.width === canvasWidth && p.height === canvasHeight)
-                ? "Choose a preset..."
-                : "Custom size"}
-            </option>
             {PAPER_PRESETS.map((preset) => (
               <option key={preset.label} value={preset.label}>
                 {preset.label}
               </option>
             ))}
+            <option value="custom">Custom size</option>
           </select>
+
+          {isCustomCanvasSize && (
+            <div className="grid grid-cols-2 gap-4 mt-4">
+              <Field label="Canvas width (px)" hint="A4 default is 595" value={canvasWidth || 0} onChange={setCanvasWidth} min={1} />
+              <Field label="Canvas height (px)" hint="A4 default is 842" value={canvasHeight || 0} onChange={setCanvasHeight} min={1} />
+            </div>
+          )}
         </div>
 
-        <div className="grid grid-cols-2 gap-4 mb-4">
-          <Field label="Canvas width (px)" hint="A4 default is 595" value={canvasWidth} onChange={setCanvasWidth} min={1} />
-          <Field label="Canvas height (px)" hint="A4 default is 842" value={canvasHeight} onChange={setCanvasHeight} min={1} />
-          <Field
-            label="Subject size ratio"
-            hint="Fraction of canvas height"
-            value={subjectSizeRatio}
-            onChange={setSubjectSizeRatio}
+        <div className="mb-5 pb-5" style={{ borderBottom: "1px solid var(--pencil-light)" }}>
+          <div className="flex items-center justify-between mb-1.5">
+            <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--pencil)", letterSpacing: "0.1em" }}>
+              Subject size
+            </p>
+            <span className="text-[11px] font-bold" style={{ color: "var(--tone-lavender)" }}>
+              {Math.round(subjectSizeRatio * 100)}%
+            </span>
+          </div>
+          <input
+            type="range"
+            min={0.2}
+            max={0.9}
             step={0.05}
-            min={0.1}
-            max={1}
+            value={subjectSizeRatio}
+            onChange={(e) => setSubjectSizeRatio(parseFloat(e.target.value))}
+            className="w-full"
+            style={{ accentColor: "var(--tone-lavender)" }}
           />
-          <Field label="White threshold" hint="Cleanup cutoff" value={whiteThreshold} onChange={setWhiteThreshold} min={0} max={255} />
-          <Field label="Black threshold" hint="Cleanup cutoff" value={blackThreshold} onChange={setBlackThreshold} min={0} max={255} />
-          <Field label="Palette colors" hint="Smaller = smaller file" value={paletteColors} onChange={setPaletteColors} min={2} max={256} />
+          <div className="flex items-center justify-between mt-1">
+            <span className="text-[10px]" style={{ color: "var(--pencil)" }}>Small on page</span>
+            <span className="text-[10px]" style={{ color: "var(--pencil)" }}>Fills the page</span>
+          </div>
+        </div>
+
+        <div className="mb-3">
+          <p className="text-[10px] uppercase font-bold mb-2" style={{ color: "var(--pencil)", letterSpacing: "0.1em" }}>
+            Fine-tuning
+          </p>
+
+          <div className="mb-4">
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-medium" style={{ color: "var(--ink)" }}>
+                Shading detail
+              </label>
+              <span className="text-[11px] font-bold" style={{ color: "var(--teal)" }}>
+                {paletteColors}
+              </span>
+            </div>
+            <input
+              type="range"
+              min={2}
+              max={24}
+              step={1}
+              value={paletteColors}
+              onChange={(e) => setPaletteColors(parseInt(e.target.value, 10))}
+              className="w-full"
+              style={{ accentColor: "var(--teal)" }}
+            />
+            <div className="flex items-center justify-between mt-1">
+              <span className="text-[10px]" style={{ color: "var(--pencil)" }}>Flat black & white</span>
+              <span className="text-[10px]" style={{ color: "var(--pencil)" }}>Soft shading</span>
+            </div>
+          </div>
+
+          <div className="mb-4">
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-medium" style={{ color: "var(--ink)" }}>
+                Line boldness
+              </label>
+              <span className="text-[11px] font-bold" style={{ color: "var(--teal)" }}>
+                {blackThreshold}
+              </span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={60}
+              step={1}
+              value={blackThreshold}
+              onChange={(e) => setBlackThreshold(parseInt(e.target.value, 10))}
+              className="w-full"
+              style={{ accentColor: "var(--teal)" }}
+            />
+            <div className="flex items-center justify-between mt-1">
+              <span className="text-[10px]" style={{ color: "var(--pencil)" }}>Preserve soft detail</span>
+              <span className="text-[10px]" style={{ color: "var(--pencil)" }}>Bold solid lines</span>
+            </div>
+          </div>
+
+          <div className="mb-1">
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-medium" style={{ color: "var(--ink)" }}>
+                Background cleanup
+              </label>
+              <span className="text-[11px] font-bold" style={{ color: "var(--teal)" }}>
+                {whiteThreshold}
+              </span>
+            </div>
+            <input
+              type="range"
+              min={200}
+              max={255}
+              step={1}
+              value={whiteThreshold}
+              onChange={(e) => setWhiteThreshold(parseInt(e.target.value, 10))}
+              className="w-full"
+              style={{ accentColor: "var(--teal)" }}
+            />
+            <div className="flex items-center justify-between mt-1">
+              <span className="text-[10px]" style={{ color: "var(--pencil)" }}>Aggressive cleanup</span>
+              <span className="text-[10px]" style={{ color: "var(--pencil)" }}>Preserve light detail</span>
+            </div>
+          </div>
         </div>
 
         <div className="flex items-center gap-3 mt-4">

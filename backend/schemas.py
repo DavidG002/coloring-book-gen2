@@ -534,6 +534,9 @@ class WordPressPreviewFile(BaseModel):
     published_at: Optional[str] = None
     seo_error: Optional[str] = None
     needs_update: bool = False
+    image_id: Optional[int] = None
+    subject: Optional[str] = None
+    variation_text: Optional[str] = None
 
 
 class WordPressPreviewResponse(BaseModel):
