@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { FileText, WandSparkles } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { FileText, WandSparkles, Check, ArrowRight } from "lucide-react";
 import { getBook, ApiError, type Book, type CategorySummary } from "@/lib/api";
 import { Panel, PanelSection } from "./SettingsUI";
 import PrepareCategoryPanel from "./PrepareCategoryPanel";
@@ -21,6 +22,7 @@ interface BookPreviewHistoryItem {
   palette_colors: number;
   prompt_used?: string | null;
   created_at: string;
+  promoted_image_id?: number | null;
 }
 
 async function checkPreviewAvailability(bookId: number) {
@@ -35,8 +37,9 @@ async function checkPreviewAvailability(bookId: number) {
   }>;
 }
 
-async function getCategoryPreviewOptions(bookId: number, categoryName: string) {
-  const res = await fetch(`${API_BASE_URL}/books/${bookId}/preview-options/${encodeURIComponent(categoryName)}`);
+async function getCategoryPreviewOptions(bookId: number, categoryName: string, subjectName?: string) {
+  const query = subjectName ? `?subject_name=${encodeURIComponent(subjectName)}` : "";
+  const res = await fetch(`${API_BASE_URL}/books/${bookId}/preview-options/${encodeURIComponent(categoryName)}${query}`);
   return res.json() as Promise<{ subjects: string[]; variations: string[] }>;
 }
 
@@ -71,6 +74,25 @@ async function getPreviewHistory(bookId: number): Promise<BookPreviewHistoryItem
   return res.json();
 }
 
+async function promotePreviewToImage(
+  bookId: number,
+  previewId: number
+): Promise<{
+  image_id: number;
+  category_id: number;
+  subject: string;
+  variation_text: string;
+  settings_updated: boolean;
+  already_promoted: boolean;
+}> {
+  const res = await fetch(`${API_BASE_URL}/books/${bookId}/previews/${previewId}/promote`, { method: "POST" });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.detail || "Failed to use this preview as the final image");
+  }
+  return res.json();
+}
+
 function previewFileUrl(previewId: number): string {
   return `${API_BASE_URL}/books/previews/${previewId}/file`;
 }
@@ -85,19 +107,33 @@ export default function BookPreviewSection({
   book,
   categories,
   lastCreatedCategoryId,
+  liveImageSettings,
 }: {
   bookId: number;
   onCategoryChanged?: (categoryName: string) => void;
   book?: Book | null;
   categories: CategorySummary[];
   lastCreatedCategoryId?: number;
+  liveImageSettings?: { canvas_width: number; canvas_height: number; subject_size_ratio: number } | null;
 }) {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [promotingPreviewId, setPromotingPreviewId] = useState<number | null>(null);
+  const [promoteError, setPromoteError] = useState<string | null>(null);
+
   const [previewAvailable, setPreviewAvailable] = useState(false);
   const [eligibleCategories, setEligibleCategories] = useState<string[]>([]);
-  
+  // Bumped whenever PrepareCategoryPanel saves a subject/variation edit, so
+  // the subjects/variations effects below re-fetch for the CURRENTLY
+  // selected category immediately — without this, editing the category
+  // you're already looking at (rather than switching away and back) left
+  // the Preview Settings dropdowns showing stale data until a refresh,
+  // since neither effect's own dependencies (category/subject name) had
+  // actually changed.
+  const [categoryOptionsRefreshTrigger, setCategoryOptionsRefreshTrigger] = useState(0);
+
   const [selectedPreviewCategory, setSelectedPreviewCategory] = useState<string>("");
 
   useEffect(() => {
@@ -150,6 +186,15 @@ export default function BookPreviewSection({
   }
 
   const [activeIndex, setActiveIndex] = useState(0);
+
+  useEffect(() => {
+    // The wheel only ever shows the selected category's own previews now
+    // (see reversedHistory below) — reset back to the guide square rather
+    // than leaving activeIndex pointing at whatever position happened to
+    // be scrolled to in the PREVIOUS category's shorter or longer list.
+    setActiveIndex(0);
+    if (wheelRef.current) wheelRef.current.scrollLeft = 0;
+  }, [selectedPreviewCategory]);
 
   function handleWheelScroll() {
     if (!wheelRef.current || !canvasDisplayWidth) return;
@@ -206,7 +251,20 @@ export default function BookPreviewSection({
         setEligibleCategories(availability.eligible_categories);
         setSampleSubject(availability.sample_subject ?? null);
         setSampleVariation(availability.sample_variation ?? null);
-        setSelectedPreviewCategory(availability.sample_category ?? "");
+        // The backend only offers a sample_category when it has an eligible
+        // subject + variation. A category that still exists but currently
+        // has none (e.g. its last subject was just deleted) comes back with
+        // no sample_category, which used to leave selectedPreviewCategory as
+        // "" — matching no <option>, so the dropdown visually showed the
+        // first category while selectedCategoryId silently resolved to
+        // undefined (breaking "Add subject"/"Add variation" with no visible
+        // error). Fall back to the first real category so the selection
+        // always matches something the dropdown actually shows.
+        const fallbackCategory =
+          availability.sample_category && categories.some((c) => c.name === availability.sample_category)
+            ? availability.sample_category
+            : categories[0]?.name ?? "";
+        setSelectedPreviewCategory(fallbackCategory);
         loadPreviewHistory();
       } catch (err) {
         if (!cancelled) setError(err instanceof ApiError ? err.message : "Failed to load preview data");
@@ -222,6 +280,18 @@ export default function BookPreviewSection({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookId]);
 
+  async function refreshCategoryEligibility() {
+    try {
+      const availability = await checkPreviewAvailability(bookId);
+      setPreviewAvailable(availability.available);
+      setEligibleCategories(availability.eligible_categories);
+    } catch {
+      // best-effort — a failed refresh just leaves the previous eligibility
+      // state in place rather than surfacing an error for a background sync.
+    }
+    setCategoryOptionsRefreshTrigger((n) => n + 1);
+  }
+
   useEffect(() => {
     if (!lastCreatedCategoryId) return;
     const match = categories.find((c) => c.id === lastCreatedCategoryId);
@@ -232,22 +302,63 @@ export default function BookPreviewSection({
   }, [lastCreatedCategoryId]);
 
   useEffect(() => {
-    if (!selectedPreviewCategory || !eligibleCategories.includes(selectedPreviewCategory)) {
+    // Just the subjects list + picking which one starts selected. Variations
+    // are fetched separately below, scoped to whichever subject ends up
+    // selected — a category's variations aren't one flat pool, each
+    // subject has its own (see PrepareCategoryPanel's own subject_id
+    // filter), so this can't be resolved until a subject is known.
+    //
+    // Deliberately NOT gated on eligibleCategories here — that flag is
+    // category-WIDE ("does this category have a variation anywhere at
+    // all"), so a freshly added subject with no variation of its own yet
+    // was getting wiped from this list the instant it was added (and
+    // staying wiped even across a refresh), even though the backend
+    // already returns it. Eligibility still correctly gates the actual
+    // "Generate preview" action and its warning banner further down —
+    // just not what shows up in this dropdown.
+    if (!selectedPreviewCategory) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setCategorySubjects([]);
+      setSelectedSubject("");
+      return;
+    }
+    let cancelled = false;
+    getCategoryPreviewOptions(bookId, selectedPreviewCategory)
+      .then((opts) => {
+        if (cancelled) return;
+        setCategorySubjects(opts.subjects);
+        setSelectedSubject(opts.subjects.includes(sampleSubject ?? "") ? (sampleSubject as string) : opts.subjects[0] ?? "");
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookId, selectedPreviewCategory, categoryOptionsRefreshTrigger]);
+
+  useEffect(() => {
+    // Variations for the currently selected subject only — the backend
+    // filters by subject_name now, instead of returning every variation
+    // in the category mixed together (the old, since-removed behavior).
+    // Same reasoning as the subjects effect above: no eligibleCategories
+    // gate here either — a subject with genuinely zero variations yet
+    // just gets an empty list back from the backend on its own, which
+    // already disables this dropdown via categoryVariations.length === 0.
+    if (!selectedPreviewCategory || !selectedSubject) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCategoryVariations([]);
       return;
     }
     let cancelled = false;
     setLoadingOptions(true);
-    getCategoryPreviewOptions(bookId, selectedPreviewCategory)
+    getCategoryPreviewOptions(bookId, selectedPreviewCategory, selectedSubject)
       .then((opts) => {
         if (cancelled) return;
-        setCategorySubjects(opts.subjects);
         setCategoryVariations(opts.variations);
-        setSelectedSubject(opts.subjects.includes(sampleSubject ?? "") ? (sampleSubject as string) : opts.subjects[0] ?? "");
         setSelectedVariation(
-          opts.variations.includes(sampleVariation ?? "") ? (sampleVariation as string) : opts.variations[0] ?? ""
+          selectedSubject === sampleSubject && opts.variations.includes(sampleVariation ?? "")
+            ? (sampleVariation as string)
+            : opts.variations[0] ?? ""
         );
       })
       .catch(() => {})
@@ -258,7 +369,7 @@ export default function BookPreviewSection({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bookId, selectedPreviewCategory, eligibleCategories]);
+  }, [bookId, selectedPreviewCategory, selectedSubject, categoryOptionsRefreshTrigger]);
 
   function handleMouseDown(e: React.MouseEvent) {
     if (!viewerRef.current) return;
@@ -324,23 +435,85 @@ export default function BookPreviewSection({
     handleClosePreview();
   }
 
+  function goToCategoryGenerateStep(categoryId: number) {
+    // These links are meant as a shortcut straight into Generate, but
+    // CategorySequenceShell remembers whichever step was last open for a
+    // category (in localStorage, keyed by category name) and restores it
+    // on load — so if Language was the last step visited, landing here
+    // silently reopened Language instead. Pre-setting that same key to
+    // "generate" before navigating makes this link always land on
+    // Generate, the same way a fresh category does.
+    try {
+      if (selectedPreviewCategory) {
+        window.localStorage.setItem(`category-active-step-${selectedPreviewCategory}`, "generate");
+      }
+    } catch {
+      // localStorage unavailable — CategorySequenceShell's own default
+      // step is already "generate", so this just won't override a
+      // different remembered step as reliably.
+    }
+    router.push(`/categories/${categoryId}`);
+  }
+
+  async function handleUseAsFinalImage(preview: BookPreviewHistoryItem) {
+    setPromoteError(null);
+    setPromotingPreviewId(preview.id);
+    try {
+      const result = await promotePreviewToImage(bookId, preview.id);
+      // One-shot flag so the category's Generate step can point out which
+      // image just landed there — same pattern as the "just finished
+      // wizard" / "highlight newest category" flags elsewhere in this app.
+      try {
+        window.sessionStorage.setItem(
+          `promoted-image-${result.category_id}`,
+          JSON.stringify({ imageId: result.image_id, subject: result.subject })
+        );
+      } catch {
+        // sessionStorage unavailable — the image still landed fine, it just
+        // won't be highlighted when the Generate page opens.
+      }
+      goToCategoryGenerateStep(result.category_id);
+    } catch (err) {
+      setPromoteError(err instanceof Error ? err.message : "Failed to use this image");
+      setPromotingPreviewId(null);
+    }
+  }
+
   if (loading) {
     return <p className="text-sm" style={{ color: "var(--pencil)" }}>Loading...</p>;
   }
 
-  const canvasW = book?.canvas_width || lastCanvasWidth || 595;
-  const canvasH = book?.canvas_height || lastCanvasHeight || 842;
-  const subjectRatio = book?.subject_size_ratio ?? 0.5;
-  const CANVAS_PREVIEW_MAX = 380;
+  const canvasW = liveImageSettings?.canvas_width || book?.canvas_width || lastCanvasWidth || 595;
+  const canvasH = liveImageSettings?.canvas_height || book?.canvas_height || lastCanvasHeight || 842;
+  const subjectRatio = liveImageSettings?.subject_size_ratio ?? book?.subject_size_ratio ?? 0.5;
+  // Two independent caps rather than one square bound: the book detail
+  // page's left column is now wide enough (see the page's widened
+  // contentMaxWidth + PrepareCategoryPanel's own layout) to give a
+  // portrait canvas noticeably more room without it also needing to
+  // grow absurdly tall. Whichever cap binds first still preserves the
+  // canvas's own aspect ratio exactly as before — this only raises the
+  // ceiling, the scale math is unchanged.
+  const CANVAS_PREVIEW_MAX_WIDTH = 600;
+  const CANVAS_PREVIEW_MAX_HEIGHT = 660;
   const canvasRatio = canvasW / canvasH;
-  let canvasDisplayWidth = CANVAS_PREVIEW_MAX;
-  let canvasDisplayHeight = CANVAS_PREVIEW_MAX / canvasRatio;
-  if (canvasDisplayHeight > CANVAS_PREVIEW_MAX) {
-    canvasDisplayHeight = CANVAS_PREVIEW_MAX;
-    canvasDisplayWidth = CANVAS_PREVIEW_MAX * canvasRatio;
+  let canvasDisplayWidth = CANVAS_PREVIEW_MAX_WIDTH;
+  let canvasDisplayHeight = CANVAS_PREVIEW_MAX_WIDTH / canvasRatio;
+  if (canvasDisplayHeight > CANVAS_PREVIEW_MAX_HEIGHT) {
+    canvasDisplayHeight = CANVAS_PREVIEW_MAX_HEIGHT;
+    canvasDisplayWidth = CANVAS_PREVIEW_MAX_HEIGHT * canvasRatio;
   }
-  const subjectSquarePx = canvasDisplayHeight * subjectRatio;
-  const reversedHistory = [...previewHistory].reverse();
+  // Match the new-book wizard's live preview: the subject square is sized
+  // relative to the canvas's shorter side, so 100% fits exactly inside the
+  // canvas regardless of orientation (the wizard bases it on canvas width,
+  // which is the shorter side for every portrait paper preset).
+  const subjectSquareBasisPx = Math.min(canvasDisplayWidth, canvasDisplayHeight);
+  const subjectSquarePx = subjectSquareBasisPx * subjectRatio;
+  // Scoped to whichever category is selected in "Preview settings" — this
+  // used to show every preview across the whole book mixed together,
+  // which made "scroll through this category's results and pick a
+  // winner" meaningless once a book had more than one category.
+  const categoryPreviewHistory = previewHistory.filter((p) => p.category === selectedPreviewCategory);
+  const reversedHistory = [...categoryPreviewHistory].reverse();
   const selectedCategoryId = categories.find((c) => c.name === selectedPreviewCategory)?.id;
 
   return (
@@ -361,7 +534,7 @@ export default function BookPreviewSection({
         right={
           <span className="inline-flex items-center gap-1.5 text-[10px] font-bold" style={{ color: "var(--teal)" }}>
             <span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--teal)" }} />
-            {previewHistory.length > 0 ? `${previewHistory.length} preview${previewHistory.length === 1 ? "" : "s"}` : "Ready to create"}
+            {categoryPreviewHistory.length > 0 ? `${categoryPreviewHistory.length} preview${categoryPreviewHistory.length === 1 ? "" : "s"}` : "Ready to create"}
           </span>
         }
       >
@@ -463,8 +636,8 @@ export default function BookPreviewSection({
                     position: "absolute",
                     top: "50%",
                     left: "50%",
-                    width: canvasDisplayHeight * p.subject_size_ratio,
-                    height: canvasDisplayHeight * p.subject_size_ratio,
+                    width: Math.min(canvasDisplayWidth, canvasDisplayHeight) * p.subject_size_ratio,
+                    height: Math.min(canvasDisplayWidth, canvasDisplayHeight) * p.subject_size_ratio,
                     transform: "translate(-50%, -50%)",
                     border: "1.5px dashed var(--teal)",
                     borderRadius: 4,
@@ -512,6 +685,57 @@ export default function BookPreviewSection({
             )}
           </p>
 
+          {activeIndex > 0 && reversedHistory[activeIndex - 1] && (
+            <div className="flex flex-col items-center gap-1.5 mt-2.5">
+              {reversedHistory[activeIndex - 1].promoted_image_id ? (
+                <button
+                  onClick={() => selectedCategoryId && goToCategoryGenerateStep(selectedCategoryId)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-md text-xs font-bold"
+                  style={{ color: "var(--teal-dark)", border: "1.5px solid var(--teal)", background: "var(--teal-tint)" }}
+                >
+                  <Check size={13} /> Already sent to Generate — open it
+                </button>
+              ) : (
+                <button
+                  onClick={() => handleUseAsFinalImage(reversedHistory[activeIndex - 1])}
+                  disabled={promotingPreviewId !== null}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-md text-xs font-bold text-white disabled:opacity-50"
+                  style={{ background: "var(--teal-dark)" }}
+                >
+                  {promotingPreviewId === reversedHistory[activeIndex - 1].id ? (
+                    "Sending to Generate..."
+                  ) : (
+                    <>
+                      Approve &amp; send to Generate <ArrowRight size={13} />
+                    </>
+                  )}
+                </button>
+              )}
+              {reversedHistory[activeIndex - 1].promoted_image_id ? (
+                <p className="text-[10px] m-0 mt-2" style={{ color: "var(--pencil)" }}>
+                  Already waiting for you under {reversedHistory[activeIndex - 1].subject} in the Generate step.
+                </p>
+              ) : (
+                <button
+                  onClick={() => selectedCategoryId && goToCategoryGenerateStep(selectedCategoryId)}
+                  className="text-[10px] m-0 mt-2 underline"
+                  style={{ color: "var(--pencil)" }}
+                >
+                  Pair and generate more images like this in your sequence.
+                </button>
+              )}
+            </div>
+          )}
+
+          {promoteError && (
+            <div
+              className="mt-2.5 px-3 py-2 rounded-md text-xs text-center"
+              style={{ background: "var(--coral-light)", color: "var(--coral-dark)", border: "1px solid var(--coral)" }}
+            >
+              {promoteError}
+            </div>
+          )}
+
           <style jsx>{`
             .preview-wheel::-webkit-scrollbar {
               display: none;
@@ -522,6 +746,7 @@ export default function BookPreviewSection({
           <span className="inline-flex items-center gap-1.5 text-[11px]" style={{ color: "var(--pencil)" }}>
             <FileText size={15} />
             {selectedSubject && selectedVariation ? `${selectedSubject} — ${selectedVariation}` : "No selection"}
+            <ArrowRight size={12} style={{ color: "var(--pencil)", opacity: 0.5 }} />
           </span>
 
           {previewState === "confirming" ? (
@@ -627,21 +852,26 @@ export default function BookPreviewSection({
         )}
 
         <PanelSection label="Prepare a category" defaultOpen>
-          <PrepareCategoryPanel categories={categories} selectedCategoryId={selectedCategoryId} />
+          <PrepareCategoryPanel
+            categories={categories}
+            selectedCategoryId={selectedCategoryId}
+            onCategoryUpdated={refreshCategoryEligibility}
+            autoOpenSubjectsForCategoryId={lastCreatedCategoryId}
+          />
         </PanelSection>
 
-        <PanelSection label={`Preview history (${previewHistory.length})`}>
+        <PanelSection label={`Preview history (${categoryPreviewHistory.length})`}>
           {loadingHistory ? (
             <p className="text-sm" style={{ color: "var(--pencil)" }}>
               Loading...
             </p>
-          ) : previewHistory.length === 0 ? (
+          ) : categoryPreviewHistory.length === 0 ? (
             <p className="text-sm" style={{ color: "var(--pencil)" }}>
-              No previews generated yet.
+              No previews generated yet for this category.
             </p>
           ) : (
             <div className="space-y-2">
-              {previewHistory.map((p) => (
+              {categoryPreviewHistory.map((p) => (
                 <div key={p.id} className="rounded-md border-[1.5px]" style={{ borderColor: "var(--pencil-light)" }}>
                   <button
                     onClick={() => setExpandedPreviewId(expandedPreviewId === p.id ? null : p.id)}

@@ -20,7 +20,7 @@ router = APIRouter(prefix="/publish", tags=["publish"])
 def plan_publish(payload: PublishRequest, db: Session = Depends(get_db)):
     try:
         image_ids_set = set(payload.image_ids) if payload.image_ids is not None else None
-        result = build_publish_plan(db, payload.category, payload.lang, only_new=payload.only_new, image_ids=image_ids_set)
+        result = build_publish_plan(db, payload.category_id, payload.lang, only_new=payload.only_new, image_ids=image_ids_set)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -37,7 +37,7 @@ def plan_publish(payload: PublishRequest, db: Session = Depends(get_db)):
 def run_publish(payload: PublishRequest, db: Session = Depends(get_db)):
     try:
         image_ids_set = set(payload.image_ids) if payload.image_ids is not None else None
-        result = execute_publish(db, payload.category, payload.lang, only_new=payload.only_new, image_ids=image_ids_set)
+        result = execute_publish(db, payload.category_id, payload.lang, only_new=payload.only_new, image_ids=image_ids_set, batch_id=payload.batch_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

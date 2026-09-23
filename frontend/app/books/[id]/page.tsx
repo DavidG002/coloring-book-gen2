@@ -41,7 +41,12 @@ export default function BookDetailPage() {
   
   const [justFinishedWizard, setJustFinishedWizard] = useState(false);
   const [selectedPreviewCategoryName, setSelectedPreviewCategoryName] = useState("");
-  
+  const [liveImageSettings, setLiveImageSettings] = useState<{
+    canvas_width: number;
+    canvas_height: number;
+    subject_size_ratio: number;
+  } | null>(null);
+
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -142,7 +147,7 @@ export default function BookDetailPage() {
     );
   }
   return (
-    <AppShell active="Books" breadcrumb={book.name}>
+    <AppShell active="Books" breadcrumb={book.name} contentMaxWidth={1560}>
       <div className="flex items-center justify-between mb-6 pb-4" style={{ borderBottom: "1px solid var(--pencil-light)" }}>
         <button
           onClick={() => router.push("/books")}
@@ -209,6 +214,7 @@ export default function BookDetailPage() {
             book={book}
             categories={categories}
             lastCreatedCategoryId={lastCreatedCategoryId}
+            liveImageSettings={liveImageSettings}
           />
 
           <Panel
@@ -219,85 +225,110 @@ export default function BookDetailPage() {
                 <span style={{ fontSize: 14, color: "var(--teal)", fontFamily: "inherit" }}>{categories.length}</span>
               </>
             }
-            right={
+          >
+            <div className="grid grid-cols-3 gap-2">
               <button
                 onClick={() => setShowNewCategoryModal(true)}
-                className="inline-flex items-center gap-1.5 text-xs font-bold"
-                style={{ color: "var(--teal)" }}
+                className="lift-hover flex items-center gap-3 w-full text-left min-w-0"
+                style={{
+                  padding: "11px 10px",
+                  border: "1.5px dashed var(--teal)",
+                  borderRadius: 9,
+                  background: "var(--teal-tint)",
+                }}
               >
-                <Plus size={15} /> Add category
+                <div
+                  className="w-[34px] h-[34px] rounded-lg flex items-center justify-center shrink-0"
+                  style={{ background: "var(--teal)", color: "white" }}
+                >
+                  <Plus size={16} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold m-0 truncate" style={{ color: "var(--teal-dark)" }}>
+                    Add category
+                  </p>
+                  <p className="text-[10px] m-0 mt-1 truncate" style={{ color: "var(--pencil)" }}>
+                    Start a new collection
+                  </p>
+                </div>
               </button>
-            }
-          >
-            {categories.length === 0 ? (
-              <p className="text-sm" style={{ color: "var(--pencil)" }}>
-                No categories yet in this book.
-              </p>
-            ) : (
-              <div className="grid gap-2">
-                {categories.map((cat, i) => {
-                  const tone = TONES[i % TONES.length];
-                  return (
-                    <div
-                      key={cat.id}
-                      className="flex items-center gap-1.5"
-                      style={{
-                        border: `1px solid ${highlightedCategoryId === cat.id ? "var(--teal)" : "var(--pencil-light)"}`,
-                        background: highlightedCategoryId === cat.id ? "var(--teal-tint)" : "var(--paper)",
-                        borderRadius: 9,
-                        transition: "background 0.4s ease, border-color 0.4s ease",
+
+              {categories.map((cat, i) => {
+                const tone = TONES[i % TONES.length];
+                return (
+                  <div
+                    key={cat.id}
+                    className="flex items-center gap-1.5 min-w-0"
+                    style={{
+                      border: `1px solid ${highlightedCategoryId === cat.id ? "var(--teal)" : "var(--pencil-light)"}`,
+                      background: highlightedCategoryId === cat.id ? "var(--teal-tint)" : "var(--paper)",
+                      borderRadius: 9,
+                      transition: "background 0.4s ease, border-color 0.4s ease",
+                    }}
+                  >
+                    <Link
+                      href={`/categories/${cat.id}`}
+                      onClick={() => {
+                        // CategorySequenceShell remembers whichever step was
+                        // last open for a category (localStorage, keyed by
+                        // name) and restores it — so this tile could silently
+                        // reopen Language instead of Generate if that was
+                        // last visited. Force it back to Generate every time
+                        // this tile is the entry point.
+                        try {
+                          window.localStorage.setItem(`category-active-step-${cat.name}`, "generate");
+                        } catch {
+                          // localStorage unavailable — CategorySequenceShell's
+                          // own default step is already "generate".
+                        }
                       }}
+                      className="lift-hover flex items-center gap-3 flex-1 min-w-0"
+                      style={{ padding: "11px 10px" }}
                     >
-                      <Link
-                        href={`/categories/${cat.id}`}
-                        className="lift-hover flex items-center gap-3 flex-1 min-w-0"
-                        style={{ padding: "11px 10px" }}
+                      <div
+                        className="w-[34px] h-[34px] rounded-lg flex items-center justify-center shrink-0"
+                        style={{ background: tone.bg, color: tone.fg }}
                       >
-                        <div
-                          className="w-[34px] h-[34px] rounded-lg flex items-center justify-center shrink-0"
-                          style={{ background: tone.bg, color: tone.fg }}
-                        >
-                          <ImageIcon size={16} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-bold m-0 capitalize" style={{ color: "var(--ink)" }}>
-                            {cat.name}
-                          </p>
-                          <p className="text-[10px] m-0 mt-1" style={{ color: "var(--pencil)" }}>
-                            {cat.subject_count} subjects, {cat.variation_count} variations
-                          </p>
-                        </div>
-                      </Link>
-                      <button
-                        onClick={() => setDeletingCategory(cat)}
-                        className="shrink-0 flex items-center justify-center"
-                        style={{ width: 34, height: 34, marginRight: 8, color: "var(--pencil)" }}
-                        title={`Delete ${cat.name}`}
-                      >
-                        <Trash2 size={15} />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+                        <ImageIcon size={16} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold m-0 capitalize truncate" style={{ color: "var(--ink)" }}>
+                          {cat.name}
+                        </p>
+                        <p className="text-[10px] m-0 mt-1 truncate" style={{ color: "var(--pencil)" }}>
+                          {cat.subject_count} subj, {cat.variation_count} var
+                        </p>
+                      </div>
+                    </Link>
+                    <button
+                      onClick={() => setDeletingCategory(cat)}
+                      className="shrink-0 flex items-center justify-center"
+                      style={{ width: 28, height: 28, marginRight: 6, color: "var(--pencil)" }}
+                      title={`Delete ${cat.name}`}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                );
+              })}
 
-            <button
-              onClick={() => setShowNewCategoryModal(true)}
-              className="w-full flex items-center justify-between mt-2 text-xs font-bold"
-              style={{ color: "var(--teal)", padding: "10px 2px" }}
-            >
-              <span className="inline-flex items-center gap-1.5">
-                <Plus size={14} /> Add another category
-              </span>
-              <ArrowUpRight size={14} />
-            </button>
-
+              {categories.length === 0 && (
+                <p className="text-sm mt-1 col-span-3" style={{ color: "var(--pencil)" }}>
+                  No categories yet in this book.
+                </p>
+              )}
+            </div>
           </Panel>
         </div>
 
         <div className="space-y-6">
-          <BookSettingsFields bookId={bookId} onBookLoaded={setBook} defaultSection={justFinishedWizard ? "knobs" : undefined} selectedCategoryName={selectedPreviewCategoryName} />
+          <BookSettingsFields
+            bookId={bookId}
+            onBookLoaded={setBook}
+            onLiveImageSettingsChange={setLiveImageSettings}
+            defaultSection={justFinishedWizard ? "knobs" : undefined}
+            selectedCategoryName={selectedPreviewCategoryName}
+          />
         </div>
       </div>
 

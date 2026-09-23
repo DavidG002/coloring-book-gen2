@@ -53,7 +53,7 @@ def plan_generation(payload: GenerationPlanRequest, db: Session = Depends(get_db
     category = _get_category_or_404(db, payload.category_id)
     try:
         tasks = build_task_list(
-            db, category.name, payload.subjects,
+            db, category.id, payload.subjects,
             payload.new_variations_per_subject, payload.max_images,
         )
     except ValueError as e:
@@ -71,7 +71,7 @@ def run_generation(payload: GenerationRunRequest, background_tasks: BackgroundTa
     category = _get_category_or_404(db, payload.category_id)
     try:
         tasks = build_task_list(
-            db, category.name, payload.subjects,
+            db, category.id, payload.subjects,
             payload.new_variations_per_subject, payload.max_images,
         )
     except ValueError as e:
@@ -137,7 +137,7 @@ def plan_generation_pairs(payload: GenerationPairsPlanRequest, db: Session = Dep
     category = _get_category_or_404(db, payload.category_id)
     try:
         tasks = build_task_list_from_pairs(
-            db, category.name, [p.model_dump() for p in payload.pairs]
+            db, category.id, [p.model_dump() for p in payload.pairs]
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -154,7 +154,7 @@ def run_generation_pairs(payload: GenerationPairsRunRequest, background_tasks: B
     category = _get_category_or_404(db, payload.category_id)
     try:
         tasks = build_task_list_from_pairs(
-            db, category.name, [p.model_dump() for p in payload.pairs]
+            db, category.id, [p.model_dump() for p in payload.pairs]
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -182,7 +182,7 @@ def run_generation_pairs(payload: GenerationPairsRunRequest, background_tasks: B
 @router.get("/pair-counts/{category_id}", response_model=PairGenerationCounts)
 def pair_counts(category_id: int, db: Session = Depends(get_db)):
     category = _get_category_or_404(db, category_id)
-    return PairGenerationCounts(counts=get_pair_generation_counts(db, category.name))
+    return PairGenerationCounts(counts=get_pair_generation_counts(db, category.id))
 
 
 @router.post("/regenerate-same-slots/{image_id}", response_model=RegenerateSameSlotsResponse)

@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Plus, Trash2, Check, ChevronRight, WandSparkles, ArrowUp, ArrowDown, Minimize2, Maximize2, X } from "lucide-react";
 import SequencePanel from "./SequencePanel";
-import type { Category } from "@/lib/api";
+import { getBook, type Category } from "@/lib/api";
 import CategoryImageStrip from "./CategoryImageStrip";
 import BatchHistoryPanel from "./BatchHistoryPanel";
 import EditListModal from "./EditListModal";
@@ -80,6 +80,7 @@ export default function GenerateSequencePanel({
   publishSetImageIds,
   onReviewPublishSet,
   onWarnedImagesIdentified,
+  liveImageSettings,
 }: {
   categoryName: string;
   category: Category;
@@ -93,11 +94,39 @@ export default function GenerateSequencePanel({
   publishSetImageIds?: number[];
   onReviewPublishSet?: () => void;
   onWarnedImagesIdentified?: (imageIds: number[]) => void;
+  // Live values from the style sidebar's own sliders (paper size, subject
+  // size), tracked as they move — before Save. Takes priority over the
+  // fetched book settings below so the default-canvas placeholder reacts
+  // immediately, the same way the book preview's canvas already does.
+  liveImageSettings?: { canvas_width: number; canvas_height: number; subject_size_ratio: number } | null;
 }) {
   
   const [subjects, setSubjects] = useState<string[]>(category.subjects.map((s) => s.name));
 
+  // useState's initial value only applies on the very first render — if the
+  // parent page's `category` is still loading (or a subject was just added
+  // right before landing here) and updates afterward, this local copy would
+  // otherwise be stuck with whatever it saw at mount, permanently missing
+  // subjects that exist from that point on. Re-sync whenever the category
+  // prop actually changes; handleListSaved/handleRemoveSubject already keep
+  // it in step with their own optimistic updates, so this just catches the
+  // case where the prop changes for a reason other than this component's
+  // own actions.
+  useEffect(() => {
+    setSubjects(category.subjects.map((s) => s.name));
+  }, [category]);
+
   const [selectedSubject, setSelectedSubject] = useState<string>(subjects[0] ?? "");
+
+  // Same reasoning as above: if the previously-selected subject no longer
+  // exists (or nothing was selected yet because the category had no
+  // subjects at mount), fall back to the first available one once subjects
+  // actually arrive, instead of leaving the pairing UI stuck on "".
+  useEffect(() => {
+    if (subjects.length > 0 && !subjects.includes(selectedSubject)) {
+      setSelectedSubject(subjects[0]);
+    }
+  }, [subjects, selectedSubject]);
 
   const selectedSubjectId = category.subjects.find((s) => s.name === selectedSubject)?.id;
   const variations = category.variations
@@ -157,6 +186,34 @@ export default function GenerateSequencePanel({
   useEffect(() => {
     getPairCounts(category.id).then(setPairCounts).catch(() => {});
   }, [category.id]);
+
+  // The book's canvas size + subject-size ratio, so CategoryImageStrip can
+  // show a default blank-canvas placeholder (matching the book preview's
+  // own canvas + dashed subject-size square) even before any page has been
+  // generated for this category — so there's always something to look at
+  // alongside the style knobs sidebar.
+  const [canvasSettings, setCanvasSettings] = useState<{
+    canvas_width: number;
+    canvas_height: number;
+    subject_size_ratio: number;
+  } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getBook(category.book_id)
+      .then((b) => {
+        if (cancelled) return;
+        setCanvasSettings({
+          canvas_width: b.canvas_width,
+          canvas_height: b.canvas_height,
+          subject_size_ratio: b.subject_size_ratio,
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [category.book_id]);
 
   useEffect(() => {
     return () => {
@@ -410,7 +467,17 @@ export default function GenerateSequencePanel({
         </div>
       )}
 
-          <CategoryImageStrip categoryId={category.id} categoryName={categoryName} refreshKey={refreshTrigger} onSelectionChanged={setSelectedImageIds} publishSetImageIds={publishSetImageIds} clearSelectionTrigger={clearSelectionTrigger} />
+          <CategoryImageStrip
+            categoryId={category.id}
+            categoryName={categoryName}
+            refreshKey={refreshTrigger}
+            onSelectionChanged={setSelectedImageIds}
+            publishSetImageIds={publishSetImageIds}
+            clearSelectionTrigger={clearSelectionTrigger}
+            canvasWidth={liveImageSettings?.canvas_width ?? canvasSettings?.canvas_width}
+            canvasHeight={liveImageSettings?.canvas_height ?? canvasSettings?.canvas_height}
+            subjectSizeRatio={liveImageSettings?.subject_size_ratio ?? canvasSettings?.subject_size_ratio}
+          />
          <div className="flex items-center justify-between gap-3 mx-5 mt-5" style={{ padding: "0 2px" }}>
         <span className="text-[11px]" style={{ color: "var(--pencil)" }}>
           <strong style={{ color: "var(--teal-dark)", fontSize: 12 }}>{pairs.length}</strong> pairings selected — {pairs.length} images will be generated

@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 from database import get_db
 from models import Category, Subject, Variation, Book
 from services.book_deletion import get_category_deletion_info, delete_category_cascade
-from services.translate import auto_translate_new_items
+from services.translate import auto_translate_new_items, generate_all_translations_for_category
 from schemas import CategoryCreate, CategoryUpdate, CategoryRead, CategorySummary, CategoryDeletionInfo, CategoryDeletionResult
 router = APIRouter(prefix="/categories", tags=["categories"])
 
@@ -65,7 +65,7 @@ def get_category(category_id: int, db: Session = Depends(get_db)):
     return _to_category_read(category)
 
 @router.post("", response_model=CategoryRead, status_code=201)
-def create_category(payload: CategoryCreate, db: Session = Depends(get_db)):
+def create_category(payload: CategoryCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     existing = (
         db.query(Category)
         .filter(Category.book_id == payload.book_id, Category.name == payload.name)
@@ -85,6 +85,12 @@ def create_category(payload: CategoryCreate, db: Session = Depends(get_db)):
         db.add(Variation(category_id=category.id, text=variation_text, order=i))
     db.commit()
     db.refresh(category)
+    # Fire-and-forget: sets up a Translation (templates + translated name)
+    # for every language on the account, in the background, so the category
+    # is already ready in every language by the time anyone opens its
+    # Language step — no manual "Generate all" click needed. Runs after the
+    # response is sent and never blocks category creation.
+    background_tasks.add_task(generate_all_translations_for_category, category.id)
     return _to_category_read(category)
 
 @router.put("/{category_id}", response_model=CategoryRead)
@@ -104,6 +110,14 @@ def update_category(category_id: int, payload: CategoryUpdate, db: Session = Dep
         desired_names = set(payload.subjects)
         for subj_name, subject in existing_by_name.items():
             if subj_name not in desired_names:
+                # A subject's own pose variations are meaningless once it's
+                # gone — without this they were left behind as orphans
+                # (subject_id pointing at a now-deleted row), which is why
+                # variation_count never went back to 0 after removing a
+                # category's last subject.
+                for variation in list(category.variations):
+                    if variation.subject_id == subject.id:
+                        db.delete(variation)
                 db.delete(subject)
         for subj_name in payload.subjects:
             if subj_name not in existing_by_name:

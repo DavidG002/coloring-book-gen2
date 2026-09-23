@@ -7,9 +7,10 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import Book, BookPreview
 from services.generation import (
-    generate_preview_image, get_sample_task_for_book, 
+    generate_preview_image, get_sample_task_for_book,
     get_eligible_preview_categories, save_preview_to_history,
-    get_category_preview_options,
+    get_category_preview_options, promote_preview_to_image,
+    get_promoted_preview_map,
 )
 from schemas import BookCreate, BookUpdate, BookRead, BookSummary, BookPreviewRequest, BookPreviewAvailability, BookPreviewRead, BookDeletionInfo, BookDeletionResult, WatermarkSettings, WatermarkSettingsUpdate, CategoryPreviewOptions
 from services.book_deletion import get_book_deletion_info, delete_book_cascade
@@ -111,6 +112,13 @@ def list_previews(book_id: int, db: Session = Depends(get_db)):
         .order_by(BookPreview.created_at.desc())
         .all()
     )
+    # promoted_image_id isn't a real column (see get_promoted_preview_map) —
+    # set it dynamically on each ORM object so the frontend can grey out
+    # "Use this as the final image" for one already carried over, instead
+    # of allowing a duplicate.
+    promoted_map = get_promoted_preview_map(db, book_id)
+    for preview in previews:
+        preview.promoted_image_id = promoted_map.get(preview.id)
     return previews
 
 
@@ -123,9 +131,19 @@ def get_preview_file(preview_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Preview file missing on disk")
     return FileResponse(preview.file_path, media_type="image/png")
 
+@router.post("/{book_id}/previews/{preview_id}/promote")
+def promote_preview_route(book_id: int, preview_id: int, db: Session = Depends(get_db)):
+    try:
+        return promote_preview_to_image(db, book_id, preview_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
 @router.get("/{book_id}/preview-options/{category_name}", response_model=CategoryPreviewOptions)
-def get_category_preview_options_route(book_id: int, category_name: str, db: Session = Depends(get_db)):
-    return get_category_preview_options(db, book_id, category_name)
+def get_category_preview_options_route(
+    book_id: int, category_name: str, subject_name: str | None = None, db: Session = Depends(get_db)
+):
+    return get_category_preview_options(db, book_id, category_name, subject_name)
 
 
 

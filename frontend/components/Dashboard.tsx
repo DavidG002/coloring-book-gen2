@@ -15,12 +15,26 @@ const TONES = [
   { bg: "var(--tone-lavender-bg)", fg: "var(--tone-lavender)" },
 ];
 
+type SortKey = "recent" | "oldest" | "name-asc" | "name-desc" | "categories-desc" | "categories-asc";
+
+const SORT_LABELS: Record<SortKey, string> = {
+  recent: "Recently created",
+  oldest: "Oldest first",
+  "name-asc": "Name (A–Z)",
+  "name-desc": "Name (Z–A)",
+  "categories-desc": "Most categories",
+  "categories-asc": "Fewest categories",
+};
+
+const RECENT_BOOKS_LIMIT = 5;
+
 export default function Dashboard() {
   const [books, setBooks] = useState<BookSummary[]>([]);
   const [categories, setCategories] = useState<CategorySummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [query, setQuery] = useState("");
+  const [sortBy, setSortBy] = useState<SortKey>("recent");
   const [todayLabel, setTodayLabel] = useState("");
 
   useEffect(() => {
@@ -52,13 +66,33 @@ export default function Dashboard() {
     return map;
   }, [books]);
 
-  const filteredBooks = useMemo(
-    () =>
-      books
-        .filter((b) => b.name.toLowerCase().includes(query.toLowerCase()))
-        .sort((a, b) => b.id - a.id),
-    [books, query]
-  );
+  const filteredBooks = useMemo(() => {
+    const results = books.filter((b) => b.name.toLowerCase().includes(query.toLowerCase()));
+    const sorted = [...results];
+    switch (sortBy) {
+      case "recent":
+        sorted.sort((a, b) => b.id - a.id);
+        break;
+      case "oldest":
+        sorted.sort((a, b) => a.id - b.id);
+        break;
+      case "name-asc":
+        sorted.sort((a, b) => a.name.localeCompare(b.name));
+        break;
+      case "name-desc":
+        sorted.sort((a, b) => b.name.localeCompare(a.name));
+        break;
+      case "categories-desc":
+        sorted.sort((a, b) => b.category_count - a.category_count);
+        break;
+      case "categories-asc":
+        sorted.sort((a, b) => a.category_count - b.category_count);
+        break;
+    }
+    return sorted;
+  }, [books, query, sortBy]);
+
+  const visibleBooks = filteredBooks.slice(0, RECENT_BOOKS_LIMIT);
 
   const recentCategories = useMemo(
     () => [...categories].sort((a, b) => b.id - a.id).slice(0, 5),
@@ -69,28 +103,19 @@ export default function Dashboard() {
 
   return (
     <AppShell active="Overview" breadcrumb="Overview">
-      <div className="flex items-end justify-between gap-5 mb-9">
-        <div>
-          <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--pencil)", letterSpacing: "0.12em" }}>
-            {todayLabel}
-          </p>
-          <h1
-            className="font-display font-normal m-0 mt-2"
-            style={{ fontSize: "clamp(34px, 4vw, 47px)", letterSpacing: "-0.045em", color: "var(--ink)" }}
-          >
-            Good day, David<span style={{ color: "var(--teal)" }}>.</span>
-          </h1>
-          <p className="text-[13px] m-0 mt-2.5" style={{ color: "var(--pencil)" }}>
-            A quiet place to turn ideas into pages worth keeping.
-          </p>
-        </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="lift-hover inline-flex items-center gap-2 rounded-lg text-white text-xs font-bold shrink-0"
-          style={{ padding: "11px 15px", background: "var(--teal)", boxShadow: "0 5px 14px rgba(91,124,147,0.14)" }}
+      <div className="mb-9">
+        <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--pencil)", letterSpacing: "0.12em" }}>
+          {todayLabel}
+        </p>
+        <h1
+          className="font-display font-normal m-0 mt-2"
+          style={{ fontSize: "clamp(34px, 4vw, 47px)", letterSpacing: "-0.045em", color: "var(--ink)" }}
         >
-          <Plus size={16} /> New book
-        </button>
+          Good day, David<span style={{ color: "var(--teal)" }}>.</span>
+        </h1>
+        <p className="text-[13px] m-0 mt-2.5" style={{ color: "var(--pencil)" }}>
+          A quiet place to turn ideas into pages worth keeping.
+        </p>
       </div>
 
       <div className="grid grid-cols-3 gap-3.5 mb-12">
@@ -102,7 +127,57 @@ export default function Dashboard() {
       <div className="flex items-end justify-between mb-4">
         <div>
           <h2 className="font-display font-normal m-0" style={{ fontSize: 23, letterSpacing: "-0.03em", color: "var(--ink)" }}>
-            Your books
+            Recent categories
+          </h2>
+          <p className="text-[13px] m-0 mt-1" style={{ color: "var(--pencil)" }}>
+            Most recently created across your books.
+          </p>
+        </div>
+        <Link href="/categories" className="text-[11px] font-bold inline-flex items-center gap-1.5" style={{ color: "var(--teal)" }}>
+          View all <ArrowUpRight size={13} />
+        </Link>
+      </div>
+
+      {!loading && (
+        <div
+          className="flex items-stretch mb-12"
+          style={{ borderTop: "1px solid var(--pencil-light)", borderBottom: "1px solid var(--pencil-light)" }}
+        >
+          {recentCategories.map((cat, i) => (
+            <Link
+              key={cat.id}
+              href={`/categories/${cat.id}`}
+              className="flex-1 min-w-0 hover:bg-[var(--row-tone)]"
+              style={{
+                padding: "13px 16px",
+                borderRight: i < recentCategories.length - 1 ? "1px solid var(--pencil-light)" : undefined,
+                transition: "background-color 0.45s ease",
+                "--row-tone": TONES[i % TONES.length].bg,
+              } as React.CSSProperties}
+            >
+              <div className="flex items-center gap-1.5 mb-1">
+                <span className="w-[6px] h-[6px] rounded-full shrink-0" style={{ background: TONES[i % TONES.length].fg }} />
+                <p className="font-display font-normal capitalize m-0 truncate" style={{ fontSize: 13, color: "var(--ink)" }}>
+                  {cat.name}
+                </p>
+              </div>
+              <p className="text-[10px] m-0 truncate" style={{ color: "var(--pencil)" }}>
+                {bookNameById[cat.book_id] ?? "Unknown book"} · {cat.subject_count} subjects
+              </p>
+            </Link>
+          ))}
+          {recentCategories.length === 0 && (
+            <p className="text-sm py-4" style={{ color: "var(--pencil)" }}>
+              No categories yet.
+            </p>
+          )}
+        </div>
+      )}
+
+      <div className="flex items-end justify-between mb-4">
+        <div>
+          <h2 className="font-display font-normal m-0" style={{ fontSize: 23, letterSpacing: "-0.03em", color: "var(--ink)" }}>
+            Recent books
           </h2>
           <p className="text-[13px] m-0 mt-1" style={{ color: "var(--pencil)" }}>
             Pick up where you left off.
@@ -127,12 +202,21 @@ export default function Dashboard() {
             style={{ color: "var(--ink)" }}
           />
         </div>
-        <button
-          className="inline-flex items-center gap-2 rounded-lg text-[11px]"
-          style={{ padding: "9px 11px", border: "1px solid var(--pencil-light)", color: "var(--pencil)", background: "var(--canvas)" }}
-        >
-          Recently created <ChevronDown size={14} />
-        </button>
+        <div className="relative inline-flex items-center shrink-0">
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as SortKey)}
+            className="appearance-none rounded-lg text-[11px] outline-none"
+            style={{ padding: "9px 28px 9px 11px", border: "1px solid var(--pencil-light)", color: "var(--pencil)", background: "var(--canvas)" }}
+          >
+            {(Object.keys(SORT_LABELS) as SortKey[]).map((key) => (
+              <option key={key} value={key}>
+                {SORT_LABELS[key]}
+              </option>
+            ))}
+          </select>
+          <ChevronDown size={14} className="absolute right-2.5 pointer-events-none" style={{ color: "var(--pencil)" }} />
+        </div>
       </div>
 
       {loading ? (
@@ -140,8 +224,29 @@ export default function Dashboard() {
           Loading...
         </p>
       ) : (
-        <div className="grid grid-cols-3 gap-3.5 mb-12">
-          {filteredBooks.map((book, i) => {
+        <div className="grid grid-cols-3 gap-3.5 mb-12" style={{ minHeight: 446, alignContent: "start" }}>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="lift-hover rounded-xl flex items-center gap-3 text-left"
+            style={{ minHeight: 216, padding: 18, border: "1.5px dashed var(--pencil-light)" }}
+          >
+            <div
+              className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+              style={{ background: "var(--teal-tint)", color: "var(--teal)" }}
+            >
+              <Plus size={19} />
+            </div>
+            <div>
+              <p className="font-display font-normal m-0" style={{ fontSize: 14, color: "var(--ink)" }}>
+                Create a new book
+              </p>
+              <p className="text-[11px] m-0 mt-1" style={{ color: "var(--pencil)" }}>
+                Start with a style and a prompt.
+              </p>
+            </div>
+          </button>
+
+          {visibleBooks.map((book, i) => {
             const tone = TONES[i % TONES.length];
             return (
               <Link
@@ -176,27 +281,6 @@ export default function Dashboard() {
             );
           })}
 
-          <button
-            onClick={() => setShowCreate(true)}
-            className="lift-hover rounded-xl flex items-center gap-3 text-left"
-            style={{ minHeight: 216, padding: 18, border: "1.5px dashed var(--pencil-light)" }}
-          >
-            <div
-              className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
-              style={{ background: "var(--teal-tint)", color: "var(--teal)" }}
-            >
-              <Plus size={19} />
-            </div>
-            <div>
-              <p className="font-display font-normal m-0" style={{ fontSize: 14, color: "var(--ink)" }}>
-                Create a new book
-              </p>
-              <p className="text-[11px] m-0 mt-1" style={{ color: "var(--pencil)" }}>
-                Start with a style and a prompt.
-              </p>
-            </div>
-          </button>
-
           {filteredBooks.length === 0 && (
             <p className="text-sm col-span-full" style={{ color: "var(--pencil)" }}>
               No books found. Try a different search.
@@ -205,51 +289,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="flex items-end justify-between mb-4">
-        <div>
-          <h2 className="font-display font-normal m-0" style={{ fontSize: 23, letterSpacing: "-0.03em", color: "var(--ink)" }}>
-            Recent categories
-          </h2>
-          <p className="text-[13px] m-0 mt-1" style={{ color: "var(--pencil)" }}>
-            Most recently created across your books.
-          </p>
-        </div>
-        <Link href="/categories" className="text-[11px] font-bold inline-flex items-center gap-1.5" style={{ color: "var(--teal)" }}>
-          View all <ArrowUpRight size={13} />
-        </Link>
-      </div>
-
-      {!loading && (
-        <div style={{ borderTop: "1px solid var(--pencil-light)" }}>
-          {recentCategories.map((cat, i) => (
-            <Link
-              key={cat.id}
-              href={`/categories/${cat.id}`}
-              className="flex items-center gap-3.5"
-              style={{ padding: "15px 2px", borderBottom: "1px solid var(--pencil-light)" }}
-            >
-              <span className="w-[9px] h-[9px] rounded-full shrink-0" style={{ background: TONES[i % TONES.length].fg }} />
-              <div className="flex-1 min-w-0">
-                <p className="font-display font-normal capitalize m-0" style={{ fontSize: 14, color: "var(--ink)" }}>
-                  {cat.name}
-                </p>
-                <p className="text-[11px] m-0 mt-0.5" style={{ color: "var(--pencil)" }}>
-                  {bookNameById[cat.book_id] ?? "Unknown book"}
-                </p>
-              </div>
-              <span className="text-[11px]" style={{ color: "var(--pencil)" }}>
-                {cat.subject_count} subjects
-              </span>
-              <ArrowUpRight size={15} style={{ color: "var(--pencil)" }} />
-            </Link>
-          ))}
-          {recentCategories.length === 0 && (
-            <p className="text-sm py-4" style={{ color: "var(--pencil)" }}>
-              No categories yet.
-            </p>
-          )}
-        </div>
-      )}
       {showCreate && (
         <NewBookModal
           onClose={() => setShowCreate(false)}

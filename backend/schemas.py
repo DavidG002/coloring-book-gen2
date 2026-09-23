@@ -305,6 +305,11 @@ class BookPreviewRead(BaseModel):
     palette_colors: int
     prompt_used: Optional[str] = None
     created_at: datetime
+    promoted_image_id: Optional[int] = None
+    # Not a real column — set dynamically on the ORM object by the
+    # /previews list endpoint (see get_promoted_preview_map) so the
+    # frontend can grey out "Use this as the final image" for a preview
+    # that's already been carried over, instead of allowing a duplicate.
 
 # ---------- Generation ----------
 
@@ -400,9 +405,20 @@ class PromptDefaultsUpdate(BaseModel):
 
 class PublishRequest(BaseModel):
     category: str
+    # Category names are only unique per-Book, not globally — two
+    # categories in different books can share a name (e.g. "test3"), so
+    # resolving by name alone can silently plan/publish against the WRONG
+    # category. category_id is the real, unambiguous identifier; `category`
+    # is kept for display/back-compat only and is no longer used to look
+    # the category up.
+    category_id: int
     lang: str
     only_new: bool = False
     image_ids: list[int] | None = None
+    # Shared across every per-language call made by one "Build publish sets"
+    # click, so those N per-language PublishRun rows can be reassembled into
+    # a single logical batch later (see PublishRun.batch_id).
+    batch_id: str | None = None
 
 
 class PublishedFileInfo(BaseModel):
@@ -531,12 +547,34 @@ class WordPressPreviewFile(BaseModel):
     already_pushed: bool
     wp_excluded: bool
     publish_run_id: Optional[int] = None
+    publish_batch_id: Optional[str] = None
     published_at: Optional[str] = None
     seo_error: Optional[str] = None
     needs_update: bool = False
     image_id: Optional[int] = None
     subject: Optional[str] = None
     variation_text: Optional[str] = None
+
+
+class WordPressOverviewLanguageLink(BaseModel):
+    lang: str
+    wp_term_id: int
+    term_link: Optional[str] = None
+
+
+class WordPressOverviewCategory(BaseModel):
+    category_id: int
+    category_name: str
+    book_id: int
+    book_name: str
+    languages: list[WordPressOverviewLanguageLink]
+
+
+class WordPressOverviewResponse(BaseModel):
+    connected: bool
+    site_url: Optional[str] = None
+    site_label: Optional[str] = None
+    categories: list[WordPressOverviewCategory] = []
 
 
 class WordPressPreviewResponse(BaseModel):
@@ -734,6 +772,9 @@ class PairGenerationCounts(BaseModel):
 
 class RejectImageRequest(BaseModel):
     reason: str | None = None
+
+class MoveImageCategoryRequest(BaseModel):
+    category_id: int
 
 class RegenerateSameSlotsResponse(BaseModel):
     job_id: int

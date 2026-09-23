@@ -100,21 +100,25 @@ async function regenerateField(categoryId: number, lang: string, subjectName: st
   return data.value as string;
 }
 
-async function planPublishForLang(category: string, lang: string, imageIds?: number[]) {
+async function planPublishForLang(categoryId: number, category: string, lang: string, imageIds?: number[]) {
   const res = await fetch(`${API_BASE_URL}/publish/plan`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ category, lang, only_new: true, image_ids: imageIds !== undefined ? imageIds : null }),
+    // category_id is what the backend actually resolves the category by —
+    // category names aren't unique across books, so two same-named
+    // categories could otherwise silently plan/publish against the wrong
+    // one. `category` is sent along for the response payload only.
+    body: JSON.stringify({ category_id: categoryId, category, lang, only_new: true, image_ids: imageIds !== undefined ? imageIds : null }),
   });
   const data = await res.json();
   if (!res.ok) throw new ApiError(res.status, data.detail);
   return data as { total_files: number; skipped_subjects: string[] };
 }
-async function runPublishForLang(category: string, lang: string, imageIds?: number[]) {
+async function runPublishForLang(categoryId: number, category: string, lang: string, imageIds?: number[], batchId?: string) {
   const res = await fetch(`${API_BASE_URL}/publish/run`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ category, lang, only_new: true, image_ids: imageIds !== undefined ? imageIds : null }),
+    body: JSON.stringify({ category_id: categoryId, category, lang, only_new: true, image_ids: imageIds !== undefined ? imageIds : null, batch_id: batchId ?? null }),
   });
   const data = await res.json();
   if (!res.ok) throw new ApiError(res.status, data.detail);
@@ -129,6 +133,7 @@ export default function PublishSequencePanel({
   onSeoChanged,
   publishSetImageIds,
   onRemoveFromPublishSet,
+  onClearPublishSet,
   warnedImageIds,
   initialLang,
   initialOnlyNeedsReview,
@@ -140,6 +145,11 @@ export default function PublishSequencePanel({
   onSeoChanged?: () => void;
   publishSetImageIds?: number[] | null;
   onRemoveFromPublishSet?: (imageId: number) => void;
+  // Called once the publish set has actually been built into files — the
+  // curated "carry these specific images forward" list has done its job at
+  // that point, so it's cleared rather than sitting around to be manually
+  // emptied before the next batch can be curated.
+  onClearPublishSet?: () => void;
   warnedImageIds?: number[];
   initialLang?: string;
   initialOnlyNeedsReview?: boolean;
@@ -233,7 +243,7 @@ export default function PublishSequencePanel({
       const skipped: Record<string, string[]> = {};
       for (const lang of languages) {
         try {
-          const plan = await planPublishForLang(categoryName, lang, publishSetImageIds ?? undefined);
+          const plan = await planPublishForLang(categoryId, categoryName, lang, publishSetImageIds ?? undefined);
           counts[lang] = plan.total_files;
           skipped[lang] = plan.skipped_subjects ?? [];
         } catch {
@@ -257,15 +267,27 @@ export default function PublishSequencePanel({
   setBuilding(true);
   setError(null);
   let totalPublished = 0;
+  // One id shared by every per-language run this click makes, so the
+  // WordPress push page's archive can show them as the single batch they
+  // really are instead of one batch per language.
+  const batchId = `${categoryId}-${Date.now()}`;
   try {
     for (const lang of languages) {
       if ((langFileCounts[lang] ?? 0) === 0) continue;
-      const result = await runPublishForLang(categoryName, lang, publishSetImageIds ?? undefined);
+      const result = await runPublishForLang(categoryId, categoryName, lang, publishSetImageIds ?? undefined, batchId);
       totalPublished += result.published_count;
     }
     setBuiltSummary(`${totalPublished} file${totalPublished === 1 ? "" : "s"} across ${languages.length} language${languages.length === 1 ? "" : "s"}`);
     setFilesSectionCollapsed(true);
     setShowWordPress(true);
+    if (publishSetImageIds && publishSetImageIds.length > 0) {
+      onClearPublishSet?.();
+    }
+    // A publish run just happened, which is exactly what the parent page's
+    // WordPress-sub-nav-item check keys off of (publish history existing
+    // for this category) — nudge it to re-check now rather than leaving
+    // the "WordPress: <site>" link to only appear after a reload.
+    onSeoChanged?.();
   } catch (err) {
     setError(err instanceof ApiError ? err.message : "Failed to build language sets");
   } finally {

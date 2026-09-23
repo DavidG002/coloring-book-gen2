@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import ThemeToggle from "@/components/ThemeToggle";
 
 
 const inter = Inter({
@@ -34,9 +33,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body className={inter.variable}>
-        <div className="fixed top-4 right-4 z-40">
-          <ThemeToggle />
-        </div>
         {children}
       </body>
     </html>

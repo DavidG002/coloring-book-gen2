@@ -40,11 +40,13 @@ async function uploadWatermarkFile(bookId: number, file: File) {
 export default function BookSettingsFields({
   bookId,
   onBookLoaded,
+  onLiveImageSettingsChange,
   defaultSection,
   selectedCategoryName,
 }: {
   bookId: number;
   onBookLoaded?: (book: Book) => void;
+  onLiveImageSettingsChange?: (settings: { canvas_width: number; canvas_height: number; subject_size_ratio: number }) => void;
   defaultSection?: SectionKey;
   selectedCategoryName?: string;
 }) {
@@ -106,6 +108,7 @@ export default function BookSettingsFields({
 
   const [editingName, setEditingName] = useState(false);
   const [editingProductNoun, setEditingProductNoun] = useState(false);
+  const [editingPrompt, setEditingPrompt] = useState(false);
 
   const [imageSettingsSnapshot, setImageSettingsSnapshot] = useState<{
   canvas_width: number;
@@ -189,6 +192,18 @@ function setActiveSection(key: SectionKey) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookId]);
+
+  // Live-preview the canvas shape and subject-size square as the user drags
+  // the sliders, before they hit Save — the book preview canvas reads this.
+  useEffect(() => {
+    if (loading) return;
+    onLiveImageSettingsChange?.({
+      canvas_width: canvasWidth,
+      canvas_height: canvasHeight,
+      subject_size_ratio: subjectSizeRatio,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canvasWidth, canvasHeight, subjectSizeRatio, loading]);
 
   function applyPreset(label: string) {
     const preset = PAPER_PRESETS.find((p) => p.label === label);
@@ -370,24 +385,58 @@ function setActiveSection(key: SectionKey) {
             <label className="block text-[10px] uppercase font-bold" style={{ color: "var(--pencil)", letterSpacing: "0.08em" }}>
               Creative direction
             </label>
-            <ExpandableTextModal
-              label="Creative direction"
-              value={basePrompt}
-              onChange={setBasePrompt}
-              onSave={handleSavePrompt}
-              saving={savingPrompt}
-              saved={promptSaved}
-              placeholder="Describe the shared style for every category in this book."
-            />
+            <div className="flex items-center gap-3">
+              {!editingPrompt && (
+                <button
+                  onClick={() => setEditingPrompt(true)}
+                  className="text-[10px] font-bold"
+                  style={{ color: "var(--teal)" }}
+                >
+                  Edit
+                </button>
+              )}
+              <ExpandableTextModal
+                label="Creative direction"
+                value={basePrompt}
+                onChange={setBasePrompt}
+                onSave={handleSavePrompt}
+                saving={savingPrompt}
+                saved={promptSaved}
+                placeholder="Describe the shared style for every category in this book."
+              />
+            </div>
           </div>
           <textarea
             spellCheck={true}
             value={basePrompt}
-            readOnly
+            onChange={(e) => setBasePrompt(e.target.value)}
+            disabled={!editingPrompt}
             rows={4}
-            className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-xs leading-relaxed cursor-default"
+            className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-xs leading-relaxed disabled:opacity-60"
             style={{ borderColor: "var(--pencil-light)", background: "var(--paper)" }}
           />
+          {editingPrompt && (
+            <div className="flex items-center gap-3 mt-2">
+              <button
+                onClick={async () => {
+                  await handleSavePrompt();
+                  setEditingPrompt(false);
+                }}
+                disabled={savingPrompt}
+                className="px-3.5 py-1.5 rounded-md text-[11px] font-bold text-white disabled:opacity-60"
+                style={{ background: "var(--teal)" }}
+              >
+                {savingPrompt ? "Saving..." : "Save"}
+              </button>
+              <button
+                onClick={() => setEditingPrompt(false)}
+                className="text-[11px] font-medium"
+                style={{ color: "var(--pencil)" }}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
           </div>
           <PanelSection label="Book basics" open={activeSection === "basics"} onToggle={() => toggleSection("basics")}>
           <div>
@@ -528,23 +577,32 @@ function setActiveSection(key: SectionKey) {
             <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--pencil)", letterSpacing: "0.1em" }}>
               Subject size
             </p>
-            <span className="text-[11px] font-bold" style={{ color: "var(--tone-lavender)" }}>
+            <span className="text-[11px] font-bold" style={{ color: subjectSizeRatio > 0.9 ? "var(--coral)" : "var(--tone-lavender)" }}>
               {Math.round(subjectSizeRatio * 100)}%
             </span>
           </div>
-          <input
-            type="range"
-            min={0.2}
-            max={0.9}
-            step={0.05}
-            value={subjectSizeRatio}
-            onChange={(e) => setSubjectSizeRatio(parseFloat(e.target.value))}
-            className="w-full"
-            style={{ accentColor: "var(--tone-lavender)" }}
-          />
+          <div className="relative">
+            <input
+              type="range"
+              min={0.2}
+              max={1.2}
+              step={0.05}
+              value={subjectSizeRatio}
+              onChange={(e) => setSubjectSizeRatio(parseFloat(e.target.value))}
+              className="w-full"
+              style={{ accentColor: subjectSizeRatio > 0.9 ? "var(--coral)" : "var(--tone-lavender)" }}
+            />
+            <span
+              className="absolute pointer-events-none"
+              style={{ left: "70%", top: 2, bottom: 2, width: 1, background: "var(--pencil-light)" }}
+              title="100% — fills the canvas exactly"
+            />
+          </div>
           <div className="flex items-center justify-between mt-1">
             <span className="text-[10px]" style={{ color: "var(--pencil)" }}>Small on page</span>
-            <span className="text-[10px]" style={{ color: "var(--pencil)" }}>Fills the page</span>
+            <span className="text-[10px]" style={{ color: subjectSizeRatio > 0.9 ? "var(--coral)" : "var(--pencil)" }}>
+              {subjectSizeRatio > 0.9 ? "Bleeds past the edges" : "Fills the page"}
+            </span>
           </div>
         </div>
 

@@ -4,8 +4,8 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from database import get_db
-from schemas import ReviewJob, ReviewImage, CategoryImageStatus, RejectImageRequest
-from services.review import get_images_for_job, get_jobs_for_category, reject_image, restore_image, get_current_file_path, get_images_for_category
+from schemas import ReviewJob, ReviewImage, CategoryImageStatus, RejectImageRequest, MoveImageCategoryRequest
+from services.review import get_images_for_job, get_jobs_for_category, reject_image, restore_image, get_current_file_path, get_images_for_category, move_image_to_category
 
 router = APIRouter(prefix="/review", tags=["review"])
 
@@ -106,3 +106,17 @@ def restore(image_id: int, db: Session = Depends(get_db)):
 @router.get("/images/{category_id}", response_model=list[CategoryImageStatus])
 def list_category_images(category_id: int, db: Session = Depends(get_db)):
     return get_images_for_category(db, category_id)
+
+
+@router.post("/image/{image_id}/move-category")
+def move_category(image_id: int, payload: MoveImageCategoryRequest, db: Session = Depends(get_db)):
+    """Recovery endpoint: reassigns an image (file + DB row) to a
+    different category. Exists for images that were mis-filed by the
+    since-fixed name-collision bug in generation (two categories sharing
+    a name in different books) — not exposed in the UI, called directly
+    when fixing up a specific image."""
+    try:
+        image = move_image_to_category(db, image_id, payload.category_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return {"id": image.id, "category_id": image.category_id, "category": image.category, "file_path": image.file_path}

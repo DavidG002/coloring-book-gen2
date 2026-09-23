@@ -8,12 +8,13 @@ from models import GenerationImage, Category, WordPressSubjectTerm
 from services.wordpress_publish import (
     push_batch_to_wordpress, preview_wordpress_push, sync_pushed_item_to_wordpress,
     verify_and_clean_stale_pushes, _get_wp_config, list_wordpress_categories, map_book_to_term,
-    rename_subject_term, TAXONOMY_REST_BASE,
+    rename_subject_term, TAXONOMY_REST_BASE, get_publish_overview,
 )
 from models import WordPressBookTerm
 from schemas import (
     WordPressPushRequest, WordPressPushResponse, WordPressPreviewRequest, WordPressPreviewResponse,
     WordPressSyncRequest, WordPressSyncResponse, WordPressVerifyRequest, WordPressVerifyResponse,
+    WordPressOverviewResponse,
 )
 
 
@@ -22,6 +23,14 @@ class ExcludeRequest(BaseModel):
     excluded: bool
 
 router = APIRouter(prefix="/wordpress", tags=["wordpress"])
+
+
+@router.get("/overview", response_model=WordPressOverviewResponse)
+def get_publish_overview_route(db: Session = Depends(get_db)):
+    """Every category with a real, live WordPress publishing page, grouped
+    with its per-language links — the read-only data behind the Print &
+    Publish page's connections section."""
+    return WordPressOverviewResponse(**get_publish_overview(db))
 
 
 @router.get("/categories")

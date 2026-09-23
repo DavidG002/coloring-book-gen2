@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from services.openai_client import get_openai_client
 
 
-from models import Category, Subject, Variation, Book, BookPreview
+from models import Category, Subject, Variation, Book, BookPreview, GenerationJob, GenerationImage
 
 
 
@@ -18,14 +18,19 @@ COST_PER_IMAGE_USD = 0.007  # matches README's low-quality tier estimate
 
 def build_task_list(
     db: Session,
-    category_name: str,
+    category_id: int,
     subject_names: list[str] | None,
     new_variations_per_subject: int,
     max_images: int | None,
 ) -> list[dict]:
-    category = db.query(Category).filter(Category.name == category_name).first()
+    # Looked up by id, not name — the caller (routers/generation.py) already
+    # resolved and validated the exact intended Category by id; re-resolving
+    # by name here would silently pick a DIFFERENT category when two share
+    # the same name in different books (names are only unique per-Book),
+    # writing the generated images to the wrong category/book entirely.
+    category = db.query(Category).filter(Category.id == category_id).first()
     if not category:
-        raise ValueError(f"Category '{category_name}' not found")
+        raise ValueError(f"Category {category_id} not found")
 
     all_subjects = category.subjects
     if subject_names:
@@ -34,7 +39,7 @@ def build_task_list(
 
     variations = sorted(category.variations, key=lambda v: v.order)
     if not variations:
-        raise ValueError(f"Category '{category_name}' has no variations defined")
+        raise ValueError(f"Category '{category.name}' has no variations defined")
 
     tasks = []
     for subject in all_subjects:
@@ -43,7 +48,7 @@ def build_task_list(
             variation_num = existing_max + i + 1
             modifier = variations[(variation_num - 1) % len(variations)]
             tasks.append({
-                "category": category_name,
+                "category": category.name,
                 "category_id": category.id,
                 "subject": subject.name,
                 "variation_number": variation_num,
@@ -73,10 +78,13 @@ def _get_existing_max_variation(category_id: int, subject_name: str) -> int:
     return max(numbers) if numbers else 0
 
 
-def build_task_list_from_pairs(db: Session, category_name: str, pairs: list[dict]) -> list[dict]:
-    category = db.query(Category).filter(Category.name == category_name).first()
+def build_task_list_from_pairs(db: Session, category_id: int, pairs: list[dict]) -> list[dict]:
+    # See build_task_list's comment above — looked up by id for the same
+    # reason: a name-based re-lookup can silently resolve to a different,
+    # same-named category in another book.
+    category = db.query(Category).filter(Category.id == category_id).first()
     if not category:
-        raise ValueError(f"Category '{category_name}' not found")
+        raise ValueError(f"Category {category_id} not found")
 
     from services.prompt_knobs import get_book_knobs
 
@@ -89,7 +97,7 @@ def build_task_list_from_pairs(db: Session, category_name: str, pairs: list[dict
         counters[subject_name] += 1
 
         tasks.append({
-            "category": category_name,
+            "category": category.name,
             "category_id": category.id,
             "subject": subject_name,
             "variation_number": counters[subject_name],
@@ -100,15 +108,22 @@ def build_task_list_from_pairs(db: Session, category_name: str, pairs: list[dict
     return tasks
 
 
-def get_pair_generation_counts(db: Session, category_name: str) -> dict[str, int]:
+def get_pair_generation_counts(db: Session, category_id: int) -> dict[str, int]:
     """Returns {'Car|jumping over a puddle': 2, ...} — how many times each
     exact subject+variation pair has actually been generated, queried
     from real GenerationImage rows (not a filename glob), so it reflects
-    reality even across multiple separate batches."""
+    reality even across multiple separate batches.
+
+    Filtered by category_id, not the category name string — category
+    names are only unique per-Book, not globally (e.g. two different
+    books can each have their own "test3" category), so matching by name
+    alone would count another category's images as this one's, exactly
+    like the cross-Book mixing bug already called out in
+    services/review.get_images_for_category."""
     from models import GenerationImage
     rows = (
         db.query(GenerationImage.subject, GenerationImage.variation_text)
-        .filter(GenerationImage.category == category_name)
+        .filter(GenerationImage.category_id == category_id)
         .all()
     )
     counts: dict[str, int] = {}
@@ -116,6 +131,165 @@ def get_pair_generation_counts(db: Session, category_name: str) -> dict[str, int
         key = f"{subject}|{variation_text}"
         counts[key] = counts.get(key, 0) + 1
     return counts
+
+
+def _promoted_preview_marker(preview_id: int) -> str:
+    """The exact params_json a promotion job is tagged with — used both to
+    write it and, via a LIKE-prefix scan, to find it again. json.dumps'
+    default separators are stable across calls, so this string is a
+    reliable, unique-enough marker without needing a real FK/column."""
+    import json
+    return json.dumps({"promoted_from_preview_id": preview_id})
+
+
+def get_promoted_preview_map(db: Session, book_id: int) -> dict[int, int]:
+    """{preview_id: generation_image_id} for every preview in this book
+    that's already been carried over to a category's real images —
+    lets the preview UI grey out "Use this as the final image" for one
+    that's already been promoted, instead of allowing a duplicate."""
+    import json
+
+    preview_ids = [pid for (pid,) in db.query(BookPreview.id).filter(BookPreview.book_id == book_id).all()]
+    if not preview_ids:
+        return {}
+
+    jobs = (
+        db.query(GenerationJob)
+        .filter(GenerationJob.params_json.like('{"promoted_from_preview_id":%'))
+        .all()
+    )
+    result: dict[int, int] = {}
+    for job in jobs:
+        try:
+            preview_id = json.loads(job.params_json).get("promoted_from_preview_id")
+        except (ValueError, AttributeError):
+            continue
+        if preview_id in preview_ids and job.images:
+            result[preview_id] = job.images[0].id
+    return result
+
+
+def promote_preview_to_image(db: Session, book_id: int, preview_id: int) -> dict:
+    """Turns an already-generated settings preview into a real, permanent
+    generated image for its category, instead of running a second
+    (billed, and not guaranteed identical) generation. This is safe
+    because a preview already ran the exact same pipeline as a real
+    generation (see generate_preview_image's docstring) — it's a genuine
+    generated image that just wasn't filed under the category yet.
+
+    If the preview was made with different settings than the book
+    currently has saved (e.g. the user is promoting an older preview from
+    before they kept tweaking the sliders), the book's settings are
+    updated to match it — the winning preview becomes the new baseline
+    for every future generation too, not just this one image.
+
+    Idempotent: promoting the same preview twice (double-click, a stale
+    page reloaded and retried, etc.) returns the SAME image instead of
+    creating a duplicate file + GenerationImage row."""
+    preview = db.query(BookPreview).filter(BookPreview.id == preview_id, BookPreview.book_id == book_id).first()
+    if not preview:
+        raise ValueError(f"Preview {preview_id} not found for book {book_id}")
+
+    existing_job = (
+        db.query(GenerationJob)
+        .filter(GenerationJob.params_json == _promoted_preview_marker(preview.id))
+        .first()
+    )
+    if existing_job and existing_job.images:
+        existing_image = existing_job.images[0]
+        return {
+            "image_id": existing_image.id,
+            "category_id": existing_image.category_id,
+            "subject": existing_image.subject,
+            "variation_text": existing_image.variation_text,
+            "settings_updated": False,
+            "already_promoted": True,
+        }
+
+    book = db.query(Book).filter(Book.id == book_id).first()
+    if not book:
+        raise ValueError(f"Book {book_id} not found")
+
+    category = next((c for c in book.categories if c.name == preview.category), None)
+    if not category:
+        raise ValueError(f"Category '{preview.category}' no longer exists in this book")
+
+    subject = next((s for s in category.subjects if s.name == preview.subject), None)
+    if not subject:
+        raise ValueError(f"Subject '{preview.subject}' no longer exists in category '{preview.category}'")
+
+    if not os.path.exists(preview.file_path):
+        raise ValueError("The preview's image file is missing on disk")
+
+    # Same numbering scheme real generation uses (_get_existing_max_variation
+    # scans the category's own output files), so this slots in as if it had
+    # been generated through the normal flow.
+    variation_number = _get_existing_max_variation(category.id, subject.name) + 1
+    category_dir = os.path.join(OUTPUT_DIR, str(category.id))
+    os.makedirs(category_dir, exist_ok=True)
+    filename = f"{subject.name.lower().replace(' ', '_')}_v{variation_number:03d}.png"
+    output_path = os.path.join(category_dir, filename)
+
+    import shutil
+    shutil.copyfile(preview.file_path, output_path)
+
+    job = GenerationJob(
+        category=category.name,
+        params_json=_promoted_preview_marker(preview.id),
+        status="done",
+        total_images=1,
+        completed_images=1,
+    )
+    db.add(job)
+    db.flush()
+
+    image = GenerationImage(
+        job_id=job.id,
+        category=category.name,
+        category_id=category.id,
+        subject=subject.name,
+        variation_number=variation_number,
+        variation_text=preview.variation_text,
+        file_path=output_path,
+        prompt_used=preview.prompt_used,
+        compiled_prompt_json=preview.compiled_prompt_json,
+    )
+    db.add(image)
+
+    settings_updated = False
+    preview_settings = {
+        "canvas_width": preview.canvas_width,
+        "canvas_height": preview.canvas_height,
+        "subject_size_ratio": preview.subject_size_ratio,
+        "white_clean_threshold": preview.white_clean_threshold,
+        "black_clean_threshold": preview.black_clean_threshold,
+        "palette_colors": preview.palette_colors,
+    }
+    for field, value in preview_settings.items():
+        if getattr(book, field) != value:
+            setattr(book, field, value)
+            settings_updated = True
+
+    db.commit()
+    db.refresh(image)
+
+    # Best-effort, same as the real generation path (job_runner.py) — SEO
+    # auto-drafting is a convenience, never worth failing an already-saved
+    # image over.
+    try:
+        from services.content_variants import auto_generate_seo_for_all_languages
+        auto_generate_seo_for_all_languages(db, category.id, subject.name, preview.variation_text)
+    except Exception:
+        pass
+
+    return {
+        "image_id": image.id,
+        "category_id": category.id,
+        "subject": subject.name,
+        "variation_text": preview.variation_text,
+        "settings_updated": settings_updated,
+        "already_promoted": False,
+    }
 
 
 def get_sample_task_for_book(
@@ -164,18 +338,39 @@ def get_sample_task_for_book(
     return None
 
 
-def get_category_preview_options(db: Session, book_id: int, category_name: str) -> dict:
-    """Every subject and variation available in this category, for the
-    preview UI's dropdowns."""
+def get_category_preview_options(db: Session, book_id: int, category_name: str, subject_name: str | None = None) -> dict:
+    """Every subject in this category, and the variations available for the
+    preview UI's dropdowns. Variations are scoped to `subject_name` when
+    given — matching how variations are actually stored per-subject
+    (PrepareCategoryPanel's own list does the same subject_id filter) —
+    rather than the old flat, category-wide list that mixed every
+    subject's variations together."""
     book = db.query(Book).filter(Book.id == book_id).first()
     if not book:
         return {"subjects": [], "variations": []}
     category = next((c for c in book.categories if c.name == category_name), None)
     if not category:
         return {"subjects": [], "variations": []}
+
+    subject = None
+    if subject_name is not None:
+        subject = next((s for s in category.subjects if s.name == subject_name), None)
+
+    if subject is not None:
+        relevant_variations = [v for v in category.variations if v.subject_id == subject.id]
+    elif subject_name is not None:
+        # A subject name was given but doesn't exist (e.g. stale selection) —
+        # there's nothing valid to scope to, so show no variations rather
+        # than falling back to the old mixed-together list.
+        relevant_variations = []
+    else:
+        # No subject specified at all — keep the original flat behavior for
+        # any other caller that still wants the category-wide list.
+        relevant_variations = list(category.variations)
+
     return {
         "subjects": [s.name for s in category.subjects],
-        "variations": [v.text for v in sorted(category.variations, key=lambda v: v.order)],
+        "variations": [v.text for v in sorted(relevant_variations, key=lambda v: v.order)],
     }
 
 def get_eligible_preview_categories(db: Session, book_id: int) -> list[str]:
@@ -236,7 +431,14 @@ def _process_raw_image(image_bytes: bytes, settings: dict):
 
     canvas_width = settings["canvas_width"]
     canvas_height = settings["canvas_height"]
-    max_subject_size = int(canvas_height * settings["subject_size_ratio"])
+    # Base the subject's max size on the canvas's SHORTER side, not always
+    # canvas_height. On a portrait canvas (the normal case), canvas_width is
+    # shorter, so basing this on height let the resized subject grow wider
+    # than the page at ratios above ~0.7 — it got center-cropped when pasted
+    # (see the negative-offset paste below). Using the shorter side means
+    # subject_size_ratio == 1.0 always fits exactly inside the canvas, on
+    # any orientation.
+    max_subject_size = int(min(canvas_width, canvas_height) * settings["subject_size_ratio"])
     image.thumbnail((max_subject_size, max_subject_size), Image.LANCZOS)
 
     gray = image.convert("L")

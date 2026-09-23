@@ -103,7 +103,15 @@ def reject_image(db: Session, image_id: int, reason: str | None = None) -> Gener
     if os.path.exists(image.file_path):
         shutil.move(image.file_path, new_path)
     image.status = "rejected"
-    image.reject_reason = reason
+    # A missing/None reason means "reject again, same as before" (the
+    # frontend skips re-prompting once an image already carries a reason
+    # from an earlier reject cycle) — so only overwrite reject_reason when
+    # a real one is supplied. Restoring an image deliberately leaves this
+    # field untouched, precisely so it survives a reject -> restore ->
+    # reject-again cycle without asking the user to relabel the same
+    # picture, and without silently losing the original signal.
+    if reason:
+        image.reject_reason = reason
     db.commit()
     db.refresh(image)
     return image
@@ -123,6 +131,41 @@ def restore_image(db: Session, image_id: int) -> GenerationImage:
         shutil.move(rejected_path, image.file_path)
 
     image.status = "approved"
+    db.commit()
+    db.refresh(image)
+    return image
+
+
+def move_image_to_category(db: Session, image_id: int, new_category_id: int) -> GenerationImage:
+    """Recovery tool for images filed under the wrong category — e.g. by
+    the since-fixed name-collision bug in build_task_list /
+    build_task_list_from_pairs, where two categories sharing a name (in
+    different books) could resolve to the wrong one at generation time.
+    Moves both the real file on disk and the DB row's category linkage
+    to the intended category. Only handles an "approved" image — a
+    rejected one lives under a different (name-based) quarantine path,
+    so restore it first."""
+    from models import Category
+
+    image = db.query(GenerationImage).filter(GenerationImage.id == image_id).first()
+    if not image:
+        raise ValueError(f"Generation image {image_id} not found")
+    if image.status == "rejected":
+        raise ValueError("Restore this image before moving it to another category")
+    new_category = db.query(Category).filter(Category.id == new_category_id).first()
+    if not new_category:
+        raise ValueError(f"Category {new_category_id} not found")
+
+    old_path = image.file_path
+    new_dir = os.path.join(OUTPUT_DIR, str(new_category_id))
+    os.makedirs(new_dir, exist_ok=True)
+    new_path = os.path.join(new_dir, os.path.basename(old_path))
+    if os.path.exists(old_path) and os.path.abspath(old_path) != os.path.abspath(new_path):
+        shutil.move(old_path, new_path)
+
+    image.category_id = new_category_id
+    image.category = new_category.name
+    image.file_path = new_path
     db.commit()
     db.refresh(image)
     return image

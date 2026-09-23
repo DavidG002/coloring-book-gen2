@@ -40,7 +40,7 @@ def _variation_text_for_number(variations_sorted: list, variation_number: int) -
     return variations_sorted[idx].text
 
 
-def _already_published_source_paths(db: Session, category_name: str, lang: str) -> set[str]:
+def _already_published_source_paths(db: Session, category_id: int, lang: str) -> set[str]:
     """Every source_path that has appeared in any past publish run for this
     category+language, across all runs — used to mark files as new vs repeat.
     NOTE: this is genuinely per-FILE, not per-pairing — see
@@ -48,11 +48,17 @@ def _already_published_source_paths(db: Session, category_name: str, lang: str) 
     Retained as-is since is_new (per-file) still has a real, honest
     meaning: "has THIS EXACT picture been copied into a publish run
     before" — useful for avoiding literal re-copies of the same file,
-    separate from the pairing-level duplicate-content question."""
+    separate from the pairing-level duplicate-content question.
+
+    Filtered by category_id, not the category name string — see
+    build_publish_plan's comment for why a name match is unsafe. Older
+    PublishRun rows predating the category_id column will have it as
+    NULL and won't match here, same tradeoff already accepted elsewhere
+    (e.g. GenerationImage.category_id)."""
     rows = (
         db.query(PublishedFile.source_path)
         .join(PublishRun, PublishedFile.run_id == PublishRun.id)
-        .filter(PublishRun.category == category_name, PublishRun.lang == lang)
+        .filter(PublishRun.category_id == category_id, PublishRun.lang == lang)
         .all()
     )
     return {r[0] for r in rows}
@@ -106,10 +112,16 @@ def is_exact_file_published_in_all_langs(db: Session, source_path: str, category
     return True
 
 
-def build_publish_plan(db: Session, category_name: str, lang: str, only_new: bool = False, image_ids: set[int] | None = None) -> dict:
-    category = db.query(Category).filter(Category.name == category_name).first()
+def build_publish_plan(db: Session, category_id: int, lang: str, only_new: bool = False, image_ids: set[int] | None = None) -> dict:
+    # Looked up by id, not name — category names are only unique per-Book,
+    # not globally (two categories in different books can share a name),
+    # so a name-based lookup can silently resolve to the WRONG category —
+    # e.g. one with no translations at all — and this whole plan would
+    # then be built (or fail) against the wrong category's data.
+    category = db.query(Category).filter(Category.id == category_id).first()
     if not category:
-        raise ValueError(f"Category '{category_name}' not found")
+        raise ValueError(f"Category {category_id} not found")
+    category_name = category.name
 
     translation = (
         db.query(Translation)
@@ -128,7 +140,7 @@ def build_publish_plan(db: Session, category_name: str, lang: str, only_new: boo
         variation_map[item.variation.text] = item.translated_text
 
     variations_sorted = sorted(category.variations, key=lambda v: v.order)
-    already_published = _already_published_source_paths(db, category_name, lang)
+    already_published = _already_published_source_paths(db, category.id, lang)
 
     files_info = []
     skipped_subjects = []
@@ -209,12 +221,16 @@ def build_publish_plan(db: Session, category_name: str, lang: str, only_new: boo
     }
 
 
-def execute_publish(db: Session, category_name: str, lang: str, only_new: bool = False, image_ids: set[int] | None = None) -> dict:
-    category = db.query(Category).filter(Category.name == category_name).first()
+def execute_publish(db: Session, category_id: int, lang: str, only_new: bool = False, image_ids: set[int] | None = None, batch_id: str | None = None) -> dict:
+    # See build_publish_plan's comment — looked up by id for the same
+    # reason: a name-based re-lookup can silently resolve to a different,
+    # same-named category in another book.
+    category = db.query(Category).filter(Category.id == category_id).first()
     if not category:
-        raise ValueError(f"Category '{category_name}' not found")
+        raise ValueError(f"Category {category_id} not found")
+    category_name = category.name
 
-    plan = build_publish_plan(db, category_name, lang, only_new=only_new, image_ids=image_ids)
+    plan = build_publish_plan(db, category_id, lang, only_new=only_new, image_ids=image_ids)
     files_info = plan["files"]
 
     publish_category_dir = os.path.join(PUBLISH_DIR, lang, category_name)
@@ -275,12 +291,14 @@ def execute_publish(db: Session, category_name: str, lang: str, only_new: bool =
     # and the UI can show a real history rather than a one-off return value.
     run = PublishRun(
         category=category_name,
+        category_id=category.id,
         lang=lang,
         published_count=len(files_info),
         new_count=plan["new_count"],
         already_published_count=plan["already_published_count"],
         skipped_subjects_json=json.dumps(plan["skipped_subjects"]),
         manifest_path=manifest_path,
+        batch_id=batch_id,
     )
     db.add(run)
     db.flush()

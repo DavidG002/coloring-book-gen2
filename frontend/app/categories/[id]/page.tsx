@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { getCategory, getTranslations, ApiError, type Category } from "@/lib/api";
 import CategorySequenceShell, { type StepId } from "@/components/CategorySequenceShell";
 import LanguageSequencePanel from "@/components/LanguageSequencePanel";
@@ -13,6 +13,21 @@ export default function CategoryDetailPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const categoryId = parseInt(params.id, 10);
+  const searchParams = useSearchParams();
+  const stepParam = searchParams.get("step");
+  const initialStep: StepId | undefined =
+    stepParam === "generate" || stepParam === "language" || stepParam === "publish" || stepParam === "wordpress"
+      ? stepParam
+      : undefined;
+  // The raw query string (not just the parsed step above) — a deep link
+  // clicked twice in a row resolves to the same initialStep value each
+  // time, which alone wouldn't re-trigger the "jump to this step" effect
+  // in CategorySequenceShell if that component happens to still be
+  // mounted from an earlier visit. The cache-busting nonce Publish step
+  // links append makes this string change on every click, so the shell
+  // always re-applies the deep link instead of leaving the user on
+  // whatever step they'd last navigated to inside the workflow.
+  const stepRequestKey = searchParams.toString();
 
   const [category, setCategory] = useState<Category | null>(null);
   const [loading, setLoading] = useState(true);
@@ -32,6 +47,19 @@ export default function CategoryDetailPage() {
   const [publishSetImageIds, setPublishSetImageIds] = useState<number[] | null>(null);
   const [warnedPublishImageIds, setWarnedPublishImageIds] = useState<number[]>([]);
   const publishSetLoadedRef = useRef(false);
+
+  // Lifted here (rather than living inside BookStyleSidebar or
+  // GenerateSequencePanel directly) because it needs to travel from the
+  // sidebar's sliders (rendered inside CategorySequenceShell) over to the
+  // Generate step's default-canvas placeholder (rendered inside
+  // GenerateSequencePanel) — siblings under CategorySequenceShell, not
+  // parent/child, so this common ancestor is the only place both can share
+  // it from.
+  const [liveImageSettings, setLiveImageSettings] = useState<{
+    canvas_width: number;
+    canvas_height: number;
+    subject_size_ratio: number;
+  } | null>(null);
 
   useEffect(() => {
     publishSetLoadedRef.current = false;
@@ -159,7 +187,11 @@ export default function CategoryDetailPage() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [category]);
+    // publishCheckTrigger is bumped right after a publish run completes, so
+    // this WordPress-availability check (which depends on publish history
+    // existing) re-runs immediately instead of only on the next full
+    // reload of the category page.
+  }, [category, publishCheckTrigger]);
 
   useEffect(() => {
     let cancelled = false;
@@ -246,6 +278,9 @@ export default function CategoryDetailPage() {
       languagePendingReview={languagePendingReview}
       publishNeedsAttention={publishNeedsAttention}
       publishPendingReview={publishPendingReview}
+      onLiveImageSettingsChange={setLiveImageSettings}
+      initialStep={initialStep}
+      stepRequestKey={stepRequestKey}
     >
       {(activeStep, setActiveStep) => {
         const goToStep = (step: StepId, opts?: { lang?: string; onlyNeedsReview?: boolean }) => {
@@ -266,6 +301,7 @@ export default function CategoryDetailPage() {
                 categoryName={category.name}
                 category={category}
                 onCategoryChanged={setCategory}
+                liveImageSettings={liveImageSettings}
                 languageNeedsAttention={languageNeedsAttention}
                 onGoToLanguage={() => goToStep("language")}
                 publishNeedsAttention={publishNeedsAttention}
@@ -306,6 +342,7 @@ export default function CategoryDetailPage() {
                 onRemoveFromPublishSet={(imageId) => {
                   setPublishSetImageIds((prev) => (prev ?? []).filter((id) => id !== imageId));
                 }}
+                onClearPublishSet={() => setPublishSetImageIds([])}
                 warnedImageIds={warnedPublishImageIds}
                 initialLang={publishJumpLang ?? undefined}
                 initialOnlyNeedsReview={publishJumpReviewOnly}

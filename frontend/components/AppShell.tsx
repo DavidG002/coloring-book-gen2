@@ -7,15 +7,22 @@ import {
 } from "lucide-react";
 import { getBooks } from "@/lib/api";
 import NewBookModal from "./NewBookModal";
+import ThemeToggle from "./ThemeToggle";
 
 export default function AppShell({
   active,
   breadcrumb,
   children,
+  contentMaxWidth,
 }: {
   active: "Overview" | "Books" | "Categories" | "Print";
   breadcrumb: string;
   children: React.ReactNode;
+  // Lets one page opt into a wider content area (e.g. the book detail
+  // page's preview canvas + categories, which had room to spare) without
+  // changing every other page that uses AppShell. Defaults to the
+  // original 1100 everywhere this isn't passed.
+  contentMaxWidth?: number;
 }) {
   const [bookCount, setBookCount] = useState<number | null>(null);
   const [collapsed, setCollapsed] = useState(false);
@@ -161,7 +168,7 @@ export default function AppShell({
           <Link
             href="/print"
             onClick={() => collapsed && toggleCollapsed()}
-            title={collapsed ? "Print" : undefined}
+            title={collapsed ? "Print & Publish" : undefined}
             className={`nav-hover flex items-center gap-2.5 rounded-lg text-[13px] ${collapsed ? "justify-center px-0 py-2.5" : "px-3 py-2.5"}`}
             style={
               active === "Print"
@@ -170,7 +177,7 @@ export default function AppShell({
             }
           >
             <Printer size={16} />
-            {!collapsed && "Print"}
+            {!collapsed && "Print & Publish"}
           </Link>
           </nav>
 
@@ -239,16 +246,19 @@ export default function AppShell({
             <span>/</span>
             <strong style={{ color: "var(--ink)" }}>{breadcrumb}</strong>
           </div>
-          <Link
-            href="/account"
-            className="w-[30px] h-[30px] rounded-full flex items-center justify-center text-[10px] font-medium"
-            style={{ background: "var(--teal)", color: "white" }}
-          >
-            AC
-          </Link>
+          <div className="flex items-center gap-2.5 shrink-0">
+            <ThemeToggle />
+            <Link
+              href="/account"
+              className="w-[30px] h-[30px] rounded-full flex items-center justify-center text-[10px] font-medium shrink-0"
+              style={{ background: "var(--teal)", color: "white" }}
+            >
+              AC
+            </Link>
+          </div>
         </header>
 
-        <div className="mx-auto" style={{ maxWidth: 1100, padding: "52px 44px 80px" }}>
+        <div className="mx-auto" style={{ maxWidth: contentMaxWidth ?? 1100, padding: "52px 44px 80px" }}>
           {children}
         </div>
       </main>

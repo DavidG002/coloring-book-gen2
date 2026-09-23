@@ -119,8 +119,8 @@ export default function CategoriesLibrary() {
           <select
             value={bookFilter}
             onChange={(e) => setBookFilter(e.target.value === "all" ? "all" : parseInt(e.target.value, 10))}
-            className="appearance-none pr-8 rounded-lg text-[11px]"
-            style={{ padding: "9px 11px", border: "1px solid var(--pencil-light)", color: "var(--pencil)", background: "var(--canvas)" }}
+            className="appearance-none rounded-lg text-[11px]"
+            style={{ padding: "9px 30px 9px 11px", border: "1px solid var(--pencil-light)", color: "var(--pencil)", background: "var(--canvas)" }}
           >
             <option value="all">All books</option>
             {books.map((b) => (
@@ -223,7 +223,7 @@ export default function CategoriesLibrary() {
         );
 
         return [card, expandedPanel];
-      })} 
+      })}
         {filtered.length === 0 && (
           <div
             className="col-span-2 flex flex-col items-center justify-center gap-2 rounded-xl"

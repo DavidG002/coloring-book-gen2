@@ -3,26 +3,27 @@
 import { useState } from "react";
 import { Search, FileText, Sparkles } from "lucide-react";
 import AppShell from "./AppShell";
+import PublishConnectionsPanel from "./PublishConnectionsPanel";
 
 export default function PrintBuilder() {
   const [exportFormat, setExportFormat] = useState<"PDF" | "SVG" | "Vector">("PDF");
   const [builderSearch, setBuilderSearch] = useState("");
 
   return (
-    <AppShell active="Print" breadcrumb="Print">
+    <AppShell active="Print" breadcrumb="Print & Publish">
       <div className="flex items-end justify-between gap-5 mb-7">
         <div>
           <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--pencil)", letterSpacing: "0.12em" }}>
-            Print production
+            Print production &amp; publishing
           </p>
           <h1
             className="font-display font-normal m-0 mt-2"
             style={{ fontSize: "clamp(34px, 4vw, 47px)", letterSpacing: "-0.045em", color: "var(--ink)" }}
           >
-            Print<span style={{ color: "var(--teal)" }}>.</span>
+            Print &amp; Publish<span style={{ color: "var(--teal)" }}>.</span>
           </h1>
           <p className="text-[13px] m-0 mt-2.5" style={{ color: "var(--pencil)" }}>
-            Build a print-ready collection from the pages you have created.
+            Build a print-ready collection, and see exactly where your work is already live.
           </p>
         </div>
       </div>
@@ -127,7 +128,7 @@ export default function PrintBuilder() {
         </div>
       </div>
 
-      <div className="rounded-lg flex items-center gap-3 mb-6" style={{ padding: "13px 15px", border: "1px solid var(--tone-sage)", background: "var(--tone-sage-bg)" }}>
+      <div className="rounded-lg flex items-center gap-3 mb-11" style={{ padding: "13px 15px", border: "1px solid var(--tone-sage)", background: "var(--tone-sage-bg)" }}>
         <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: "rgba(255,255,255,0.6)", color: "var(--tone-sage)" }}>
           <Sparkles size={15} />
         </div>
@@ -140,6 +141,8 @@ export default function PrintBuilder() {
           </p>
         </div>
       </div>
+
+      <PublishConnectionsPanel />
     </AppShell>
   );
 }

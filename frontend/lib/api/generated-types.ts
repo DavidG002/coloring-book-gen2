@@ -2232,6 +2232,8 @@ export interface components {
         PublishRequest: {
             /** Category */
             category: string;
+            /** Category Id */
+            category_id: number;
             /** Lang */
             lang: string;
             /**
@@ -2241,6 +2243,8 @@ export interface components {
             only_new: boolean;
             /** Image Ids */
             image_ids?: number[] | null;
+            /** Batch Id */
+            batch_id?: string | null;
         };
         /** PublishRunResponse */
         PublishRunResponse: {
@@ -2710,6 +2714,8 @@ export interface components {
             wp_excluded: boolean;
             /** Publish Run Id */
             publish_run_id?: number | null;
+            /** Publish Batch Id */
+            publish_batch_id?: string | null;
             /** Published At */
             published_at?: string | null;
             /** Seo Error */

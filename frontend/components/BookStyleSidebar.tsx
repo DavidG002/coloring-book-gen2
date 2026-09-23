@@ -7,7 +7,18 @@ import { PAPER_PRESETS } from "./SettingsUI";
 import KnobsPanel from "./KnobsPanel";
 import ExpandableTextModal from "./ExpandableTextModal";
 
-export default function BookStyleSidebar({ bookId, categoryName }: { bookId: number; categoryName?: string }) {
+export default function BookStyleSidebar({
+  bookId,
+  categoryName,
+  onLiveImageSettingsChange,
+}: {
+  bookId: number;
+  categoryName?: string;
+  // Mirrors BookSettingsFields' own live-preview callback — lets whatever
+  // renders this sidebar (the Generate step's default-canvas placeholder)
+  // reflect slider changes immediately, before Save is clicked.
+  onLiveImageSettingsChange?: (settings: { canvas_width: number; canvas_height: number; subject_size_ratio: number }) => void;
+}) {
   const [book, setBook] = useState<Book | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -93,6 +104,21 @@ export default function BookStyleSidebar({ bookId, categoryName }: { bookId: num
     if (!prefsLoaded || typeof window === "undefined") return;
     window.localStorage.setItem(`book-style-knobs-${bookId}`, knobsOpen ? "1" : "0");
   }, [knobsOpen, prefsLoaded, bookId]);
+
+  // Live-preview the canvas shape and subject-size square as the user drags
+  // these sliders, before they hit Save — same pattern as BookSettingsFields'
+  // own callback, which the book preview canvas already reads. Here it lets
+  // the Generate step's default-canvas placeholder track paper size and
+  // subject size immediately too.
+  useEffect(() => {
+    if (loading) return;
+    onLiveImageSettingsChange?.({
+      canvas_width: canvasWidth,
+      canvas_height: canvasHeight,
+      subject_size_ratio: subjectSizeRatio,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canvasWidth, canvasHeight, subjectSizeRatio, loading]);
 
   async function handleSavePrompt(value?: string) {
     setError(null);
@@ -289,23 +315,32 @@ export default function BookStyleSidebar({ bookId, categoryName }: { bookId: num
             <p className="text-[9px] uppercase font-bold m-0" style={{ color: "var(--pencil)", letterSpacing: "0.08em" }}>
               Subject size
             </p>
-            <span className="text-[11px] font-bold" style={{ color: "var(--tone-lavender)" }}>
+            <span className="text-[11px] font-bold" style={{ color: subjectSizeRatio > 0.9 ? "var(--coral)" : "var(--tone-lavender)" }}>
               {Math.round(subjectSizeRatio * 100)}%
             </span>
           </div>
-          <input
-            type="range"
-            min={0.2}
-            max={0.9}
-            step={0.05}
-            value={subjectSizeRatio}
-            onChange={(e) => setSubjectSizeRatio(parseFloat(e.target.value))}
-            className="w-full"
-            style={{ accentColor: "var(--tone-lavender)" }}
-          />
+          <div className="relative">
+            <input
+              type="range"
+              min={0.2}
+              max={1.2}
+              step={0.05}
+              value={subjectSizeRatio}
+              onChange={(e) => setSubjectSizeRatio(parseFloat(e.target.value))}
+              className="w-full"
+              style={{ accentColor: subjectSizeRatio > 0.9 ? "var(--coral)" : "var(--tone-lavender)" }}
+            />
+            <span
+              className="absolute pointer-events-none"
+              style={{ left: "70%", top: 2, bottom: 2, width: 1, background: "var(--pencil-light)" }}
+              title="100% — fills the canvas exactly"
+            />
+          </div>
           <div className="flex items-center justify-between mt-0.5">
             <span className="text-[9px]" style={{ color: "var(--pencil)" }}>Small on page</span>
-            <span className="text-[9px]" style={{ color: "var(--pencil)" }}>Fills the page</span>
+            <span className="text-[9px]" style={{ color: subjectSizeRatio > 0.9 ? "var(--coral)" : "var(--pencil)" }}>
+              {subjectSizeRatio > 0.9 ? "Bleeds past the edges" : "Fills the page"}
+            </span>
           </div>
         </div>
 

@@ -294,15 +294,102 @@ def ensure_category_term(
     response = httpx.post(url, auth=_auth(config), json=payload, timeout=15.0)
     if response.status_code not in (200, 201):
         raise RuntimeError(f"Failed to create taxonomy term '{translated_name}': {response.status_code} {response.text}")
-    term_id = response.json()["id"]
+    term_json = response.json()
+    term_id = term_json["id"]
+    term_link = term_json.get("link")
 
     if config.use_polylang_linking:
         _set_term_language_and_translations(db, config, term_id, lang, category_id, is_subject=False)
 
-    record = WordPressCategoryTerm(category=category_name, category_id=category_id, lang=lang, wp_term_id=term_id, site_url=config.site_url)
+    record = WordPressCategoryTerm(
+        category=category_name, category_id=category_id, lang=lang, wp_term_id=term_id,
+        site_url=config.site_url, term_link=term_link,
+    )
     db.add(record)
     db.commit()
     return term_id
+
+
+def fetch_term_link(config: WordPressIntegration, wp_term_id: int, taxonomy: str = "category") -> str | None:
+    """Looks up the real, public archive-page URL WordPress serves for a
+    taxonomy term. Used to backfill WordPressCategoryTerm rows created
+    before term_link existed, and safe to call speculatively — any
+    failure (network, deleted term) just means no link is shown, not a
+    hard error, since this only ever feeds a presentation layer."""
+    rest_base = TAXONOMY_REST_BASE.get(taxonomy, taxonomy)
+    url = config.site_url.rstrip("/") + f"/wp-json/wp/v2/{rest_base}/{wp_term_id}"
+    try:
+        response = httpx.get(url, auth=_auth(config), timeout=10.0)
+    except Exception:
+        return None
+    if response.status_code != 200:
+        return None
+    return response.json().get("link")
+
+
+def get_publish_overview(db: Session) -> dict:
+    """Every category that has at least one real, live WordPress publishing
+    page — one entry per category, each carrying its per-language live
+    links. Powers the Print & Publish page's read-only 'connections'
+    section. Backfills term_link lazily for rows saved before that column
+    existed, caching the result so it's only ever fetched once per term."""
+    try:
+        config = _get_wp_config(db)
+    except ValueError:
+        return {"connected": False, "site_url": None, "categories": []}
+
+    terms = (
+        db.query(WordPressCategoryTerm)
+        .filter(WordPressCategoryTerm.site_url == config.site_url)
+        .order_by(WordPressCategoryTerm.category_id, WordPressCategoryTerm.lang)
+        .all()
+    )
+
+    by_category: dict[int, list[WordPressCategoryTerm]] = {}
+    for term in terms:
+        if term.category_id is None:
+            continue
+        by_category.setdefault(term.category_id, []).append(term)
+
+    categories_info = (
+        db.query(Category)
+        .filter(Category.id.in_(by_category.keys()))
+        .all()
+    ) if by_category else []
+    category_by_id = {c.id: c for c in categories_info}
+
+    rest_base = config.taxonomy
+    results = []
+    for category_id, category_terms in by_category.items():
+        category = category_by_id.get(category_id)
+        if not category:
+            continue
+        languages = []
+        for term in sorted(category_terms, key=lambda t: t.lang):
+            if not term.term_link:
+                fetched = fetch_term_link(config, term.wp_term_id, rest_base)
+                if fetched:
+                    term.term_link = fetched
+                    db.add(term)
+            languages.append({"lang": term.lang, "wp_term_id": term.wp_term_id, "term_link": term.term_link})
+        results.append({
+            "category_id": category.id,
+            "category_name": category.name,
+            "book_id": category.book_id,
+            "book_name": category.book.name if category.book else "Unknown book",
+            "languages": languages,
+        })
+    db.commit()
+
+    results.sort(key=lambda r: (r["book_name"].lower(), r["category_name"].lower()))
+
+    site_label = config.site_url.replace("https://", "").replace("http://", "").rstrip("/")
+    return {
+        "connected": True,
+        "site_url": config.site_url,
+        "site_label": site_label,
+        "categories": results,
+    }
 
 def ensure_subject_term(
     db: Session,
@@ -797,7 +884,7 @@ def preview_wordpress_push(db: Session, category_id: int, lang: str) -> dict:
     if not translation:
         raise ValueError(f"No '{lang}' translation for '{category_name}' — create it first")
 
-    plan = build_publish_plan(db, category_name, lang)
+    plan = build_publish_plan(db, category.id, lang)
     already_pushed = get_already_pushed_paths(db, category.id, lang, site_url=config.site_url)
     locally_published = get_locally_published_paths(db, category_name, lang)
     eligible_files = [f for f in plan["files"] if f["source_path"] in locally_published]
@@ -872,6 +959,7 @@ def preview_wordpress_push(db: Session, category_id: int, lang: str) -> dict:
             "already_pushed": f["source_path"] in already_pushed,
             "wp_excluded": image_record.wp_excluded if image_record else False,
             "publish_run_id": publish_file_record.run_id if publish_file_record else None,
+            "publish_batch_id": publish_file_record.run.batch_id if publish_file_record else None,
             "published_at": publish_file_record.run.created_at.isoformat() if publish_file_record else None,
             "seo_error": seo_error,
             "needs_update": needs_update,
@@ -920,7 +1008,7 @@ def push_batch_to_wordpress(
     if not translation:
         raise ValueError(f"No '{lang}' translation for '{category_name}' — create it first")
 
-    plan = build_publish_plan(db, category_name, lang)
+    plan = build_publish_plan(db, category.id, lang)
     already_pushed = get_already_pushed_paths(db, category.id, lang, site_url=config.site_url)
     excluded_paths = {
         img.file_path for img in db.query(GenerationImage).filter(GenerationImage.wp_excluded == True).all()

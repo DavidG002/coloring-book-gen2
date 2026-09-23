@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Trash2, Plus, Minimize2, Maximize2 } from "lucide-react";
 import { getCategory, updateCategory, type CategorySummary, type Category } from "@/lib/api";
 import EditListModal from "./EditListModal";
@@ -8,9 +8,13 @@ import EditListModal from "./EditListModal";
 export default function PrepareCategoryPanel({
   categories,
   selectedCategoryId,
+  onCategoryUpdated,
+  autoOpenSubjectsForCategoryId,
 }: {
   categories: CategorySummary[];
   selectedCategoryId?: number;
+  onCategoryUpdated?: () => void;
+  autoOpenSubjectsForCategoryId?: number;
 }) {
   const [category, setCategory] = useState<Category | null>(null);
   const [selectedSubject, setSelectedSubject] = useState<string>("");
@@ -18,6 +22,7 @@ export default function PrepareCategoryPanel({
   const [error, setError] = useState<string | null>(null);
   const [editModalKind, setEditModalKind] = useState<"subjects" | "variations" | null>(null);
   const [listsExpanded, setListsExpanded] = useState(false);
+  const autoOpenedForIdRef = useRef<number | undefined>(undefined);
 
   function loadCategory(id: number) {
     setLoading(true);
@@ -42,8 +47,49 @@ export default function PrepareCategoryPanel({
     return () => clearTimeout(timer);
   }, [selectedCategoryId]);
 
+  useEffect(() => {
+    // Right after a brand-new category is created (and becomes the
+    // selected one here), jump straight into "Add subjects" so the user
+    // doesn't have to hunt for the Add button to start setting it up.
+    // Guarded by a ref (not state) so this only fires once per newly
+    // created category, even though selectedCategoryId keeps matching it
+    // on every re-render until the user picks something else.
+    //
+    // Gated on `category` (the fetched data), not just
+    // `selectedCategoryId` (the id alone) — selectedCategoryId flips to
+    // the new category immediately, but its subjects/variations load
+    // asynchronously via loadCategory(). Opening on the id alone raced
+    // that fetch: the modal could mount (and capture its initial list)
+    // while `category` — and the `subjects` derived from it — still held
+    // the PREVIOUS category's data, showing someone else's subjects in a
+    // supposedly-empty new category. Waiting for `category.id` to match
+    // guarantees the right data is already in state first.
+    if (!autoOpenSubjectsForCategoryId) return;
+    if (!category || category.id !== autoOpenSubjectsForCategoryId) return;
+    if (autoOpenedForIdRef.current === autoOpenSubjectsForCategoryId) return;
+    autoOpenedForIdRef.current = autoOpenSubjectsForCategoryId;
+    setEditModalKind("subjects");
+  }, [autoOpenSubjectsForCategoryId, category]);
+
   function handleListSaved(updated: Category) {
+    if (editModalKind === "subjects") {
+      // Highlight the newly added subject so the user can go straight to
+      // "Add" on variations, without hunting for it in the list. If more
+      // than one was added at once, pick the last one (assumed newest,
+      // since the backend appends in creation order).
+      const prevNames = new Set(subjects);
+      const newlyAdded = updated.subjects.filter((s) => !prevNames.has(s.name));
+      const newest = newlyAdded[newlyAdded.length - 1];
+      if (newest) {
+        setSelectedSubject(newest.name);
+      } else if (!updated.subjects.some((s) => s.name === selectedSubject)) {
+        // Previous selection no longer exists (e.g. it was removed as part
+        // of this edit) — fall back rather than leaving a stale selection.
+        setSelectedSubject(updated.subjects[0]?.name ?? "");
+      }
+    }
     setCategory(updated);
+    onCategoryUpdated?.();
   }
 
   const subjects = category?.subjects.map((s) => s.name) ?? [];
@@ -60,6 +106,7 @@ export default function PrepareCategoryPanel({
       const updated = await updateCategory(selectedCategoryId, { subjects: next });
       setCategory(updated);
       if (selectedSubject === subject) setSelectedSubject(updated.subjects[0]?.name ?? "");
+      onCategoryUpdated?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to remove subject");
     }
@@ -71,6 +118,7 @@ export default function PrepareCategoryPanel({
     try {
       const updated = await updateCategory(selectedCategoryId, { variations: next, variations_subject_id: selectedSubjectId });
       setCategory(updated);
+      onCategoryUpdated?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to remove variation");
     }

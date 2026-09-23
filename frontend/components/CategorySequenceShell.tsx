@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { ArrowLeft, Sparkles, CircleCheck, CornerDownRight, BookOpen } from "lucide-react";
 import BookStyleSidebar from "./BookStyleSidebar";
+import ThemeToggle from "./ThemeToggle";
 
 const STEPS = [
   { id: "generate", label: "Generate", eyebrow: "01" },
@@ -25,6 +26,9 @@ export default function CategorySequenceShell({
   languagePendingReview,
   publishNeedsAttention,
   publishPendingReview,
+  onLiveImageSettingsChange,
+  initialStep,
+  stepRequestKey,
   children,
 }: {
   bookId: number;
@@ -37,14 +41,35 @@ export default function CategorySequenceShell({
   languagePendingReview?: string[];
   publishNeedsAttention?: boolean;
   publishPendingReview?: string[];
+  // Forwarded into BookStyleSidebar (rendered internally, below) so the
+  // Generate step's default-canvas placeholder can track paper size and
+  // subject size live, as the sidebar's own sliders move.
+  onLiveImageSettingsChange?: (settings: { canvas_width: number; canvas_height: number; subject_size_ratio: number }) => void;
+  // A step to land on straight from a deep link (e.g. "?step=wordpress"
+  // from the Print & Publish page's connections list), taking priority
+  // over whatever step was last saved for this category — a deliberate
+  // jump should always win over "where you left off".
+  initialStep?: StepId;
+  // Changes on every "Publish step"-style deep link click (it carries a
+  // cache-busting nonce), even when initialStep itself resolves to the
+  // same value as before. Included in the mount effect's dependencies so
+  // a repeat click on the same deep link always re-applies it, instead of
+  // being a no-op because initialStep "didn't change" while the user had
+  // since navigated to a different step inside the workflow.
+  stepRequestKey?: string;
   children: (activeStep: StepId, setActiveStep: (s: StepId) => void) => React.ReactNode;
 }) {
 
-const [activeStep, setActiveStepRaw] = useState<StepId>("generate");
+const [activeStep, setActiveStepRaw] = useState<StepId>(initialStep ?? "generate");
 const mainStepIndex = STEPS.findIndex((s) => s.id === activeStep);
 const stepIndex = activeStep === "wordpress" ? STEPS.length - 1 : mainStepIndex;
 
   useEffect(() => {
+    if (initialStep) {
+      setActiveStepRaw(initialStep);
+      window.localStorage.setItem(`category-active-step-${categoryName}`, initialStep);
+      return;
+    }
     const timer = setTimeout(() => {
       const saved = window.localStorage.getItem(`category-active-step-${categoryName}`);
       if (saved === "generate" || saved === "language" || saved === "publish" || saved === "wordpress") {
@@ -52,7 +77,7 @@ const stepIndex = activeStep === "wordpress" ? STEPS.length - 1 : mainStepIndex;
       }
     }, 0);
     return () => clearTimeout(timer);
-  }, [categoryName]);
+  }, [categoryName, initialStep, stepRequestKey]);
 
   function setActiveStep(step: StepId) {
     setActiveStepRaw(step);
@@ -88,7 +113,9 @@ const stepIndex = activeStep === "wordpress" ? STEPS.length - 1 : mainStepIndex;
             {categoryName}
           </p>
         </div>
-        <div style={{ width: 100 }} />
+        <div className="flex justify-end" style={{ width: 100 }}>
+          <ThemeToggle />
+        </div>
       </header>
 
       <main
@@ -188,7 +215,9 @@ const stepIndex = activeStep === "wordpress" ? STEPS.length - 1 : mainStepIndex;
             </p>
           </div>
 
-          {activeStep === "generate" && <BookStyleSidebar bookId={bookId} categoryName={categoryName} />}
+          {activeStep === "generate" && (
+            <BookStyleSidebar bookId={bookId} categoryName={categoryName} onLiveImageSettingsChange={onLiveImageSettingsChange} />
+          )}
         </aside>
 
         <section className="min-w-0">

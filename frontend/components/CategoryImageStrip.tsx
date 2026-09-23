@@ -29,11 +29,14 @@ async function getCategoryImages(categoryId: number): Promise<CategoryImage[]> {
   const res = await fetch(`${API_BASE_URL}/review/images/${categoryId}`);
   return res.json();
 }
-async function rejectImage(imageId: number, reason: string) {
+async function rejectImage(imageId: number, reason?: string | null) {
+  // reason omitted (undefined/null) tells the backend to keep whatever
+  // reason this image already carries from an earlier reject cycle,
+  // rather than prompting the user to relabel the same picture.
   await fetch(`${API_BASE_URL}/review/image/${imageId}/reject`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ reason }),
+    body: JSON.stringify({ reason: reason ?? null }),
   });
 }
 async function restoreImage(imageId: number) {
@@ -87,6 +90,9 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+const PLACEHOLDER_CARD_WIDTH = 260;
+const PLACEHOLDER_CARD_HEIGHT = 368;
+
 export default function CategoryImageStrip({
   categoryId,
   categoryName,
@@ -94,6 +100,9 @@ export default function CategoryImageStrip({
   onSelectionChanged,
   publishSetImageIds,
   clearSelectionTrigger,
+  canvasWidth,
+  canvasHeight,
+  subjectSizeRatio,
 }: {
   categoryId: number;
   categoryName: string;
@@ -101,6 +110,15 @@ export default function CategoryImageStrip({
   onSelectionChanged?: (imageIds: number[]) => void;
   publishSetImageIds?: number[];
   clearSelectionTrigger?: number;
+  // The book's real canvas size + subject-size ratio — used to draw a
+  // permanent, default "blank canvas" tile at the front of the strip
+  // (same idea as the book preview's own canvas placeholder), so there's
+  // always something to look at even before any page has been generated
+  // for this category. Falls back to the same A4-ish defaults used
+  // elsewhere when the caller hasn't loaded the book yet.
+  canvasWidth?: number;
+  canvasHeight?: number;
+  subjectSizeRatio?: number;
 }) {
 
   const [images, setImages] = useState<CategoryImage[]>([]);
@@ -154,6 +172,7 @@ export default function CategoryImageStrip({
   
   const [busyId, setBusyId] = useState<number | null>(null);
   const [bulkRejecting, setBulkRejecting] = useState(false);
+  const [bulkRestoring, setBulkRestoring] = useState(false);
   const [minimized, setMinimized] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [flashId, setFlashId] = useState<number | null>(null);
@@ -251,12 +270,17 @@ export default function CategoryImageStrip({
     confirmTimerRef.current = setTimeout(() => setConfirming(null), 4000);
   }
 
-   async function doReject(id: number, reason: string) {
+   async function doReject(id: number, reason?: string | null) {
+    if (images.find((img) => img.id === id)?.status === "rejected" && reason == null) return;
     setBusyId(id);
     try {
       await rejectImage(id, reason);
       setImages((prev) =>
-        prev.map((img) => (img.id === id ? { ...img, status: "rejected", reject_reason: reason } : img))
+        prev.map((img) =>
+          img.id === id
+            ? { ...img, status: "rejected", reject_reason: reason ?? img.reject_reason }
+            : img
+        )
       );
       setSelected((prev) => {
         const next = new Set(prev);
@@ -269,14 +293,27 @@ export default function CategoryImageStrip({
       setBusyId(null);
     }
   }
-  async function handleBulkReject(reason: string) {
+  async function handleBulkReject(reason?: string) {
     if (selected.size === 0) return;
     setBulkRejecting(true);
     try {
-      const ids = Array.from(selected);
-      await Promise.all(ids.map((id) => rejectImage(id, reason)));
+      const rejectedIds = new Set(images.filter((img) => img.status === "rejected").map((img) => img.id));
+      const ids = Array.from(selected).filter((id) => !rejectedIds.has(id));
+      if (ids.length === 0) return;
+      await Promise.all(
+        ids.map((id) => {
+          // An image already carrying a reason from an earlier reject cycle
+          // keeps that reason — the newly-picked one only applies to images
+          // being rejected for the first time, so restoring an already-
+          // labeled image and rejecting it again in bulk doesn't relabel it.
+          const existingReason = images.find((img) => img.id === id)?.reject_reason;
+          return rejectImage(id, existingReason || reason);
+        })
+      );
       setImages((prev) =>
-        prev.map((img) => (ids.includes(img.id) ? { ...img, status: "rejected", reject_reason: reason } : img))
+        prev.map((img) =>
+          ids.includes(img.id) ? { ...img, status: "rejected", reject_reason: img.reject_reason ?? reason ?? null } : img
+        )
       );
       setSelected(new Set());
     } catch {
@@ -289,13 +326,36 @@ export default function CategoryImageStrip({
     setBusyId(id);
     try {
       await restoreImage(id);
+      // reject_reason is deliberately kept (not nulled) — the backend keeps
+      // it too, so if this image gets rejected again without a fresh reason
+      // being picked, that original reason is reapplied automatically
+      // instead of re-prompting for one and risking a second, conflicting
+      // label on the exact same picture.
       setImages((prev) =>
-        prev.map((img) => (img.id === id ? { ...img, status: "approved", reject_reason: null } : img))
+        prev.map((img) => (img.id === id ? { ...img, status: "approved" } : img))
       );
     } catch {
       setError("Failed to restore image");
     } finally {
       setBusyId(null);
+    }
+  }
+  async function handleBulkRestore() {
+    if (selected.size === 0) return;
+    setBulkRestoring(true);
+    try {
+      const rejectedIds = new Set(images.filter((img) => img.status === "rejected").map((img) => img.id));
+      const ids = Array.from(selected).filter((id) => rejectedIds.has(id));
+      if (ids.length === 0) return;
+      await Promise.all(ids.map((id) => restoreImage(id)));
+      setImages((prev) =>
+        prev.map((img) => (ids.includes(img.id) ? { ...img, status: "approved" } : img))
+      );
+      setSelected(new Set());
+    } catch {
+      setError("Failed to restore selected images");
+    } finally {
+      setBulkRestoring(false);
     }
   }
   async function doRegenerateSameSlots(id: number) {
@@ -430,16 +490,33 @@ async function doRegenerate(id: number) {
     );
   }
 
-  if (images.length === 0) {
-    return (
-      <p className="text-sm px-7 py-4" style={{ color: "var(--pencil)" }}>
-        No generated images yet for this category.
-      </p>
-    );
-  }
+  // Selection can contain a mix of active and already-rejected images, so
+  // the toolbar offers a reject action for the active ones and a restore
+  // action for the rejected ones, rather than one button that's ambiguous
+  // about what it'll do to a rejected image already in the selection.
+  const selectedActiveCount = Array.from(selected).filter(
+    (id) => images.find((img) => img.id === id)?.status !== "rejected"
+  ).length;
+  const selectedRejectedCount = selected.size - selectedActiveCount;
+
+  // Default-canvas placeholder tile, sized to fit inside the same 260x368
+  // box every real generated-image card uses, scaled down (letterboxed,
+  // same as a real image's object-contain) to preserve the book's actual
+  // canvas aspect ratio — with a dashed square showing where the subject
+  // will sit at the current subject-size setting. Shown permanently as
+  // the first tile, same idea as the book preview's own canvas item, so
+  // there's always something to look at even before any page has been
+  // generated for this category.
+  const canvasW = canvasWidth || 595;
+  const canvasH = canvasHeight || 842;
+  const canvasScale = Math.min(PLACEHOLDER_CARD_WIDTH / canvasW, PLACEHOLDER_CARD_HEIGHT / canvasH);
+  const placeholderCanvasWidth = canvasW * canvasScale;
+  const placeholderCanvasHeight = canvasH * canvasScale;
+  const placeholderSubjectRatio = subjectSizeRatio ?? 0.5;
+  const placeholderSubjectPx = Math.min(placeholderCanvasWidth, placeholderCanvasHeight) * placeholderSubjectRatio;
 
   return (
-    <div className="mx-4 my-5 rounded-xl overflow-hidden" style={{ border: "1px solid var(--pencil-light)", background: "var(--paper)" }}>
+    <div className="mx-4 my-5 rounded-xl overflow-hidden" style={{ border: "1px solid var(--pencil-light)", background: "var(--tone-blue-bg)" }}>
       <div className="flex items-center justify-between gap-3 flex-wrap px-4 py-3.5" style={{ borderBottom: minimized ? "none" : "1px solid var(--pencil-light)" }}>
         <div>
           <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--pencil)", letterSpacing: "0.1em" }}>
@@ -530,7 +607,7 @@ async function doRegenerate(id: number) {
           <button
             onClick={() => setMinimized((v) => !v)}
             className="w-8 h-8 flex items-center justify-center rounded-md ml-auto"
-            style={{ border: "1px solid var(--tone-blue)", color: "var(--tone-blue)", background: "#eef2f5" }}
+            style={{ border: "1px solid var(--tone-blue)", color: "var(--tone-blue)", background: "var(--canvas)" }}
             aria-label={minimized ? "Expand" : "Minimize"}
           >
             {minimized ? <Maximize2 size={13} /> : <Minimize2 size={13} />}
@@ -538,7 +615,7 @@ async function doRegenerate(id: number) {
         </div>
       </div>
       {!minimized && (
-            <div className="flex items-center justify-between gap-2 flex-nowrap overflow-x-auto px-4 py-2.5 relative" style={{ borderBottom: "1px solid var(--pencil-light)" }}>
+            <div className="flex items-center justify-between gap-2 flex-nowrap overflow-x-auto px-4 py-2.5 relative" style={{ borderBottom: "1px solid var(--pencil-light)", background: "var(--paper)" }}>
               <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={() => setSelected(new Set(sortedImages.filter((img) => img.status !== "rejected").map((img) => img.id)))}
@@ -578,18 +655,39 @@ async function doRegenerate(id: number) {
               }
             }}
             className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold absolute left-1/2"
-            style={{ transform: "translateX(-50%)", border: "1px solid var(--pencil-light)", color: "var(--teal-dark)" }}
+            style={{ transform: "translateX(-50%)", border: "1px solid var(--tone-blue)", color: "var(--tone-blue)", background: "var(--tone-blue-bg)" }}
           >
             <Expand size={11} /> Full preview
           </button>
-          {selected.size > 0 && !bulkRejectPicker && (
+          {selectedRejectedCount > 0 && !bulkRejectPicker && (
             <button
-              onClick={() => setBulkRejectPicker(true)}
+              onClick={handleBulkRestore}
+              disabled={bulkRestoring}
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold disabled:opacity-60"
+              style={{ border: "1px solid var(--pencil-light)", color: "var(--pencil)" }}
+            >
+              <Check size={11} /> {bulkRestoring ? "Restoring..." : `Restore ${selectedRejectedCount} selected`}
+            </button>
+          )}
+          {selectedActiveCount > 0 && !bulkRejectPicker && (
+            <button
+              onClick={() => {
+                // If every active selected image already has a reason from
+                // an earlier reject cycle, reuse those and skip the picker
+                // entirely — only ask when at least one is being rejected
+                // for the first time.
+                const needsReason = Array.from(selected).some((id) => {
+                  const img = images.find((i) => i.id === id);
+                  return img && img.status !== "rejected" && !img.reject_reason;
+                });
+                if (needsReason) setBulkRejectPicker(true);
+                else handleBulkReject();
+              }}
               disabled={bulkRejecting}
               className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold disabled:opacity-60"
               style={{ border: "1px solid var(--coral)", color: "var(--coral-dark)" }}
             >
-              <Trash2 size={11} /> {bulkRejecting ? "Rejecting..." : `Reject ${selected.size} selected`}
+              <Trash2 size={11} /> {bulkRejecting ? "Rejecting..." : `Reject ${selectedActiveCount} selected`}
             </button>
           )}
           {selected.size > 0 && bulkRejectPicker && (
@@ -630,7 +728,49 @@ async function doRegenerate(id: number) {
       {!minimized && (
         <div className="relative group">
             <div ref={scrollRef} className="flex gap-3 p-3 overflow-x-auto scroll-smooth" style={{ scrollbarWidth: "thin" }}>
-            {sortedImages.length === 0 && (
+            <div
+              className="flex-shrink-0 rounded-lg overflow-hidden relative"
+              style={{ width: PLACEHOLDER_CARD_WIDTH, border: "1.5px dashed var(--pencil-light)", background: "var(--paper)" }}
+            >
+              <div
+                className="flex items-center justify-center"
+                style={{ width: "100%", height: PLACEHOLDER_CARD_HEIGHT, background: "var(--canvas)" }}
+              >
+                <div
+                  style={{
+                    width: placeholderCanvasWidth,
+                    height: placeholderCanvasHeight,
+                    background: "white",
+                    border: "1px solid var(--pencil-light)",
+                    borderRadius: 4,
+                    position: "relative",
+                    boxShadow: "0 1px 4px rgba(0,0,0,0.1)",
+                  }}
+                >
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "50%",
+                      left: "50%",
+                      width: placeholderSubjectPx,
+                      height: placeholderSubjectPx,
+                      transform: "translate(-50%, -50%)",
+                      border: "1.5px dashed var(--teal)",
+                      borderRadius: 4,
+                    }}
+                  />
+                </div>
+              </div>
+              <div className="p-2.5" style={{ background: "var(--paper)" }}>
+                <p className="text-xs font-medium m-0" style={{ color: "var(--ink)" }}>
+                  Default canvas
+                </p>
+                <p className="text-[10px] m-0 mt-1" style={{ color: "var(--pencil)" }}>
+                  {canvasW}×{canvasH}px · subject fills {Math.round(placeholderSubjectRatio * 100)}%
+                </p>
+              </div>
+            </div>
+            {images.length > 0 && sortedImages.length === 0 && (
               <p className="text-sm py-6" style={{ color: "var(--pencil)" }}>
                 No images match the current filters.
               </p>
@@ -678,7 +818,7 @@ async function doRegenerate(id: number) {
                     />
                   </button>
 
-                  <div className="p-2.5">
+                  <div className="p-2.5" style={{ background: "var(--paper)" }}>
                     <div className="flex items-start justify-between gap-1.5 mb-1">
                       <p className="text-xs font-medium m-0 capitalize" style={{ color: "var(--ink)" }}>
                         {img.subject}
@@ -709,34 +849,7 @@ async function doRegenerate(id: number) {
                       Batch #{img.job_id} · {formatDate(img.created_at)}
                     </p>
 
-                     {isRejected ? (
-                      <div>
-                        <p className="text-[10px] font-bold m-0 mb-1.5" style={{ color: "var(--coral-dark)" }}>
-                          Rejected{img.reject_reason ? ` — ${REJECT_REASONS.find((r) => r.key === img.reject_reason)?.label ?? img.reject_reason}` : ""}
-                        </p>
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            onClick={() => doRegenerateSameSlots(img.id)}
-                            disabled={isBusy}
-                            title="Regenerate using the exact same instructions as the original"
-                            className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 rounded-md text-[10px] font-bold disabled:opacity-30"
-                            style={{ border: "1px solid var(--teal)", color: "var(--teal)" }}
-                          >
-                            <RotateCw size={11} className={isBusy ? "animate-spin" : ""} />
-                            {isBusy ? "Working..." : "Regenerate original"}
-                          </button>
-                          <button
-                            onClick={() => doRestore(img.id)}
-                            disabled={isBusy}
-                            title="Restore this image"
-                            className="w-7 h-7 flex items-center justify-center rounded-md disabled:opacity-30 shrink-0"
-                            style={{ border: "1px solid var(--pencil-light)", color: "var(--pencil)" }}
-                          >
-                            <Check size={12} />
-                          </button>
-                        </div>
-                      </div>
-                    ) : isPickingReason ? (
+                     {isPickingReason ? (
                       <div className="rounded-md" style={{ background: "var(--coral-light)", padding: 6 }}>
                         <p className="text-[10px] font-medium m-0 mb-1.5" style={{ color: "var(--coral-dark)" }}>
                           Why reject?
@@ -763,6 +876,42 @@ async function doRegenerate(id: number) {
                         >
                           Cancel
                         </button>
+                      </div>
+                    ) : isRejected ? (
+                      <div>
+                        <div className="flex items-center justify-between gap-1.5 mb-1.5">
+                          <p className="text-[10px] font-bold m-0" style={{ color: "var(--coral-dark)" }}>
+                            Rejected{img.reject_reason ? ` — ${REJECT_REASONS.find((r) => r.key === img.reject_reason)?.label ?? img.reject_reason}` : ""}
+                          </p>
+                          <button
+                            onClick={() => setRejectingId(img.id)}
+                            className="text-[9px] font-medium underline shrink-0"
+                            style={{ color: "var(--pencil)" }}
+                          >
+                            Change reason
+                          </button>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => doRegenerateSameSlots(img.id)}
+                            disabled={isBusy}
+                            title="Regenerate using the exact same instructions as the original"
+                            className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 rounded-md text-[10px] font-bold disabled:opacity-30"
+                            style={{ border: "1px solid var(--teal)", color: "var(--teal)" }}
+                          >
+                            <RotateCw size={11} className={isBusy ? "animate-spin" : ""} />
+                            {isBusy ? "Working..." : "Regenerate original"}
+                          </button>
+                          <button
+                            onClick={() => doRestore(img.id)}
+                            disabled={isBusy}
+                            title="Restore this image"
+                            className="w-7 h-7 flex items-center justify-center rounded-md disabled:opacity-30 shrink-0"
+                            style={{ border: "1px solid var(--pencil-light)", color: "var(--pencil)" }}
+                          >
+                            <Check size={12} />
+                          </button>
+                        </div>
                       </div>
                     ) : confirmingRegen ? (
                       <div className="rounded-md" style={{ background: "var(--teal-tint)", padding: 6 }}>
@@ -799,9 +948,16 @@ async function doRegenerate(id: number) {
                           {isBusy ? "Working..." : "Regenerate"}
                         </button>
                         <button
-                          onClick={() => setRejectingId(img.id)}
+                          onClick={() => {
+                            // Already labeled once (rejected, then restored) —
+                            // reject again with that same reason instead of
+                            // re-prompting for one; "Change reason" in the
+                            // rejected view below is the way to relabel it.
+                            if (img.reject_reason) doReject(img.id);
+                            else setRejectingId(img.id);
+                          }}
                           disabled={isBusy}
-                          title="Reject this image"
+                          title={img.reject_reason ? `Reject again (same reason: ${REJECT_REASONS.find((r) => r.key === img.reject_reason)?.label ?? img.reject_reason})` : "Reject this image"}
                           className="w-7 h-7 flex items-center justify-center rounded-md disabled:opacity-30 shrink-0"
                           style={{ border: "1px solid var(--pencil-light)", color: "var(--coral-dark)" }}
                         >

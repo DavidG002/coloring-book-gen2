@@ -263,7 +263,14 @@ export default function WordPressPushPanel({ categoryId, categoryName }: { categ
   const allBatchesChronological = useMemo(() => {
     const groups = new Map<string, LangFile[]>();
     for (const f of allFiles) {
-      const key = String(f.publish_run_id ?? "unknown");
+      // publish_batch_id ties together every language published together in
+      // one "Build publish sets" click (see PublishRun.batch_id) — that's
+      // the real "batch" from the user's point of view, even though each
+      // language got its own PublishRun row under the hood. Runs from
+      // before batch_id existed fall back to grouping by the minute they
+      // were created, which is enough to reassemble a same-click batch
+      // without merging genuinely unrelated runs.
+      const key = f.publish_batch_id ?? (f.published_at ? `min:${f.published_at.slice(0, 16)}` : `run:${f.publish_run_id ?? "unknown"}`);
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(f);
     }

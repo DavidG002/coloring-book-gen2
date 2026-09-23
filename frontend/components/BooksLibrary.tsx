@@ -15,7 +15,16 @@ const TONES = [
   { bg: "var(--tone-lavender-bg)", fg: "var(--tone-lavender)" },
 ];
 
-type SortKey = "recent" | "title";
+type SortKey = "recent" | "oldest" | "name-asc" | "name-desc" | "categories-desc" | "categories-asc";
+
+const SORT_LABELS: Record<SortKey, string> = {
+  recent: "Recently created",
+  oldest: "Oldest first",
+  "name-asc": "Name (A–Z)",
+  "name-desc": "Name (Z–A)",
+  "categories-desc": "Most categories",
+  "categories-asc": "Fewest categories",
+};
 
 export default function BooksLibrary() {
   const [books, setBooks] = useState<BookSummary[]>([]);
@@ -39,8 +48,34 @@ export default function BooksLibrary() {
 
   const filteredBooks = useMemo(() => {
     const results = books.filter((b) => b.name.toLowerCase().includes(query.toLowerCase()));
-    return [...results].sort((a, b) => (sortBy === "title" ? a.name.localeCompare(b.name) : b.id - a.id));
+    const sorted = [...results];
+    switch (sortBy) {
+      case "recent":
+        sorted.sort((a, b) => b.id - a.id);
+        break;
+      case "oldest":
+        sorted.sort((a, b) => a.id - b.id);
+        break;
+      case "name-asc":
+        sorted.sort((a, b) => a.name.localeCompare(b.name));
+        break;
+      case "name-desc":
+        sorted.sort((a, b) => b.name.localeCompare(a.name));
+        break;
+      case "categories-desc":
+        sorted.sort((a, b) => b.category_count - a.category_count);
+        break;
+      case "categories-asc":
+        sorted.sort((a, b) => a.category_count - b.category_count);
+        break;
+    }
+    return sorted;
   }, [books, query, sortBy]);
+
+  // Reserve space for the full (unfiltered) list so typing in search never shrinks the page.
+  const totalGridItems = books.length + 1; // +1 for the "create a new book" tile
+  const gridRows = Math.max(1, Math.ceil(totalGridItems / 3));
+  const gridMinHeight = gridRows * 216 + (gridRows - 1) * 14;
 
   return (
     <AppShell active="Books" breadcrumb="Books">
@@ -61,22 +96,13 @@ export default function BooksLibrary() {
         </div>
       </div>
 
-      <div className="flex items-end justify-between mb-4">
-        <div>
-          <h2 className="font-display font-normal m-0" style={{ fontSize: 23, letterSpacing: "-0.03em", color: "var(--ink)" }}>
-            Your library
-          </h2>
-          <p className="text-[13px] m-0 mt-1" style={{ color: "var(--pencil)" }}>
-            A clear view of every collection in progress.
-          </p>
-        </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="lift-hover inline-flex items-center gap-2 rounded-lg text-white text-xs font-bold shrink-0"
-          style={{ padding: "11px 15px", background: "var(--teal)", boxShadow: "0 5px 14px rgba(91,124,147,0.14)" }}
-        >
-          <Plus size={16} /> New book
-        </button>
+      <div className="mb-4">
+        <h2 className="font-display font-normal m-0" style={{ fontSize: 23, letterSpacing: "-0.03em", color: "var(--ink)" }}>
+          Your library
+        </h2>
+        <p className="text-[13px] m-0 mt-1" style={{ color: "var(--pencil)" }}>
+          A clear view of every collection in progress.
+        </p>
       </div>
 
       <div className="flex items-center justify-between gap-3 mb-4">
@@ -97,11 +123,14 @@ export default function BooksLibrary() {
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as SortKey)}
-            className="appearance-none pr-8 rounded-lg text-[11px]"
-            style={{ padding: "9px 11px", border: "1px solid var(--pencil-light)", color: "var(--pencil)", background: "var(--canvas)" }}
+            className="appearance-none rounded-lg text-[11px]"
+            style={{ padding: "9px 30px 9px 11px", border: "1px solid var(--pencil-light)", color: "var(--pencil)", background: "var(--canvas)" }}
           >
-            <option value="recent">Recently created</option>
-            <option value="title">Title</option>
+            {(Object.keys(SORT_LABELS) as SortKey[]).map((key) => (
+              <option key={key} value={key}>
+                {SORT_LABELS[key]}
+              </option>
+            ))}
           </select>
           <ChevronDown size={13} className="absolute pointer-events-none" style={{ right: 10, top: "50%", transform: "translateY(-50%)", color: "var(--pencil)" }} />
         </div>
@@ -112,7 +141,25 @@ export default function BooksLibrary() {
           Loading...
         </p>
       ) : (
-        <div className="grid grid-cols-3 gap-3.5">
+        <div className="grid grid-cols-3 gap-3.5" style={{ minHeight: gridMinHeight, alignContent: "start" }}>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="lift-hover rounded-xl flex items-center gap-3 text-left"
+            style={{ minHeight: 216, padding: 18, border: "1.5px dashed var(--pencil-light)" }}
+          >
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: "var(--teal-tint)", color: "var(--teal)" }}>
+              <Plus size={19} />
+            </div>
+            <div>
+              <p className="font-display font-normal m-0" style={{ fontSize: 14, color: "var(--ink)" }}>
+                Create a new book
+              </p>
+              <p className="text-[11px] m-0 mt-1" style={{ color: "var(--pencil)" }}>
+                Start with a style and a spark.
+              </p>
+            </div>
+          </button>
+
           {filteredBooks.map((book, i) => {
             const tone = TONES[i % TONES.length];
             return (
@@ -144,24 +191,6 @@ export default function BooksLibrary() {
               </Link>
             );
           })}
-
-          <button
-            onClick={() => setShowCreate(true)}
-            className="lift-hover rounded-xl flex items-center gap-3 text-left"
-            style={{ minHeight: 216, padding: 18, border: "1.5px dashed var(--pencil-light)" }}
-          >
-            <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: "var(--teal-tint)", color: "var(--teal)" }}>
-              <Plus size={19} />
-            </div>
-            <div>
-              <p className="font-display font-normal m-0" style={{ fontSize: 14, color: "var(--ink)" }}>
-                Create a new book
-              </p>
-              <p className="text-[11px] m-0 mt-1" style={{ color: "var(--pencil)" }}>
-                Start with a style and a spark.
-              </p>
-            </div>
-          </button>
 
           {filteredBooks.length === 0 && (
             <p className="text-sm col-span-3" style={{ color: "var(--pencil)" }}>

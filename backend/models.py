@@ -250,6 +250,13 @@ class PublishRun(Base):
     skipped_subjects_json = Column(Text, nullable=True)
     manifest_path = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    # One "Build publish sets" click runs execute_publish() once per active
+    # language, each creating its own PublishRun row. batch_id is a shared
+    # value generated once per click and stamped on all of them, so callers
+    # (e.g. the WordPress push archive view) can group those per-language
+    # runs back into the single real-world action they came from, instead
+    # of showing one run per language as separate batches.
+    batch_id = Column(String, nullable=True)
 
     files = relationship("PublishedFile", back_populates="run", cascade="all, delete-orphan")
 
@@ -284,6 +291,23 @@ engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 
 def init_db():
     Base.metadata.create_all(bind=engine)
+    _run_light_migrations()
+
+
+def _run_light_migrations():
+    """create_all() only creates missing TABLES — it never adds columns to
+    a table that already exists. This project has no migration framework,
+    so a column added to a model after its table already exists on disk
+    needs a manual ALTER TABLE. This runs on every startup and is a no-op
+    once the column is present."""
+    with engine.begin() as conn:
+        existing_cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(publish_runs)").fetchall()}
+        if "batch_id" not in existing_cols:
+            conn.exec_driver_sql("ALTER TABLE publish_runs ADD COLUMN batch_id VARCHAR")
+
+        wp_term_cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(wordpress_category_terms)").fetchall()}
+        if "term_link" not in wp_term_cols:
+            conn.exec_driver_sql("ALTER TABLE wordpress_category_terms ADD COLUMN term_link VARCHAR")
 
 
 class AppCredential(Base):
@@ -323,6 +347,12 @@ class WordPressCategoryTerm(Base):
     wp_term_id = Column(Integer, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     site_url = Column(String, nullable=False, default="")
+    # The real, public archive-page URL WordPress returns for this term —
+    # captured at creation time when available, backfilled lazily (a GET
+    # on the term) for older rows that predate this column. Used by the
+    # Print & Publish page's live "publishing pages" overview so each
+    # category+language can link straight to its real page on the site.
+    term_link = Column(String, nullable=True)
 
     __table_args__ = (
         UniqueConstraint("category", "lang", "site_url", name="uq_wp_term_per_category_lang_site"),

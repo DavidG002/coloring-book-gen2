@@ -155,3 +155,81 @@ def auto_translate_new_items(db, category, new_subjects: list, new_variations: l
             result[lang] = touched
 
     return result
+
+
+def generate_all_translations_for_category(category_id: int) -> None:
+    """Best-effort background job: creates a Translation (book-level
+    filename/alt/title templates + a translated category name) for every
+    language the account has ever added, for a freshly created category.
+
+    Runs right after category creation (scheduled as a FastAPI background
+    task, so it starts server-side and survives the request/page that
+    triggered it) so a brand-new category is already set up in every
+    language by the time someone opens its Language step or carries a
+    preview image over to Generate — no manual "Generate all" click needed.
+
+    Takes only `category_id`, not a `db` session — a background task runs
+    after the request's own session may already be closed, so this opens
+    and closes its own. Each language is committed independently and a
+    failure on one is swallowed and skipped rather than aborting the rest,
+    since this always runs unattended with no one to see an error.
+    """
+    from database import SessionLocal
+    from models import Category, SupportedLanguage, Translation, LanguageTemplateDefault
+
+    db = SessionLocal()
+    try:
+        category = db.query(Category).filter(Category.id == category_id).first()
+        if not category:
+            return
+        book = category.book
+        existing_langs = {t.lang for t in category.translations}
+        languages = db.query(SupportedLanguage).all()
+
+        for lang_row in languages:
+            lang = lang_row.code
+            if lang in existing_langs:
+                continue
+            try:
+                template_row = (
+                    db.query(LanguageTemplateDefault)
+                    .filter(LanguageTemplateDefault.book_id == book.id, LanguageTemplateDefault.lang == lang)
+                    .first()
+                )
+                if template_row:
+                    templates = {
+                        "filename_template": template_row.filename_template,
+                        "alt_template": template_row.alt_template,
+                        "title_template": template_row.title_template,
+                    }
+                else:
+                    templates = translate_template_structure_for_book(book.product_noun, lang)
+                    db.add(LanguageTemplateDefault(
+                        book_id=book.id,
+                        lang=lang,
+                        filename_template=templates["filename_template"],
+                        alt_template=templates["alt_template"],
+                        title_template=templates["title_template"],
+                    ))
+
+                translated_name = translate_phrases([category.name], lang).get(category.name, category.name)
+
+                db.add(Translation(
+                    category_id=category.id,
+                    lang=lang,
+                    category_translated=translated_name,
+                    filename_template=templates["filename_template"],
+                    alt_template=templates["alt_template"],
+                    title_template=templates["title_template"],
+                ))
+                db.commit()
+            except Exception:
+                # Best-effort — one language failing (e.g. a transient API
+                # error) shouldn't stop the rest, and there's no one
+                # watching this run to retry it themselves. Language step
+                # still shows a manual "Generate all"/per-language button
+                # for whatever didn't make it.
+                db.rollback()
+                continue
+    finally:
+        db.close()
