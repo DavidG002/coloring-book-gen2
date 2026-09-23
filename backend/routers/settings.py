@@ -2,8 +2,14 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import Setting
+from models import Setting, User
 from schemas import SettingsRead, SettingsUpdate
+from services.auth import get_current_user
+
+# NOTE: Setting is a single global key/value table, not per-user —
+# these endpoints just require login, they're not ownership-scoped.
+# Task 5 in the roadmap (per-user AppCredential) is the analogous
+# change for account_settings.py; this table hasn't needed that yet.
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -32,14 +38,14 @@ def _cast(key: str, raw_value: str):
 
 
 @router.get("", response_model=SettingsRead)
-def get_settings(db: Session = Depends(get_db)):
+def get_settings(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     _ensure_defaults(db)
     rows = {s.key: s.value for s in db.query(Setting).all()}
     return SettingsRead(**{key: _cast(key, rows[key]) for key in DEFAULTS})
 
 
 @router.put("", response_model=SettingsRead)
-def update_settings(payload: SettingsUpdate, db: Session = Depends(get_db)):
+def update_settings(payload: SettingsUpdate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     _ensure_defaults(db)
     updates = payload.model_dump(exclude_unset=True)  # only fields actually sent
 

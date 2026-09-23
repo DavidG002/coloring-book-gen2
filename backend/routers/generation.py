@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 import json
 
 from database import get_db
-from models import GenerationJob, GenerationImage, Category
+from models import GenerationJob, GenerationImage, Category, User
 from schemas import (
     GenerationPlanRequest, GenerationPlanResponse, PlannedTask,
     GenerationRunRequest, GenerationRunResponse, GenerationStatusResponse,
@@ -16,15 +16,16 @@ from services.generation import (
 )
 from services.job_runner import run_generation_job, request_cancel
 from routers.settings import get_settings as get_settings_route, DEFAULTS
+from services.auth import get_current_user
+from services.ownership import get_owned_category, get_owned_job
 
 router = APIRouter(prefix="/generate", tags=["generation"])
 
 
-def _get_category_or_404(db: Session, category_id: int) -> Category:
-    category = db.query(Category).filter(Category.id == category_id).first()
-    if not category:
-        raise HTTPException(status_code=404, detail=f"Category {category_id} not found")
-    return category
+def _get_category_or_404(db: Session, category_id: int, user: User) -> Category:
+    # Ownership-checked: raises 404 for a category in someone else's book,
+    # same as a category that doesn't exist at all.
+    return get_owned_category(category_id, user, db)
 
 
 def _load_settings_dict(db: Session, category: Category) -> dict:
@@ -49,8 +50,8 @@ def _load_settings_dict(db: Session, category: Category) -> dict:
 
 
 @router.post("/plan", response_model=GenerationPlanResponse)
-def plan_generation(payload: GenerationPlanRequest, db: Session = Depends(get_db)):
-    category = _get_category_or_404(db, payload.category_id)
+def plan_generation(payload: GenerationPlanRequest, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    category = _get_category_or_404(db, payload.category_id, user)
     try:
         tasks = build_task_list(
             db, category.id, payload.subjects,
@@ -67,8 +68,8 @@ def plan_generation(payload: GenerationPlanRequest, db: Session = Depends(get_db
 
 
 @router.post("/run", response_model=GenerationRunResponse)
-def run_generation(payload: GenerationRunRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
-    category = _get_category_or_404(db, payload.category_id)
+def run_generation(payload: GenerationRunRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    category = _get_category_or_404(db, payload.category_id, user)
     try:
         tasks = build_task_list(
             db, category.id, payload.subjects,
@@ -81,6 +82,7 @@ def run_generation(payload: GenerationRunRequest, background_tasks: BackgroundTa
         raise HTTPException(status_code=400, detail="No images to generate for this request")
 
     job = GenerationJob(
+        user_id=user.id,
         category=category.name,
         params_json=json.dumps(payload.model_dump()),
         status="pending",
@@ -98,10 +100,8 @@ def run_generation(payload: GenerationRunRequest, background_tasks: BackgroundTa
 
 
 @router.get("/status/{job_id}", response_model=GenerationStatusResponse)
-def get_status(job_id: int, db: Session = Depends(get_db)):
-    job = db.query(GenerationJob).get(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+def get_status(job_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    job = get_owned_job(job_id, user, db)
 
     last_image = (
         db.query(GenerationImage)
@@ -122,10 +122,8 @@ def get_status(job_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/cancel/{job_id}")
-def cancel_job(job_id: int, db: Session = Depends(get_db)):
-    job = db.query(GenerationJob).get(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+def cancel_job(job_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    job = get_owned_job(job_id, user, db)
     if job.status not in ("pending", "running"):
         raise HTTPException(status_code=400, detail=f"Job is already '{job.status}', cannot cancel")
     request_cancel(job_id)
@@ -133,8 +131,8 @@ def cancel_job(job_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/plan-pairs", response_model=GenerationPlanResponse)
-def plan_generation_pairs(payload: GenerationPairsPlanRequest, db: Session = Depends(get_db)):
-    category = _get_category_or_404(db, payload.category_id)
+def plan_generation_pairs(payload: GenerationPairsPlanRequest, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    category = _get_category_or_404(db, payload.category_id, user)
     try:
         tasks = build_task_list_from_pairs(
             db, category.id, [p.model_dump() for p in payload.pairs]
@@ -150,8 +148,8 @@ def plan_generation_pairs(payload: GenerationPairsPlanRequest, db: Session = Dep
 
 
 @router.post("/run-pairs", response_model=GenerationRunResponse)
-def run_generation_pairs(payload: GenerationPairsRunRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
-    category = _get_category_or_404(db, payload.category_id)
+def run_generation_pairs(payload: GenerationPairsRunRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    category = _get_category_or_404(db, payload.category_id, user)
     try:
         tasks = build_task_list_from_pairs(
             db, category.id, [p.model_dump() for p in payload.pairs]
@@ -163,6 +161,7 @@ def run_generation_pairs(payload: GenerationPairsRunRequest, background_tasks: B
         raise HTTPException(status_code=400, detail="No images to generate for this request")
 
     job = GenerationJob(
+        user_id=user.id,
         category=category.name,
         params_json=json.dumps(payload.model_dump()),
         status="pending",
@@ -180,21 +179,22 @@ def run_generation_pairs(payload: GenerationPairsRunRequest, background_tasks: B
 
 
 @router.get("/pair-counts/{category_id}", response_model=PairGenerationCounts)
-def pair_counts(category_id: int, db: Session = Depends(get_db)):
-    category = _get_category_or_404(db, category_id)
+def pair_counts(category_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    category = _get_category_or_404(db, category_id, user)
     return PairGenerationCounts(counts=get_pair_generation_counts(db, category.id))
 
 
 @router.post("/regenerate-same-slots/{image_id}", response_model=RegenerateSameSlotsResponse)
-def regenerate_same_slots(image_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+def regenerate_same_slots(image_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     try:
         task = build_regenerate_task(db, image_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    category = _get_category_or_404(db, task["category_id"])
+    category = _get_category_or_404(db, task["category_id"], user)
 
     job = GenerationJob(
+        user_id=user.id,
         category=task["category"],
         params_json=json.dumps({"regenerate_same_slots_for_image_id": image_id}),
         status="pending",

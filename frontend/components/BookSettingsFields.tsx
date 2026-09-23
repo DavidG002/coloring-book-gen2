@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Settings2 } from "lucide-react";
-import { getBook, updateBook, ApiError, type Book } from "@/lib/api";
+import { getBook, updateBook, getAuthHeaders, ApiError, type Book } from "@/lib/api";
 import { Panel, PanelSection, SaveRow, Field, PAPER_PRESETS } from "./SettingsUI";
 import KnobsPanel from "./KnobsPanel";
 import { useSearchParams } from "next/navigation";
@@ -14,14 +14,14 @@ export type SectionKey = "basics" | "image" | "knobs" | "watermark";
 const SECTION_ORDER: SectionKey[] = ["basics", "image", "knobs", "watermark"];
 
 async function getWatermarkSettings(bookId: number) {
-  const res = await fetch(`${API_BASE_URL}/books/${bookId}/watermark`);
+  const res = await fetch(`${API_BASE_URL}/books/${bookId}/watermark`, { headers: await getAuthHeaders() });
   return res.json();
 }
 
 async function updateWatermarkSettings(bookId: number, payload: Record<string, unknown>) {
   const res = await fetch(`${API_BASE_URL}/books/${bookId}/watermark`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
     body: JSON.stringify(payload),
   });
   return res.json();
@@ -30,8 +30,11 @@ async function updateWatermarkSettings(bookId: number, payload: Record<string, u
 async function uploadWatermarkFile(bookId: number, file: File) {
   const formData = new FormData();
   formData.append("file", file);
+  // Deliberately no Content-Type header — the browser sets the correct
+  // multipart boundary itself when the body is a FormData object.
   const res = await fetch(`${API_BASE_URL}/books/${bookId}/watermark/upload`, {
     method: "POST",
+    headers: await getAuthHeaders(),
     body: formData,
   });
   return res.json();
@@ -64,7 +67,8 @@ export default function BookSettingsFields({
     const timer = setTimeout(async () => {
       try {
         const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/categories/by-name/${bookId}/${encodeURIComponent(selectedCategoryName)}/base-prompt`
+          `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/categories/by-name/${bookId}/${encodeURIComponent(selectedCategoryName)}/base-prompt`,
+          { headers: await getAuthHeaders() }
         );
         const data = await res.json();
         if (!cancelled && res.ok) setBasePrompt(data.base_prompt);
@@ -264,7 +268,7 @@ function setActiveSection(key: SectionKey) {
       if (selectedCategoryName) {
         const res = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/categories/by-name/${bookId}/${encodeURIComponent(selectedCategoryName)}/base-prompt`,
-          { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ base_prompt: trimmed }) }
+          { method: "PUT", headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) }, body: JSON.stringify({ base_prompt: trimmed }) }
         );
         const data = await res.json();
         if (!res.ok) throw new ApiError(res.status, data.detail);

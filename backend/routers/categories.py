@@ -1,10 +1,12 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 from database import get_db
-from models import Category, Subject, Variation, Book
+from models import Category, Subject, Variation, Book, User
 from services.book_deletion import get_category_deletion_info, delete_category_cascade
 from services.translate import auto_translate_new_items, generate_all_translations_for_category
 from schemas import CategoryCreate, CategoryUpdate, CategoryRead, CategorySummary, CategoryDeletionInfo, CategoryDeletionResult
+from services.auth import get_current_user
+from services.ownership import get_owned_book, get_owned_category
 router = APIRouter(prefix="/categories", tags=["categories"])
 
 
@@ -22,7 +24,8 @@ def _to_category_read(category: Category, auto_translated: dict | None = None) -
     )
 
 @router.get("/by-name/{book_id}/{category_name}/base-prompt")
-def get_category_base_prompt_by_name(book_id: int, category_name: str, db: Session = Depends(get_db)):
+def get_category_base_prompt_by_name(book_id: int, category_name: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    get_owned_book(book_id, user, db)
     category = db.query(Category).filter(Category.book_id == book_id, Category.name == category_name).first()
     if not category:
         raise HTTPException(status_code=404, detail=f"Category '{category_name}' not found in book {book_id}")
@@ -30,7 +33,8 @@ def get_category_base_prompt_by_name(book_id: int, category_name: str, db: Sessi
 
 
 @router.put("/by-name/{book_id}/{category_name}/base-prompt")
-def set_category_base_prompt_by_name(book_id: int, category_name: str, payload: dict, db: Session = Depends(get_db)):
+def set_category_base_prompt_by_name(book_id: int, category_name: str, payload: dict, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    get_owned_book(book_id, user, db)
     category = db.query(Category).filter(Category.book_id == book_id, Category.name == category_name).first()
     if not category:
         raise HTTPException(status_code=404, detail=f"Category '{category_name}' not found in book {book_id}")
@@ -39,8 +43,14 @@ def set_category_base_prompt_by_name(book_id: int, category_name: str, payload: 
     return {"base_prompt": category.base_prompt}
 
 @router.get("", response_model=list[CategorySummary])
-def list_categories(db: Session = Depends(get_db)):
-    categories = db.query(Category).options(joinedload(Category.book)).all()
+def list_categories(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    categories = (
+        db.query(Category)
+        .join(Book, Category.book_id == Book.id)
+        .options(joinedload(Category.book))
+        .filter(Book.user_id == user.id)
+        .all()
+    )
     return [
         CategorySummary(
             id=c.id,
@@ -53,19 +63,19 @@ def list_categories(db: Session = Depends(get_db)):
         for c in categories
     ]
 @router.get("/{category_id}", response_model=CategoryRead)
-def get_category(category_id: int, db: Session = Depends(get_db)):
+def get_category(category_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    get_owned_category(category_id, user, db)
     category = (
         db.query(Category)
         .options(joinedload(Category.subjects), joinedload(Category.variations), joinedload(Category.book))
         .filter(Category.id == category_id)
         .first()
     )
-    if not category:
-        raise HTTPException(status_code=404, detail=f"Category {category_id} not found")
     return _to_category_read(category)
 
 @router.post("", response_model=CategoryRead, status_code=201)
-def create_category(payload: CategoryCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+def create_category(payload: CategoryCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    get_owned_book(payload.book_id, user, db)
     existing = (
         db.query(Category)
         .filter(Category.book_id == payload.book_id, Category.name == payload.name)
@@ -73,9 +83,6 @@ def create_category(payload: CategoryCreate, background_tasks: BackgroundTasks, 
     )
     if existing:
         raise HTTPException(status_code=409, detail=f"Category '{payload.name}' already exists in this book")
-    book = db.query(Book).filter(Book.id == payload.book_id).first()
-    if not book:
-        raise HTTPException(status_code=400, detail=f"Book {payload.book_id} not found")
     category = Category(name=payload.name, book_id=payload.book_id)
     db.add(category)
     db.flush()
@@ -94,10 +101,8 @@ def create_category(payload: CategoryCreate, background_tasks: BackgroundTasks, 
     return _to_category_read(category)
 
 @router.put("/{category_id}", response_model=CategoryRead)
-def update_category(category_id: int, payload: CategoryUpdate, db: Session = Depends(get_db)):
-    category = db.query(Category).filter(Category.id == category_id).first()
-    if not category:
-        raise HTTPException(status_code=404, detail=f"Category {category_id} not found")
+def update_category(category_id: int, payload: CategoryUpdate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    category = get_owned_category(category_id, user, db)
 
     if payload.base_prompt is not None:
         category.base_prompt = payload.base_prompt
@@ -170,13 +175,15 @@ def update_category(category_id: int, payload: CategoryUpdate, db: Session = Dep
 
 
 @router.get("/{category_id}/deletion-info", response_model=CategoryDeletionInfo)
-def category_deletion_info(category_id: int, db: Session = Depends(get_db)):
+def category_deletion_info(category_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    get_owned_category(category_id, user, db)
     try:
         return get_category_deletion_info(db, category_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 @router.delete("/{category_id}", response_model=CategoryDeletionResult)
-def delete_category(category_id: int, delete_files: bool = False, db: Session = Depends(get_db)):
+def delete_category(category_id: int, delete_files: bool = False, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    get_owned_category(category_id, user, db)
     try:
         return delete_category_cascade(db, category_id, delete_files)
     except ValueError as e:

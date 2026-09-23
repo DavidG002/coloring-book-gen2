@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 
 from database import get_db
-from models import Category, Subject, Variation, Translation, TranslationItem, VariationTranslationItem
+from models import Category, Subject, Variation, Translation, TranslationItem, VariationTranslationItem, User
 from schemas import (
     TranslationCreate, TranslationUpdate, TranslationRead,
     TranslationItemRead, VariationTranslationItemRead,
@@ -10,16 +10,15 @@ from schemas import (
 )
 from services.translate import translate_phrases
 from schemas import TranslateCategoryNameResponse
+from services.auth import get_current_user
+from services.ownership import get_owned_category
 
 
 router = APIRouter(prefix="/categories/{category_id}/translations", tags=["translations"])
 
 
-def _get_category_or_404(category_id: int, db: Session) -> Category:
-    category = db.query(Category).filter(Category.id == category_id).first()
-    if not category:
-        raise HTTPException(status_code=404, detail=f"Category {category_id} not found")
-    return category
+def _get_category_or_404(category_id: int, db: Session, user: User) -> Category:
+    return get_owned_category(category_id, user, db)
 
 
 def _to_translation_read(translation: Translation) -> TranslationRead:
@@ -58,8 +57,8 @@ def _to_translation_read(translation: Translation) -> TranslationRead:
 
 
 @router.get("", response_model=list[TranslationRead])
-def list_translations(category_id: int, active_only: bool = False, db: Session = Depends(get_db)):
-    category = _get_category_or_404(category_id, db)
+def list_translations(category_id: int, active_only: bool = False, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    category = _get_category_or_404(category_id, db, user)
     translations = category.translations
     if active_only:
         translations = [t for t in translations if t.active]
@@ -67,8 +66,8 @@ def list_translations(category_id: int, active_only: bool = False, db: Session =
 
 
 @router.post("/{lang}/set-active")
-def set_translation_active(category_id: int, lang: str, active: bool, db: Session = Depends(get_db)):
-    category = _get_category_or_404(category_id, db)
+def set_translation_active(category_id: int, lang: str, active: bool, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    category = _get_category_or_404(category_id, db, user)
     translation = next((t for t in category.translations if t.lang == lang), None)
     if not translation:
         raise HTTPException(status_code=404, detail=f"No '{lang}' translation for '{category.name}'")
@@ -78,8 +77,8 @@ def set_translation_active(category_id: int, lang: str, active: bool, db: Sessio
 
 
 @router.get("/{lang}", response_model=TranslationRead)
-def get_translation(category_id: int, lang: str, db: Session = Depends(get_db)):
-    category = _get_category_or_404(category_id, db)
+def get_translation(category_id: int, lang: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    category = _get_category_or_404(category_id, db, user)
     translation = next((t for t in category.translations if t.lang == lang), None)
     if not translation:
         raise HTTPException(status_code=404, detail=f"No '{lang}' translation for '{category.name}'")
@@ -113,12 +112,12 @@ def _resolve_variation_id(category: Category, variation_text: str, db: Session) 
     return variation.id
 
 @router.post("/{lang}/mark-reviewed")
-def mark_translation_reviewed(category_id: int, lang: str, db: Session = Depends(get_db)):
+def mark_translation_reviewed(category_id: int, lang: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """Called when a user opens (and closes) a language's translation
     editor — clears pending_review on every item for that language,
     regardless of whether anything was actually edited. Viewing counts
     as reviewing; no save/edit required."""
-    category = _get_category_or_404(category_id, db)
+    category = _get_category_or_404(category_id, db, user)
     translation = next((t for t in category.translations if t.lang == lang), None)
     if not translation:
         raise HTTPException(status_code=404, detail=f"No '{lang}' translation for '{category.name}'")
@@ -132,8 +131,8 @@ def mark_translation_reviewed(category_id: int, lang: str, db: Session = Depends
     return {"success": True}
 
 @router.post("", response_model=TranslationRead, status_code=201)
-def create_translation(category_id: int, payload: TranslationCreate, db: Session = Depends(get_db)):
-    category = _get_category_or_404(category_id, db)
+def create_translation(category_id: int, payload: TranslationCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    category = _get_category_or_404(category_id, db, user)
 
     existing = next((t for t in category.translations if t.lang == payload.lang), None)
     if existing:
@@ -167,8 +166,8 @@ def create_translation(category_id: int, payload: TranslationCreate, db: Session
 
 
 @router.put("/{lang}", response_model=TranslationRead)
-def update_translation(category_id: int, lang: str, payload: TranslationUpdate, db: Session = Depends(get_db)):
-    category = _get_category_or_404(category_id, db)
+def update_translation(category_id: int, lang: str, payload: TranslationUpdate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    category = _get_category_or_404(category_id, db, user)
     translation = next((t for t in category.translations if t.lang == lang), None)
     if not translation:
         raise HTTPException(status_code=404, detail=f"No '{lang}' translation for '{category.name}'")
@@ -200,8 +199,8 @@ def update_translation(category_id: int, lang: str, payload: TranslationUpdate, 
 
 
 @router.delete("/{lang}", status_code=204)
-def delete_translation(category_id: int, lang: str, db: Session = Depends(get_db)):
-    category = _get_category_or_404(category_id, db)
+def delete_translation(category_id: int, lang: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    category = _get_category_or_404(category_id, db, user)
     translation = next((t for t in category.translations if t.lang == lang), None)
     if not translation:
         raise HTTPException(status_code=404, detail=f"No '{lang}' translation for '{category.name}'")
@@ -210,8 +209,8 @@ def delete_translation(category_id: int, lang: str, db: Session = Depends(get_db
 
 
 @router.post("/{lang}/translate-variations", response_model=TranslateVariationsResponse)
-def translate_variations(category_id: int, lang: str, db: Session = Depends(get_db)):
-    category = _get_category_or_404(category_id, db)
+def translate_variations(category_id: int, lang: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    category = _get_category_or_404(category_id, db, user)
     translation = next((t for t in category.translations if t.lang == lang), None)
     if not translation:
         raise HTTPException(status_code=404, detail=f"No '{lang}' translation for '{category.name}' — create it first")
@@ -244,8 +243,8 @@ def translate_variations(category_id: int, lang: str, db: Session = Depends(get_
 
 
 @router.post("/{lang}/translate-subjects", response_model=TranslateVariationsResponse)
-def translate_subjects(category_id: int, lang: str, db: Session = Depends(get_db)):
-    category = _get_category_or_404(category_id, db)
+def translate_subjects(category_id: int, lang: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    category = _get_category_or_404(category_id, db, user)
     translation = next((t for t in category.translations if t.lang == lang), None)
     if not translation:
         raise HTTPException(status_code=404, detail=f"No '{lang}' translation for '{category.name}' — create it first")
@@ -278,8 +277,8 @@ def translate_subjects(category_id: int, lang: str, db: Session = Depends(get_db
 
 
 @router.post("/{lang}/translate-category-name", response_model=TranslateCategoryNameResponse)
-def translate_category_name(category_id: int, lang: str, db: Session = Depends(get_db)):
-    category = _get_category_or_404(category_id, db)
+def translate_category_name(category_id: int, lang: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    category = _get_category_or_404(category_id, db, user)
     results = translate_phrases([category.name], lang)
     translated = results.get(category.name, "")
     return TranslateCategoryNameResponse(translated_text=translated)

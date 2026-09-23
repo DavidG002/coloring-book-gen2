@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useSession, signOut } from "next-auth/react";
 import {
-  BookOpen, LayoutDashboard, Library, Grid2X2, Printer, Settings, Sparkles,ArrowUpRight, ChevronDown, ChevronLeft,
+  BookOpen, LayoutDashboard, Library, Grid2X2, Printer, Settings, Sparkles,ArrowUpRight, ChevronDown, ChevronLeft, LogOut,
 } from "lucide-react";
 import { getBooks } from "@/lib/api";
 import NewBookModal from "./NewBookModal";
@@ -24,10 +25,16 @@ export default function AppShell({
   // original 1100 everywhere this isn't passed.
   contentMaxWidth?: number;
 }) {
+  const { data: session } = useSession();
   const [bookCount, setBookCount] = useState<number | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [ready, setReady] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+
+  // Shown in place of the old static "My studio" placeholder — the
+  // sidebar card doubles as the sign-out control now that accounts exist.
+  const displayName = session?.user?.name || session?.user?.email || "Signed in";
+  const initial = displayName.trim().charAt(0).toUpperCase() || "?";
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -83,34 +90,39 @@ export default function AppShell({
         </div>
 
         {!collapsed ? (
-          <div
-            className="flex items-center gap-2.5 p-2.5 mb-7 rounded-xl"
+          <button
+            type="button"
+            onClick={() => signOut({ callbackUrl: "/login" })}
+            title="Sign out"
+            className="flex items-center gap-2.5 p-2.5 mb-7 rounded-xl text-left w-full nav-hover"
             style={{ border: "1px solid var(--pencil-light)", background: "var(--canvas)" }}
           >
             <div
               className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-[11px] font-bold"
               style={{ background: "var(--teal-tint)", color: "var(--teal-dark)" }}
             >
-              A
+              {initial}
             </div>
             <div className="min-w-0">
               <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--pencil)", letterSpacing: "0.12em" }}>
-                Workspace
+                Signed in
               </p>
               <p className="text-xs font-semibold m-0 mt-0.5 truncate" style={{ color: "var(--ink)" }}>
-                My studio
+                {displayName}
               </p>
             </div>
-            <ChevronDown size={14} className="ml-auto shrink-0" style={{ color: "var(--pencil)" }} />
-          </div>
+            <LogOut size={14} className="ml-auto shrink-0" style={{ color: "var(--pencil)" }} />
+          </button>
         ) : (
-          <div
+          <button
+            type="button"
+            onClick={() => signOut({ callbackUrl: "/login" })}
             className="flex items-center justify-center mb-7 mx-auto rounded-full text-[11px] font-bold"
             style={{ width: 28, height: 28, background: "var(--teal-tint)", color: "var(--teal-dark)" }}
-            title="My studio"
+            title={`Sign out (${displayName})`}
           >
-            A
-          </div>
+            {initial}
+          </button>
         )}
 
         <nav className="grid gap-1">

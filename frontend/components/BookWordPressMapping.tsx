@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Link2, Check, Plus } from "lucide-react";
-import { getBooks } from "@/lib/api";
+import { getBooks, getAuthHeaders } from "@/lib/api";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -17,13 +17,15 @@ interface WpCategory {
 }
 
 async function getWordpressCategories(): Promise<WpCategory[]> {
-  const res = await fetch(`${API_BASE_URL}/wordpress/categories`);
+  const res = await fetch(`${API_BASE_URL}/wordpress/categories`, { headers: await getAuthHeaders() });
   if (!res.ok) throw new Error((await res.json()).detail || "Failed to fetch WordPress categories");
   return res.json();
 }
 
 async function getBookMapping(bookId: number, lang: string): Promise<number | null> {
-  const res = await fetch(`${API_BASE_URL}/wordpress/books/${bookId}/mapping?lang=${lang}`);
+  const res = await fetch(`${API_BASE_URL}/wordpress/books/${bookId}/mapping?lang=${lang}`, {
+    headers: await getAuthHeaders(),
+  });
   if (!res.ok) return null;
   const data = await res.json();
   return data.wp_term_id;
@@ -32,7 +34,7 @@ async function getBookMapping(bookId: number, lang: string): Promise<number | nu
 async function createBookMapping(bookId: number, lang: string, body: { wp_term_id?: number; term_name?: string }): Promise<void> {
   const res = await fetch(`${API_BASE_URL}/wordpress/books/${bookId}/mapping`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
     body: JSON.stringify({ lang, ...body }),
   });
   if (!res.ok) throw new Error((await res.json()).detail || "Failed to save mapping");

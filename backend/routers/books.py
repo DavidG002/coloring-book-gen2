@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import Book, BookPreview
+from models import Book, BookPreview, User
 from services.generation import (
     generate_preview_image, get_sample_task_for_book,
     get_eligible_preview_categories, save_preview_to_history,
@@ -14,6 +14,8 @@ from services.generation import (
 )
 from schemas import BookCreate, BookUpdate, BookRead, BookSummary, BookPreviewRequest, BookPreviewAvailability, BookPreviewRead, BookDeletionInfo, BookDeletionResult, WatermarkSettings, WatermarkSettingsUpdate, CategoryPreviewOptions
 from services.book_deletion import get_book_deletion_info, delete_book_cascade
+from services.auth import get_current_user
+from services.ownership import get_owned_book
 
 
 
@@ -21,18 +23,16 @@ router = APIRouter(prefix="/books", tags=["books"])
 
 
 @router.get("", response_model=list[BookSummary])
-def list_books(db: Session = Depends(get_db)):
-    books = db.query(Book).all()
+def list_books(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    books = db.query(Book).filter(Book.user_id == user.id).all()
     return [
         BookSummary(id=b.id, name=b.name, category_count=len(b.categories))
         for b in books
     ]
 
 @router.get("/{book_id}/preview-availability", response_model=BookPreviewAvailability)
-def check_preview_availability(book_id: int, db: Session = Depends(get_db)):
-    book = db.query(Book).filter(Book.id == book_id).first()
-    if not book:
-        raise HTTPException(status_code=404, detail=f"Book {book_id} not found")
+def check_preview_availability(book_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    book = get_owned_book(book_id, user, db)
 
     all_category_names = [c.name for c in book.categories]
     eligible = get_eligible_preview_categories(db, book_id)
@@ -52,10 +52,8 @@ def check_preview_availability(book_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{book_id}/preview")
-def preview_book_settings(book_id: int, payload: BookPreviewRequest, db: Session = Depends(get_db)):
-    book = db.query(Book).filter(Book.id == book_id).first()
-    if not book:
-        raise HTTPException(status_code=404, detail=f"Book {book_id} not found")
+def preview_book_settings(book_id: int, payload: BookPreviewRequest, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    book = get_owned_book(book_id, user, db)
 
     task = get_sample_task_for_book(
         db,
@@ -105,7 +103,8 @@ def preview_book_settings(book_id: int, payload: BookPreviewRequest, db: Session
 
 
 @router.get("/{book_id}/previews", response_model=list[BookPreviewRead])
-def list_previews(book_id: int, db: Session = Depends(get_db)):
+def list_previews(book_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    get_owned_book(book_id, user, db)
     previews = (
         db.query(BookPreview)
         .filter(BookPreview.book_id == book_id)
@@ -123,8 +122,13 @@ def list_previews(book_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/previews/{preview_id}/file")
-def get_preview_file(preview_id: int, db: Session = Depends(get_db)):
-    preview = db.query(BookPreview).filter(BookPreview.id == preview_id).first()
+def get_preview_file(preview_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    preview = (
+        db.query(BookPreview)
+        .join(Book, BookPreview.book_id == Book.id)
+        .filter(BookPreview.id == preview_id, Book.user_id == user.id)
+        .first()
+    )
     if not preview:
         raise HTTPException(status_code=404, detail="Preview not found")
     if not os.path.exists(preview.file_path):
@@ -132,7 +136,8 @@ def get_preview_file(preview_id: int, db: Session = Depends(get_db)):
     return FileResponse(preview.file_path, media_type="image/png")
 
 @router.post("/{book_id}/previews/{preview_id}/promote")
-def promote_preview_route(book_id: int, preview_id: int, db: Session = Depends(get_db)):
+def promote_preview_route(book_id: int, preview_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    get_owned_book(book_id, user, db)
     try:
         return promote_preview_to_image(db, book_id, preview_id)
     except ValueError as e:
@@ -141,17 +146,16 @@ def promote_preview_route(book_id: int, preview_id: int, db: Session = Depends(g
 
 @router.get("/{book_id}/preview-options/{category_name}", response_model=CategoryPreviewOptions)
 def get_category_preview_options_route(
-    book_id: int, category_name: str, subject_name: str | None = None, db: Session = Depends(get_db)
+    book_id: int, category_name: str, subject_name: str | None = None, db: Session = Depends(get_db), user: User = Depends(get_current_user)
 ):
+    get_owned_book(book_id, user, db)
     return get_category_preview_options(db, book_id, category_name, subject_name)
 
 
 
 @router.get("/{book_id}", response_model=BookRead)
-def get_book(book_id: int, db: Session = Depends(get_db)):
-    book = db.query(Book).filter(Book.id == book_id).first()
-    if not book:
-        raise HTTPException(status_code=404, detail=f"Book {book_id} not found")
+def get_book(book_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    book = get_owned_book(book_id, user, db)
     return BookRead(
         id=book.id,
         name=book.name,
@@ -184,12 +188,12 @@ def get_book(book_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=BookRead, status_code=201)
-def create_book(payload: BookCreate, db: Session = Depends(get_db)):
-    existing = db.query(Book).filter(Book.name == payload.name).first()
+def create_book(payload: BookCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    existing = db.query(Book).filter(Book.name == payload.name, Book.user_id == user.id).first()
     if existing:
         raise HTTPException(status_code=409, detail=f"Book '{payload.name}' already exists")
 
-    book = Book(**payload.model_dump())
+    book = Book(**payload.model_dump(), user_id=user.id)
     db.add(book)
     db.commit()
     db.refresh(book)
@@ -225,10 +229,8 @@ def create_book(payload: BookCreate, db: Session = Depends(get_db)):
 
 
 @router.put("/{book_id}", response_model=BookRead)
-def update_book(book_id: int, payload: BookUpdate, db: Session = Depends(get_db)):
-    book = db.query(Book).filter(Book.id == book_id).first()
-    if not book:
-        raise HTTPException(status_code=404, detail=f"Book {book_id} not found")
+def update_book(book_id: int, payload: BookUpdate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    book = get_owned_book(book_id, user, db)
 
     updates = payload.model_dump(exclude_unset=True)
     for key, value in updates.items():
@@ -268,7 +270,8 @@ def update_book(book_id: int, payload: BookUpdate, db: Session = Depends(get_db)
 
 
 @router.get("/{book_id}/deletion-info", response_model=BookDeletionInfo)
-def deletion_info(book_id: int, db: Session = Depends(get_db)):
+def deletion_info(book_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    get_owned_book(book_id, user, db)
     try:
         return get_book_deletion_info(db, book_id)
     except ValueError as e:
@@ -276,7 +279,8 @@ def deletion_info(book_id: int, db: Session = Depends(get_db)):
 
 
 @router.delete("/{book_id}", response_model=BookDeletionResult)
-def delete_book(book_id: int, delete_files: bool = False, db: Session = Depends(get_db)):
+def delete_book(book_id: int, delete_files: bool = False, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    get_owned_book(book_id, user, db)
     try:
         return delete_book_cascade(db, book_id, delete_files)
     except ValueError as e:
@@ -287,10 +291,8 @@ WATERMARK_DIR = "watermarks"
 
 
 @router.get("/{book_id}/watermark", response_model=WatermarkSettings)
-def get_watermark_settings(book_id: int, db: Session = Depends(get_db)):
-    book = db.query(Book).filter(Book.id == book_id).first()
-    if not book:
-        raise HTTPException(status_code=404, detail=f"Book {book_id} not found")
+def get_watermark_settings(book_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    book = get_owned_book(book_id, user, db)
     watermark_path = os.path.join(WATERMARK_DIR, f"{book_id}.png")
     return WatermarkSettings(
         watermark_enabled=book.watermark_enabled,
@@ -302,10 +304,8 @@ def get_watermark_settings(book_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/{book_id}/watermark", response_model=WatermarkSettings)
-def update_watermark_settings(book_id: int, payload: WatermarkSettingsUpdate, db: Session = Depends(get_db)):
-    book = db.query(Book).filter(Book.id == book_id).first()
-    if not book:
-        raise HTTPException(status_code=404, detail=f"Book {book_id} not found")
+def update_watermark_settings(book_id: int, payload: WatermarkSettingsUpdate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    book = get_owned_book(book_id, user, db)
 
     if payload.watermark_enabled is not None:
         book.watermark_enabled = payload.watermark_enabled
@@ -329,10 +329,8 @@ def update_watermark_settings(book_id: int, payload: WatermarkSettingsUpdate, db
 
 
 @router.post("/{book_id}/watermark/upload", response_model=WatermarkSettings)
-async def upload_watermark(book_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
-    book = db.query(Book).filter(Book.id == book_id).first()
-    if not book:
-        raise HTTPException(status_code=404, detail=f"Book {book_id} not found")
+async def upload_watermark(book_id: int, file: UploadFile = File(...), db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    book = get_owned_book(book_id, user, db)
 
     os.makedirs(WATERMARK_DIR, exist_ok=True)
     watermark_path = os.path.join(WATERMARK_DIR, f"{book_id}.png")
@@ -358,10 +356,8 @@ async def upload_watermark(book_id: int, file: UploadFile = File(...), db: Sessi
 
 
 @router.delete("/{book_id}/watermark", status_code=204)
-def delete_watermark(book_id: int, db: Session = Depends(get_db)):
-    book = db.query(Book).filter(Book.id == book_id).first()
-    if not book:
-        raise HTTPException(status_code=404, detail=f"Book {book_id} not found")
+def delete_watermark(book_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    get_owned_book(book_id, user, db)
     watermark_path = os.path.join(WATERMARK_DIR, f"{book_id}.png")
     if os.path.exists(watermark_path):
         os.remove(watermark_path)

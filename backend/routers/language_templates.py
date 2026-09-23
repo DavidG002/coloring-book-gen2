@@ -2,15 +2,18 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import LanguageTemplateDefault, Book
+from models import LanguageTemplateDefault, Book, User
 from schemas import LanguageTemplateDefaultRead, LanguageTemplateDefaultUpdate
 from services.translate import translate_template_structure_for_book
+from services.auth import get_current_user
+from services.ownership import get_owned_book
 
 router = APIRouter(prefix="/books/{book_id}/language-templates", tags=["language-templates"])
 
 
 @router.get("/{lang}", response_model=LanguageTemplateDefaultRead)
-def get_language_template(book_id: int, lang: str, db: Session = Depends(get_db)):
+def get_language_template(book_id: int, lang: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    get_owned_book(book_id, user, db)
     row = (
         db.query(LanguageTemplateDefault)
         .filter(LanguageTemplateDefault.book_id == book_id, LanguageTemplateDefault.lang == lang)
@@ -28,7 +31,8 @@ def get_language_template(book_id: int, lang: str, db: Session = Depends(get_db)
 
 
 @router.put("/{lang}", response_model=LanguageTemplateDefaultRead)
-def update_language_template(book_id: int, lang: str, payload: LanguageTemplateDefaultUpdate, db: Session = Depends(get_db)):
+def update_language_template(book_id: int, lang: str, payload: LanguageTemplateDefaultUpdate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    get_owned_book(book_id, user, db)
     row = (
         db.query(LanguageTemplateDefault)
         .filter(LanguageTemplateDefault.book_id == book_id, LanguageTemplateDefault.lang == lang)
@@ -63,10 +67,8 @@ def update_language_template(book_id: int, lang: str, payload: LanguageTemplateD
 
 
 @router.post("/{lang}/auto-translate", response_model=LanguageTemplateDefaultRead)
-def auto_translate_language_template(book_id: int, lang: str, db: Session = Depends(get_db)):
-    book = db.query(Book).filter(Book.id == book_id).first()
-    if not book:
-        raise HTTPException(status_code=404, detail=f"Book {book_id} not found")
+def auto_translate_language_template(book_id: int, lang: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    book = get_owned_book(book_id, user, db)
 
     translated = translate_template_structure_for_book(book.product_noun, lang)
 

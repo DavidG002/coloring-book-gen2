@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Globe2, ChevronDown, ExternalLink, Link2Off, Radio, CornerDownRight } from "lucide-react";
+import { getAuthHeaders } from "@/lib/api";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -36,7 +37,7 @@ interface OverviewResponse {
 }
 
 async function getPublishOverview(): Promise<OverviewResponse> {
-  const res = await fetch(`${API_BASE_URL}/wordpress/overview`);
+  const res = await fetch(`${API_BASE_URL}/wordpress/overview`, { headers: await getAuthHeaders() });
   return res.json();
 }
 

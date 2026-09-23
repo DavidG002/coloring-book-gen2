@@ -780,3 +780,24 @@ class RegenerateSameSlotsResponse(BaseModel):
     job_id: int
     status: str
     total_images: int
+
+
+## ---------- Auth ----------
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class LoginResponse(BaseModel):
+    id: int
+    email: str
+    name: str
+    is_admin: bool
+
+
+class CurrentUserRead(BaseModel):
+    id: int
+    email: str
+    name: str
+    is_admin: bool

@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { FileText, WandSparkles, Check, ArrowRight } from "lucide-react";
-import { getBook, ApiError, type Book, type CategorySummary } from "@/lib/api";
+import { getBook, getAuthHeaders, ApiError, type Book, type CategorySummary } from "@/lib/api";
+import { useAccessToken } from "@/lib/hooks/useAccessToken";
 import { Panel, PanelSection } from "./SettingsUI";
 import PrepareCategoryPanel from "./PrepareCategoryPanel";
 
@@ -26,7 +27,9 @@ interface BookPreviewHistoryItem {
 }
 
 async function checkPreviewAvailability(bookId: number) {
-  const res = await fetch(`${API_BASE_URL}/books/${bookId}/preview-availability`);
+  const res = await fetch(`${API_BASE_URL}/books/${bookId}/preview-availability`, {
+    headers: await getAuthHeaders(),
+  });
   return res.json() as Promise<{
     available: boolean;
     all_categories: string[];
@@ -39,7 +42,9 @@ async function checkPreviewAvailability(bookId: number) {
 
 async function getCategoryPreviewOptions(bookId: number, categoryName: string, subjectName?: string) {
   const query = subjectName ? `?subject_name=${encodeURIComponent(subjectName)}` : "";
-  const res = await fetch(`${API_BASE_URL}/books/${bookId}/preview-options/${encodeURIComponent(categoryName)}${query}`);
+  const res = await fetch(`${API_BASE_URL}/books/${bookId}/preview-options/${encodeURIComponent(categoryName)}${query}`, {
+    headers: await getAuthHeaders(),
+  });
   return res.json() as Promise<{ subjects: string[]; variations: string[] }>;
 }
 
@@ -59,7 +64,7 @@ async function fetchPreviewImage(
 ): Promise<Blob> {
   const res = await fetch(`${API_BASE_URL}/books/${bookId}/preview`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
     body: JSON.stringify(settings),
   });
   if (!res.ok) {
@@ -70,7 +75,9 @@ async function fetchPreviewImage(
 }
 
 async function getPreviewHistory(bookId: number): Promise<BookPreviewHistoryItem[]> {
-  const res = await fetch(`${API_BASE_URL}/books/${bookId}/previews`);
+  const res = await fetch(`${API_BASE_URL}/books/${bookId}/previews`, {
+    headers: await getAuthHeaders(),
+  });
   return res.json();
 }
 
@@ -85,7 +92,10 @@ async function promotePreviewToImage(
   settings_updated: boolean;
   already_promoted: boolean;
 }> {
-  const res = await fetch(`${API_BASE_URL}/books/${bookId}/previews/${previewId}/promote`, { method: "POST" });
+  const res = await fetch(`${API_BASE_URL}/books/${bookId}/previews/${previewId}/promote`, {
+    method: "POST",
+    headers: await getAuthHeaders(),
+  });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new Error(data.detail || "Failed to use this preview as the final image");
@@ -93,8 +103,14 @@ async function promotePreviewToImage(
   return res.json();
 }
 
-function previewFileUrl(previewId: number): string {
-  return `${API_BASE_URL}/books/previews/${previewId}/file`;
+// Handed straight to <img src>, which can't set an Authorization header —
+// so the access token rides along as a query param instead (accepted as a
+// fallback by backend/services/auth.py's get_current_user). accessToken is
+// undefined until the session has loaded (see useAccessToken); callers
+// should hold off rendering the src until then rather than requesting the
+// URL with no token and getting a 401.
+function previewFileUrl(previewId: number, accessToken: string | undefined): string {
+  return `${API_BASE_URL}/books/previews/${previewId}/file?token=${encodeURIComponent(accessToken ?? "")}`;
 }
 
 function formatDate(iso: string): string {
@@ -117,6 +133,7 @@ export default function BookPreviewSection({
   liveImageSettings?: { canvas_width: number; canvas_height: number; subject_size_ratio: number } | null;
 }) {
   const router = useRouter();
+  const accessToken = useAccessToken();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -613,12 +630,12 @@ export default function BookPreviewSection({
                 }}
               >
                 <img
-                  src={previewFileUrl(p.id)}
+                  src={previewFileUrl(p.id, accessToken)}
                   alt={`${p.subject} preview`}
                   draggable={false}
                   onClick={() => {
                     if (wheelDragMoved.current) return;
-                    setLightboxImageUrl(previewFileUrl(p.id));
+                    setLightboxImageUrl(previewFileUrl(p.id, accessToken));
                     setShowFullSize(true);
                   }}
                   style={{
@@ -892,10 +909,10 @@ export default function BookPreviewSection({
                   {expandedPreviewId === p.id && (
                     <div className="px-4 pb-4">
                       <img
-                        src={previewFileUrl(p.id)}
+                        src={previewFileUrl(p.id, accessToken)}
                         alt={`${p.subject} preview`}
                         onClick={() => {
-                          setLightboxImageUrl(previewFileUrl(p.id));
+                          setLightboxImageUrl(previewFileUrl(p.id, accessToken));
                           setShowFullSize(true);
                         }}
                         className="max-w-xs rounded-md border-[1.5px] mb-2 cursor-pointer hover:opacity-90 transition-opacity"

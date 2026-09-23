@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Plus, Trash2, Check, ChevronRight, WandSparkles, ArrowUp, ArrowDown, Minimize2, Maximize2, X } from "lucide-react";
 import SequencePanel from "./SequencePanel";
-import { getBook, type Category } from "@/lib/api";
+import { getBook, getAuthHeaders, type Category } from "@/lib/api";
 import CategoryImageStrip from "./CategoryImageStrip";
 import BatchHistoryPanel from "./BatchHistoryPanel";
 import EditListModal from "./EditListModal";
@@ -29,7 +29,7 @@ interface JobStatus {
 async function runPairs(categoryId: number, pairs: Pair[]) {
   const res = await fetch(`${API_BASE_URL}/generate/run-pairs`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
     body: JSON.stringify({ category_id: categoryId, pairs }),
   });
   if (!res.ok) throw new Error((await res.json()).detail || "Failed to start generation");
@@ -37,16 +37,16 @@ async function runPairs(categoryId: number, pairs: Pair[]) {
 }
 
 async function getJobStatus(jobId: number): Promise<JobStatus> {
-  const res = await fetch(`${API_BASE_URL}/generate/status/${jobId}`);
+  const res = await fetch(`${API_BASE_URL}/generate/status/${jobId}`, { headers: await getAuthHeaders() });
   return res.json();
 }
 
 async function cancelJob(jobId: number) {
-  await fetch(`${API_BASE_URL}/generate/cancel/${jobId}`, { method: "POST" });
+  await fetch(`${API_BASE_URL}/generate/cancel/${jobId}`, { method: "POST", headers: await getAuthHeaders() });
 }
 
 async function getPairCounts(categoryId: number): Promise<Record<string, number>> {
-  const res = await fetch(`${API_BASE_URL}/generate/pair-counts/${categoryId}`);
+  const res = await fetch(`${API_BASE_URL}/generate/pair-counts/${categoryId}`, { headers: await getAuthHeaders() });
   const data = await res.json();
   return data.counts ?? {};
 }
@@ -54,7 +54,7 @@ async function getPairCounts(categoryId: number): Promise<Record<string, number>
 async function updateCategoryLists(categoryId: number, body: { subjects?: string[]; variations?: string[]; variations_subject_id?: number }) {
   const res = await fetch(`${API_BASE_URL}/categories/${categoryId}`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error((await res.json()).detail || "Failed to update category");
@@ -343,7 +343,7 @@ export default function GenerateSequencePanel({
             setRefreshTrigger((n) => n + 1);
             getPairCounts(category.id).then(setPairCounts).catch(() => {});
             if (status.status === "done") {
-              fetch(`${API_BASE_URL}/categories/${category.id}/seo/pending-review-count`)
+              getAuthHeaders().then((headers) => fetch(`${API_BASE_URL}/categories/${category.id}/seo/pending-review-count`, { headers }))
                 .then((r) => r.json())
                 .then((data) => {
                   if (data.count > 0) {
@@ -500,9 +500,10 @@ export default function GenerateSequencePanel({
 
                   if (candidateIds.length > 0) {
                     try {
+                      const listAuthHeaders = await getAuthHeaders();
                       const [newImagesRes, translationsRes] = await Promise.all([
-                        fetch(`${API_BASE_URL}/review/images-by-ids?ids=${candidateIds.join(",")}`).then((r) => r.json()),
-                        fetch(`${API_BASE_URL}/categories/${category.id}/translations?active_only=true`).then((r) => r.json()),
+                        fetch(`${API_BASE_URL}/review/images-by-ids?ids=${candidateIds.join(",")}`, { headers: listAuthHeaders }).then((r) => r.json()),
+                        fetch(`${API_BASE_URL}/categories/${category.id}/translations?active_only=true`, { headers: listAuthHeaders }).then((r) => r.json()),
                       ]);
                       const langs = translationsRes.map((t: { lang: string }) => t.lang);
                       const imagesById: Record<number, { id: number; filename: string; subject: string; variation_text: string | null }> = {};
@@ -521,7 +522,7 @@ export default function GenerateSequencePanel({
                         }));
                         const checkRes = await fetch(`${API_BASE_URL}/publish/check-fully-published`, {
                           method: "POST",
-                          headers: { "Content-Type": "application/json" },
+                          headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
                           body: JSON.stringify({ category_id: category.id, images: imagesPayload, langs }),
                         }).then((r) => r.json());
                         blockedIds = checkRes.exact_file_blocked ?? [];

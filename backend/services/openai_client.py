@@ -18,3 +18,15 @@ def get_openai_client() -> OpenAI:
         raise ValueError("No OpenAI API key configured. Add one in Settings.")
 
     return OpenAI(api_key=api_key)
+
+
+def get_active_credential_key() -> str:
+    """Identifies which OpenAI credential is "active", for rate-limiting
+    purposes (see services/rate_limits.py). Today there's only ever one
+    row (id=1, shared by every user — see get_openai_client above), so
+    this always returns the same key and every user shares one rate-limit
+    bucket. Once AppCredential moves to per-user (roadmap task 5), this
+    becomes the caller's own credential id instead — rate limiting then
+    becomes per-user automatically, with no change needed in
+    services/rate_limits.py or any of its callers."""
+    return "credential:1"

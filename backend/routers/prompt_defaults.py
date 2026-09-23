@@ -3,10 +3,13 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import Setting
+from models import Setting, User
 from schemas import PromptDefaultsRead, PromptDefaultsUpdate
+from services.auth import get_current_user
 
 router = APIRouter(prefix="/defaults/prompt-template", tags=["prompt-defaults"])
+
+# NOTE: global Setting rows, not per-user — same as routers/settings.py.
 
 # Seeded once, then fully editable from the frontend — this is a *starting*
 # default, not a hardcoded fallback used at generation time.
@@ -49,7 +52,7 @@ def _ensure_seeded(db: Session):
 
 
 @router.get("", response_model=PromptDefaultsRead)
-def get_prompt_defaults(db: Session = Depends(get_db)):
+def get_prompt_defaults(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     _ensure_seeded(db)
     base_prompt = db.query(Setting).filter(Setting.key == BASE_PROMPT_KEY).first().value
     variations = json.loads(db.query(Setting).filter(Setting.key == VARIATIONS_KEY).first().value)
@@ -57,7 +60,7 @@ def get_prompt_defaults(db: Session = Depends(get_db)):
 
 
 @router.put("", response_model=PromptDefaultsRead)
-def update_prompt_defaults(payload: PromptDefaultsUpdate, db: Session = Depends(get_db)):
+def update_prompt_defaults(payload: PromptDefaultsUpdate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     _ensure_seeded(db)
 
     if payload.base_prompt is not None:

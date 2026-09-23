@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { ShieldCheck, UserRound, KeyRound, Sparkles, ChevronRight } from "lucide-react";
-import { ApiError } from "@/lib/api";
+import { ApiError, getAuthHeaders } from "@/lib/api";
 import { AccountSection, SubCard, SaveRow, Toggle } from "@/components/SettingsUI";
 import BookWordPressMapping from "@/components/BookWordPressMapping";
 import AppShell from "@/components/AppShell";
@@ -15,19 +15,19 @@ type OpenAIKeyRead = components["schemas"]["OpenAIKeyRead"];
 type WordPressIntegrationRead = components["schemas"]["WordPressIntegrationRead"];
 
 async function getOpenAIKey(): Promise<OpenAIKeyRead> {
-  const res = await fetch(`${API_BASE_URL}/account/openai-key`);
+  const res = await fetch(`${API_BASE_URL}/account/openai-key`, { headers: await getAuthHeaders() });
   return res.json();
 }
 async function updateOpenAIKey(key: string): Promise<OpenAIKeyRead> {
   const res = await fetch(`${API_BASE_URL}/account/openai-key`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
     body: JSON.stringify({ openai_api_key: key }),
   });
   return res.json();
 }
 async function getWordPressIntegration(): Promise<WordPressIntegrationRead> {
-  const res = await fetch(`${API_BASE_URL}/account/wordpress`);
+  const res = await fetch(`${API_BASE_URL}/account/wordpress`, { headers: await getAuthHeaders() });
   return res.json();
 }
 async function updateWordPressIntegration(data: {
@@ -40,13 +40,13 @@ async function updateWordPressIntegration(data: {
 }): Promise<WordPressIntegrationRead> {
   const res = await fetch(`${API_BASE_URL}/account/wordpress`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
     body: JSON.stringify(data),
   });
   return res.json();
 }
 async function testWordPressConnection(): Promise<{ success: boolean; message: string }> {
-  const res = await fetch(`${API_BASE_URL}/account/wordpress/test`, { method: "POST" });
+  const res = await fetch(`${API_BASE_URL}/account/wordpress/test`, { method: "POST", headers: await getAuthHeaders() });
   return res.json();
 }
 

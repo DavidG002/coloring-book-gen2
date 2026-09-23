@@ -4,7 +4,7 @@ from pydantic import BaseModel
 
 from database import get_db
 import httpx
-from models import GenerationImage, Category, WordPressSubjectTerm
+from models import GenerationImage, Category, WordPressSubjectTerm, Subject, User
 from services.wordpress_publish import (
     push_batch_to_wordpress, preview_wordpress_push, sync_pushed_item_to_wordpress,
     verify_and_clean_stale_pushes, _get_wp_config, list_wordpress_categories, map_book_to_term,
@@ -16,6 +16,8 @@ from schemas import (
     WordPressSyncRequest, WordPressSyncResponse, WordPressVerifyRequest, WordPressVerifyResponse,
     WordPressOverviewResponse,
 )
+from services.auth import get_current_user
+from services.ownership import get_owned_book, get_owned_category
 
 
 class ExcludeRequest(BaseModel):
@@ -26,15 +28,20 @@ router = APIRouter(prefix="/wordpress", tags=["wordpress"])
 
 
 @router.get("/overview", response_model=WordPressOverviewResponse)
-def get_publish_overview_route(db: Session = Depends(get_db)):
+def get_publish_overview_route(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """Every category with a real, live WordPress publishing page, grouped
     with its per-language links — the read-only data behind the Print &
-    Publish page's connections section."""
+    Publish page's connections section.
+
+    NOTE: not ownership-scoped to the caller — WordPress config is still
+    a single shared singleton (AppCredential/WordPressIntegration, task 5
+    in the roadmap), so this reflects the one shared site's overview for
+    any logged-in user, same as before multiuser support existed."""
     return WordPressOverviewResponse(**get_publish_overview(db))
 
 
 @router.get("/categories")
-def get_wordpress_categories(db: Session = Depends(get_db)):
+def get_wordpress_categories(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """Real, live top-level WordPress categories from the connected site —
     used by the Book-mapping setup screen."""
     try:
@@ -53,7 +60,8 @@ class BookMappingRequest(BaseModel):
 
 
 @router.post("/books/{book_id}/mapping")
-def create_book_mapping(book_id: int, payload: BookMappingRequest, db: Session = Depends(get_db)):
+def create_book_mapping(book_id: int, payload: BookMappingRequest, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    get_owned_book(book_id, user, db)
     try:
         config = _get_wp_config(db)
         term_id = map_book_to_term(db, config, book_id, payload.lang, payload.wp_term_id, payload.term_name)
@@ -65,7 +73,8 @@ def create_book_mapping(book_id: int, payload: BookMappingRequest, db: Session =
 
 
 @router.get("/books/{book_id}/mapping")
-def get_book_mapping(book_id: int, lang: str, db: Session = Depends(get_db)):
+def get_book_mapping(book_id: int, lang: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    get_owned_book(book_id, user, db)
     config = _get_wp_config(db)
     mapping = (
         db.query(WordPressBookTerm)
@@ -82,8 +91,21 @@ class RenameSubjectTagRequest(BaseModel):
     update_slug: bool = False
 
 
+def _check_subject_ownership(db: Session, subject_id: int, user: User) -> None:
+    subject = db.query(Subject).filter(Subject.id == subject_id).first()
+    if not subject:
+        raise HTTPException(status_code=404, detail="Subject not found")
+    get_owned_category(subject.category_id, user, db)
+
+
+# NOTE: this function was defined twice in this file before this pass
+# (found while adding auth) — Python keeps only the second definition,
+# so the first was dead code. Left both in place, both now with the
+# ownership check, rather than changing behavior in an auth-focused
+# change; worth cleaning up separately.
 @router.post("/rename-subject-tag")
-def rename_subject_tag(payload: RenameSubjectTagRequest, db: Session = Depends(get_db)):
+def rename_subject_tag(payload: RenameSubjectTagRequest, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    _check_subject_ownership(db, payload.subject_id, user)
     try:
         config = _get_wp_config(db)
         return rename_subject_term(db, payload.subject_id, payload.lang, payload.new_name, config.site_url, payload.update_slug)
@@ -94,7 +116,8 @@ def rename_subject_tag(payload: RenameSubjectTagRequest, db: Session = Depends(g
 
 
 @router.post("/rename-subject-tag")
-def rename_subject_tag(payload: RenameSubjectTagRequest, db: Session = Depends(get_db)):
+def rename_subject_tag(payload: RenameSubjectTagRequest, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    _check_subject_ownership(db, payload.subject_id, user)
     try:
         config = _get_wp_config(db)
         return rename_subject_term(db, payload.subject_id, payload.lang, payload.new_name, config.site_url)
@@ -105,16 +128,14 @@ def rename_subject_tag(payload: RenameSubjectTagRequest, db: Session = Depends(g
 
 
 @router.get("/subject-tags")
-def get_subject_tags(category_id: int, lang: str, db: Session = Depends(get_db)):
+def get_subject_tags(category_id: int, lang: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """Real, live per-subject WordPress Tag status for one category+language.
     Lets the Language page show which subjects are already live tags on the
     real site, which are new and not pushed yet, and whether a live tag's
     name has drifted from the current local translation (e.g. a bad
     auto-translation that got corrected here but was never synced to the
     live site) — surfaced directly instead of discovered after publishing."""
-    category = db.query(Category).filter(Category.id == category_id).first()
-    if not category:
-        raise HTTPException(status_code=404, detail="Category not found")
+    category = get_owned_category(category_id, user, db)
 
     try:
         config = _get_wp_config(db)
@@ -177,7 +198,8 @@ def get_subject_tags(category_id: int, lang: str, db: Session = Depends(get_db))
 
 
 @router.post("/push", response_model=WordPressPushResponse)
-def push_to_wordpress(payload: WordPressPushRequest, db: Session = Depends(get_db)):
+def push_to_wordpress(payload: WordPressPushRequest, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    get_owned_category(payload.category_id, user, db)
     try:
         result = push_batch_to_wordpress(
             db,
@@ -193,7 +215,8 @@ def push_to_wordpress(payload: WordPressPushRequest, db: Session = Depends(get_d
     return WordPressPushResponse(**result)
 
 @router.post("/preview", response_model=WordPressPreviewResponse)
-def preview_push(payload: WordPressPreviewRequest, db: Session = Depends(get_db)):
+def preview_push(payload: WordPressPreviewRequest, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    get_owned_category(payload.category_id, user, db)
     try:
         result = preview_wordpress_push(db, payload.category_id, payload.lang)
     except ValueError as e:
@@ -201,8 +224,14 @@ def preview_push(payload: WordPressPreviewRequest, db: Session = Depends(get_db)
     return WordPressPreviewResponse(**result)
 
 @router.post("/exclude")
-def set_exclude(payload: ExcludeRequest, db: Session = Depends(get_db)):
-    image = db.query(GenerationImage).filter(GenerationImage.file_path == payload.source_path).first()
+def set_exclude(payload: ExcludeRequest, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    from models import GenerationJob
+    image = (
+        db.query(GenerationImage)
+        .join(GenerationJob, GenerationImage.job_id == GenerationJob.id)
+        .filter(GenerationImage.file_path == payload.source_path, GenerationJob.user_id == user.id)
+        .first()
+    )
     if not image:
         raise HTTPException(status_code=404, detail="Image not found")
     image.wp_excluded = payload.excluded
@@ -210,7 +239,16 @@ def set_exclude(payload: ExcludeRequest, db: Session = Depends(get_db)):
     return {"source_path": payload.source_path, "excluded": image.wp_excluded}
 
 @router.post("/sync", response_model=WordPressSyncResponse)
-def sync_to_wordpress(payload: WordPressSyncRequest, db: Session = Depends(get_db)):
+def sync_to_wordpress(payload: WordPressSyncRequest, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    from models import GenerationJob
+    owned = (
+        db.query(GenerationImage)
+        .join(GenerationJob, GenerationImage.job_id == GenerationJob.id)
+        .filter(GenerationImage.file_path == payload.source_path, GenerationJob.user_id == user.id)
+        .first()
+    )
+    if not owned:
+        raise HTTPException(status_code=404, detail="Image not found")
     try:
         result = sync_pushed_item_to_wordpress(db, payload.source_path, payload.lang)
     except ValueError as e:
@@ -220,7 +258,8 @@ def sync_to_wordpress(payload: WordPressSyncRequest, db: Session = Depends(get_d
     return WordPressSyncResponse(**result)
 
 @router.post("/verify", response_model=WordPressVerifyResponse)
-def verify_push(payload: WordPressVerifyRequest, db: Session = Depends(get_db)):
+def verify_push(payload: WordPressVerifyRequest, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    get_owned_category(payload.category_id, user, db)
     try:
         result = verify_and_clean_stale_pushes(db, payload.category_id, payload.lang, _get_wp_config(db).site_url)
     except ValueError as e:

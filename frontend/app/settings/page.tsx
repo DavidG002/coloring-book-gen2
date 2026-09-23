@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { ShieldCheck, Globe2, Settings2, ChevronRight, Check, Plus } from "lucide-react";
-import { getSettings, updateSettings, ApiError, type Settings } from "@/lib/api";
+import { getSettings, updateSettings, getAuthHeaders, ApiError, type Settings } from "@/lib/api";
 import BackupSettingsPanel from "@/components/BackupSettingsPanel";
 import { AccountSection, Field } from "@/components/SettingsUI";
 import AppShell from "@/components/AppShell";
@@ -20,13 +20,13 @@ const DEFAULTS: Settings = {
 type SupportedLanguageItem = components["schemas"]["SupportedLanguageRead"];
 
 async function getLanguages(): Promise<SupportedLanguageItem[]> {
-  const res = await fetch(`${API_BASE_URL}/account/languages`);
+  const res = await fetch(`${API_BASE_URL}/account/languages`, { headers: await getAuthHeaders() });
   return res.json();
 }
 async function addLanguage(code: string, name: string): Promise<SupportedLanguageItem> {
   const res = await fetch(`${API_BASE_URL}/account/languages`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
     body: JSON.stringify({ code, name }),
   });
   if (!res.ok) {
@@ -36,7 +36,7 @@ async function addLanguage(code: string, name: string): Promise<SupportedLanguag
   return res.json();
 }
 async function deleteLanguage(code: string): Promise<void> {
-  await fetch(`${API_BASE_URL}/account/languages/${code}`, { method: "DELETE" });
+  await fetch(`${API_BASE_URL}/account/languages/${code}`, { method: "DELETE", headers: await getAuthHeaders() });
 }
 
 export default function SettingsPage() {

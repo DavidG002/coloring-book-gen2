@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import { Send, RotateCw, ArrowUp, ArrowDown, X, Minimize2, Maximize2 } from "lucide-react";
 import SequencePanel from "./SequencePanel";
 import LanguagePills from "@/components/LanguagePills";
-import { getTranslations, ApiError, type Translation } from "@/lib/api";
+import { getTranslations, getAuthHeaders, ApiError, type Translation } from "@/lib/api";
+import { useAccessToken } from "@/lib/hooks/useAccessToken";
 import type { components } from "@/lib/api/generated-types";
 import { Check, ChevronDown } from "lucide-react";
 
@@ -14,7 +15,7 @@ type ContentVariantRow = components["schemas"]["SeoContentVariantRow"];
 type SeoData = components["schemas"]["SeoDataResponse"];
 
 async function getSeoData(categoryId: number, lang: string): Promise<SeoData> {
-  const res = await fetch(`${API_BASE_URL}/categories/${categoryId}/seo/${lang}`);
+  const res = await fetch(`${API_BASE_URL}/categories/${categoryId}/seo/${lang}`, { headers: await getAuthHeaders() });
   if (!res.ok) {
     const data = await res.json();
     throw new ApiError(res.status, data.detail);
@@ -22,7 +23,10 @@ async function getSeoData(categoryId: number, lang: string): Promise<SeoData> {
   return res.json();
 }
 async function markSeoReviewed(categoryId: number, lang: string): Promise<void> {
-  await fetch(`${API_BASE_URL}/categories/${categoryId}/seo/${lang}/mark-reviewed`, { method: "POST" }).catch(() => {});
+  await fetch(`${API_BASE_URL}/categories/${categoryId}/seo/${lang}/mark-reviewed`, {
+    method: "POST",
+    headers: await getAuthHeaders(),
+  }).catch(() => {});
 }
 interface SelectedImageInfo {
   id: number;
@@ -32,21 +36,21 @@ interface SelectedImageInfo {
 }
 async function getImagesByIds(ids: number[]): Promise<SelectedImageInfo[]> {
   if (ids.length === 0) return [];
-  const res = await fetch(`${API_BASE_URL}/review/images-by-ids?ids=${ids.join(",")}`);
+  const res = await fetch(`${API_BASE_URL}/review/images-by-ids?ids=${ids.join(",")}`, { headers: await getAuthHeaders() });
   if (!res.ok) return [];
   return res.json();
 }
 async function saveDescription(categoryId: number, lang: string, description: string): Promise<void> {
   await fetch(`${API_BASE_URL}/categories/${categoryId}/seo/${lang}/description`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
     body: JSON.stringify({ description }),
   });
 }
 async function regenerateDescription(categoryId: number, lang: string): Promise<string> {
   const res = await fetch(
     `${API_BASE_URL}/categories/${categoryId}/seo/${lang}/description/regenerate`,
-    { method: "POST" }
+    { method: "POST", headers: await getAuthHeaders() }
   );
   const data = await res.json();
   return data.description;
@@ -54,7 +58,7 @@ async function regenerateDescription(categoryId: number, lang: string): Promise<
 async function saveContentVariant(categoryId: number, lang: string, row: ContentVariantRow): Promise<void> {
   await fetch(`${API_BASE_URL}/categories/${categoryId}/seo/${lang}/content`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
     body: JSON.stringify({
       subject_name: row.subject_name,
       variation_text: row.variation_text,
@@ -65,18 +69,24 @@ async function saveContentVariant(categoryId: number, lang: string, row: Content
     }),
   });
 }
-function imageFileUrl(imageId: number): string {
-  return `${API_BASE_URL}/review/image/${imageId}/file`;
+// Handed straight to <img src> — can't set an Authorization header, so the
+// access token rides along as a query param (accepted as a fallback by
+// backend/services/auth.py's get_current_user).
+function imageFileUrl(imageId: number, accessToken: string | undefined): string {
+  return `${API_BASE_URL}/review/image/${imageId}/file?token=${encodeURIComponent(accessToken ?? "")}`;
 }
 async function generateMissing(categoryId: number, lang: string): Promise<number> {
-  const res = await fetch(`${API_BASE_URL}/categories/${categoryId}/seo/${lang}/content/generate-missing`, { method: "POST" });
+  const res = await fetch(`${API_BASE_URL}/categories/${categoryId}/seo/${lang}/content/generate-missing`, {
+    method: "POST",
+    headers: await getAuthHeaders(),
+  });
   const data = await res.json();
   return data.generated_count;
 }
 async function regenerateOne(categoryId: number, lang: string, subjectName: string, variationText: string): Promise<Partial<ContentVariantRow>> {
   const res = await fetch(`${API_BASE_URL}/categories/${categoryId}/seo/${lang}/content/regenerate`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
     body: JSON.stringify({ subject_name: subjectName, variation_text: variationText }),
   });
   return res.json();
@@ -84,7 +94,7 @@ async function regenerateOne(categoryId: number, lang: string, subjectName: stri
 async function acknowledgeTagSync(categoryId: number, lang: string, subjectName: string, variationText: string): Promise<void> {
   await fetch(`${API_BASE_URL}/categories/${categoryId}/seo/${lang}/content/acknowledge-tag-sync`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
     body: JSON.stringify({ subject_name: subjectName, variation_text: variationText }),
   });
 }
@@ -92,7 +102,7 @@ async function acknowledgeTagSync(categoryId: number, lang: string, subjectName:
 async function regenerateField(categoryId: number, lang: string, subjectName: string, variationText: string, field: string): Promise<string> {
   const res = await fetch(`${API_BASE_URL}/categories/${categoryId}/seo/${lang}/content/regenerate-field`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
     body: JSON.stringify({ subject_name: subjectName, variation_text: variationText, field }),
   });
   const data = await res.json();
@@ -103,7 +113,7 @@ async function regenerateField(categoryId: number, lang: string, subjectName: st
 async function planPublishForLang(categoryId: number, category: string, lang: string, imageIds?: number[]) {
   const res = await fetch(`${API_BASE_URL}/publish/plan`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
     // category_id is what the backend actually resolves the category by —
     // category names aren't unique across books, so two same-named
     // categories could otherwise silently plan/publish against the wrong
@@ -117,7 +127,7 @@ async function planPublishForLang(categoryId: number, category: string, lang: st
 async function runPublishForLang(categoryId: number, category: string, lang: string, imageIds?: number[], batchId?: string) {
   const res = await fetch(`${API_BASE_URL}/publish/run`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
     body: JSON.stringify({ category_id: categoryId, category, lang, only_new: true, image_ids: imageIds !== undefined ? imageIds : null, batch_id: batchId ?? null }),
   });
   const data = await res.json();
@@ -154,6 +164,7 @@ export default function PublishSequencePanel({
   initialLang?: string;
   initialOnlyNeedsReview?: boolean;
 }) {
+  const accessToken = useAccessToken();
   const [languages, setLanguages] = useState<string[]>([]);
   const [loadingLangs, setLoadingLangs] = useState(true);
   const [selectedLang, setSelectedLang] = useState("");
@@ -1008,7 +1019,7 @@ export default function PublishSequencePanel({
                         >
                           <span className="flex items-center gap-3 min-w-0">
                             <img
-                              src={imageFileUrl(row.sample_image_id)}
+                              src={imageFileUrl(row.sample_image_id, accessToken)}
                               alt={`${row.subject_name} — ${row.variation_text}`}
                               className="w-10 h-10 rounded-md object-cover shrink-0"
                               style={{ background: "var(--tone-sage-bg)" }}

@@ -1,15 +1,79 @@
 import os
 import shutil
 import sqlite3
+import subprocess
 import tarfile
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
+from sqlalchemy.engine import make_url
 
-from models import BackupSettings, BackupRecord
+from models import BackupSettings, BackupRecord, engine, DATABASE_URL
 
 BACKUP_DIR = "backups"
 CONTENT_FOLDERS = ["output", "publish", "watermarks"]
-DB_PATH = "data.db"
+DB_PATH = "data.db"  # SQLite only — see _is_postgres() below
+
+
+def _is_postgres() -> bool:
+    return engine.dialect.name == "postgresql"
+
+
+def _pg_dump(dest_path: str):
+    """Dumps the whole Postgres database to dest_path using pg_dump's
+    custom format (-Fc) — compact, and restorable with pg_restore.
+    Requires the postgresql-client package (pg_dump/pg_restore binaries),
+    installed in backend/Dockerfile."""
+    url = make_url(DATABASE_URL)
+    env = os.environ.copy()
+    if url.password:
+        env["PGPASSWORD"] = url.password
+    cmd = [
+        "pg_dump",
+        "-h", url.host or "localhost",
+        "-p", str(url.port or 5432),
+        "-U", url.username or "",
+        "-Fc",
+        "-f", dest_path,
+        url.database,
+    ]
+    result = subprocess.run(cmd, env=env, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"pg_dump failed: {result.stderr.strip()}")
+
+
+def _pg_restore(dump_path: str):
+    """Restores a pg_dump custom-format file into the current database.
+    --clean --if-exists drops existing objects first so the restore
+    isn't blocked by things already present; --no-owner/--no-privileges
+    avoids failing over role names that may differ between environments."""
+    url = make_url(DATABASE_URL)
+    env = os.environ.copy()
+    if url.password:
+        env["PGPASSWORD"] = url.password
+    cmd = [
+        "pg_restore",
+        "-h", url.host or "localhost",
+        "-p", str(url.port or 5432),
+        "-U", url.username or "",
+        "-d", url.database,
+        "--clean", "--if-exists", "--no-owner", "--no-privileges",
+        dump_path,
+    ]
+    result = subprocess.run(cmd, env=env, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"pg_restore failed: {result.stderr.strip()}")
+
+
+def _find_db_backup_file(folder: str) -> str | None:
+    """A backup folder holds exactly one of these, depending on which
+    database engine created it: postgres.dump (current, Postgres) or
+    data.db (legacy, SQLite). Checking both keeps old local backups
+    readable even after moving to Postgres."""
+    for name in ("postgres.dump", "data.db"):
+        path = os.path.join(folder, name)
+        if os.path.exists(path):
+            return path
+    return None
 
 
 def get_or_create_backup_settings(db: Session) -> BackupSettings:
@@ -23,11 +87,11 @@ def get_or_create_backup_settings(db: Session) -> BackupSettings:
 
 
 def run_backup(db: Session, triggered_by: str = "manual") -> BackupRecord:
-    """Runs a real backup: a safe SQLite snapshot (via SQLite's own backup
-    API, correct even while the app is writing to the database) plus a
-    tarball of real generated content. Rotates old local backups per the
-    configured retention count. Never touches any off-site copy — that's
-    a separate, additive layer."""
+    """Runs a real backup: a full database dump (pg_dump on Postgres; a
+    safe SQLite snapshot via SQLite's own backup API on the legacy local
+    setup) plus a tarball of real generated content. Rotates old local
+    backups per the configured retention count. Never touches any
+    off-site copy — that's a separate, additive layer."""
     if triggered_by == "manual":
         last_manual = (
             db.query(BackupRecord)
@@ -44,16 +108,20 @@ def run_backup(db: Session, triggered_by: str = "manual") -> BackupRecord:
     folder = os.path.join(BACKUP_DIR, timestamp)
     os.makedirs(folder, exist_ok=True)
 
-    db_backup_path = os.path.join(folder, "data.db")
     content_backup_path = os.path.join(folder, "content.tar.gz")
 
     try:
-        source = sqlite3.connect(DB_PATH)
-        dest = sqlite3.connect(db_backup_path)
-        with dest:
-            source.backup(dest)
-        source.close()
-        dest.close()
+        if _is_postgres():
+            db_backup_path = os.path.join(folder, "postgres.dump")
+            _pg_dump(db_backup_path)
+        else:
+            db_backup_path = os.path.join(folder, "data.db")
+            source = sqlite3.connect(DB_PATH)
+            dest = sqlite3.connect(db_backup_path)
+            with dest:
+                source.backup(dest)
+            source.close()
+            dest.close()
         db_size = os.path.getsize(db_backup_path)
 
         with tarfile.open(content_backup_path, "w:gz") as tar:
@@ -117,10 +185,10 @@ def maybe_run_auto_backup(db: Session):
 
 def list_backups_from_disk() -> list[dict]:
     """The real source of truth for what backups exist — reads directly from
-    disk rather than trusting BackupRecord rows, which live inside data.db
-    itself and can be lost if a restore swaps in an older database. Cross-
-    references BackupRecord opportunistically for extra metadata when
-    available, but never depends on it being there."""
+    disk rather than trusting BackupRecord rows, which live inside the
+    database itself and can be lost if a restore swaps in an older
+    database. Cross-references BackupRecord opportunistically for extra
+    metadata when available, but never depends on it being there."""
     if not os.path.isdir(BACKUP_DIR):
         return []
 
@@ -129,13 +197,13 @@ def list_backups_from_disk() -> list[dict]:
         folder = os.path.join(BACKUP_DIR, name)
         if not os.path.isdir(folder):
             continue
-        db_path = os.path.join(folder, "data.db")
+        db_path = _find_db_backup_file(folder)
         content_path = os.path.join(folder, "content.tar.gz")
         results.append({
             "timestamp": name,
-            "db_size_bytes": os.path.getsize(db_path) if os.path.exists(db_path) else 0,
+            "db_size_bytes": os.path.getsize(db_path) if db_path else 0,
             "content_size_bytes": os.path.getsize(content_path) if os.path.exists(content_path) else 0,
-            "has_db": os.path.exists(db_path),
+            "has_db": db_path is not None,
         })
     return results
 
@@ -164,18 +232,23 @@ def get_backup_history(db: Session, limit: int = 20) -> list[dict]:
 def restore_backup(db: Session, timestamp: str) -> str:
     """Restores from a backup identified by its folder timestamp — always
     resolvable directly from disk, unlike a database-row ID which can be
-    lost if a restore swaps in an older database that never knew about it."""
+    lost if a restore swaps in an older database that never knew about it.
+    Uses pg_restore on Postgres, or a plain file copy for a legacy SQLite
+    backup folder."""
     folder = os.path.join(BACKUP_DIR, timestamp)
     if not os.path.isdir(folder):
         raise ValueError(f"Backup '{timestamp}' not found on disk")
 
-    db_backup_path = os.path.join(folder, "data.db")
+    db_backup_path = _find_db_backup_file(folder)
     content_backup_path = os.path.join(folder, "content.tar.gz")
 
-    if not os.path.exists(db_backup_path):
+    if not db_backup_path:
         raise ValueError(f"Backup '{timestamp}' has no database file")
 
-    shutil.copy2(db_backup_path, DB_PATH)
+    if db_backup_path.endswith("postgres.dump"):
+        _pg_restore(db_backup_path)
+    else:
+        shutil.copy2(db_backup_path, DB_PATH)
 
     if os.path.exists(content_backup_path):
         for name in CONTENT_FOLDERS:

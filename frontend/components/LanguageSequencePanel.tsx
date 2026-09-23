@@ -11,6 +11,7 @@ import {
   getTranslation,
   createTranslation,
   updateTranslation,
+  getAuthHeaders,
   ApiError,
   type SupportedLanguage,
   type Subject,
@@ -21,32 +22,46 @@ import {
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 async function getLanguageTemplateDefault(bookId: number, lang: string) {
-  const res = await fetch(`${API_BASE_URL}/books/${bookId}/language-templates/${encodeURIComponent(lang)}`);
+  const res = await fetch(`${API_BASE_URL}/books/${bookId}/language-templates/${encodeURIComponent(lang)}`, {
+    headers: await getAuthHeaders(),
+  });
   if (res.status === 404) return null;
   const data = await res.json();
   if (!res.ok) throw new ApiError(res.status, data.detail);
   return data as { filename_template: string; alt_template: string; title_template: string };
 }
 async function autoTranslateLanguageTemplate(bookId: number, lang: string) {
-  const res = await fetch(`${API_BASE_URL}/books/${bookId}/language-templates/${encodeURIComponent(lang)}/auto-translate`, { method: "POST" });
+  const res = await fetch(`${API_BASE_URL}/books/${bookId}/language-templates/${encodeURIComponent(lang)}/auto-translate`, {
+    method: "POST",
+    headers: await getAuthHeaders(),
+  });
   const data = await res.json();
   if (!res.ok) throw new ApiError(res.status, data.detail);
   return data as { filename_template: string; alt_template: string; title_template: string };
 }
 async function translateCategoryName(categoryId: number, lang: string): Promise<string> {
-  const res = await fetch(`${API_BASE_URL}/categories/${categoryId}/translations/${encodeURIComponent(lang)}/translate-category-name`, { method: "POST" });
+  const res = await fetch(`${API_BASE_URL}/categories/${categoryId}/translations/${encodeURIComponent(lang)}/translate-category-name`, {
+    method: "POST",
+    headers: await getAuthHeaders(),
+  });
   const data = await res.json();
   if (!res.ok) throw new ApiError(res.status, data.detail);
   return data.translated_text as string;
 }
 async function translateSubjects(categoryId: number, lang: string) {
-  const res = await fetch(`${API_BASE_URL}/categories/${categoryId}/translations/${encodeURIComponent(lang)}/translate-subjects`, { method: "POST" });
+  const res = await fetch(`${API_BASE_URL}/categories/${categoryId}/translations/${encodeURIComponent(lang)}/translate-subjects`, {
+    method: "POST",
+    headers: await getAuthHeaders(),
+  });
   const data = await res.json();
   if (!res.ok) throw new ApiError(res.status, data.detail);
   return data.translated_count as number;
 }
 async function translateVariations(categoryId: number, lang: string) {
-  const res = await fetch(`${API_BASE_URL}/categories/${categoryId}/translations/${encodeURIComponent(lang)}/translate-variations`, { method: "POST" });
+  const res = await fetch(`${API_BASE_URL}/categories/${categoryId}/translations/${encodeURIComponent(lang)}/translate-variations`, {
+    method: "POST",
+    headers: await getAuthHeaders(),
+  });
   const data = await res.json();
   if (!res.ok) throw new ApiError(res.status, data.detail);
   return data.translated_count as number;
@@ -69,7 +84,9 @@ interface SubjectTagsResponse {
   subjects: SubjectTagStatus[];
 }
 async function getSubjectTags(categoryId: number, lang: string): Promise<SubjectTagsResponse> {
-  const res = await fetch(`${API_BASE_URL}/wordpress/subject-tags?category_id=${categoryId}&lang=${encodeURIComponent(lang)}`);
+  const res = await fetch(`${API_BASE_URL}/wordpress/subject-tags?category_id=${categoryId}&lang=${encodeURIComponent(lang)}`, {
+    headers: await getAuthHeaders(),
+  });
   const data = await res.json();
   if (!res.ok) throw new ApiError(res.status, data.detail);
   return data;
@@ -292,7 +309,7 @@ export default function LanguageSequencePanel({
       try {
         const res = await fetch(`${API_BASE_URL}/wordpress/rename-subject-tag`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
           body: JSON.stringify({
             subject_id: subjectId,
             lang: tagsLangView,
@@ -332,7 +349,10 @@ export default function LanguageSequencePanel({
   async function hideLang(code: string) {
     persistHidden(new Set(hiddenLangs).add(code));
     try {
-      await fetch(`${API_BASE_URL}/categories/${categoryId}/translations/${code}/set-active?active=false`, { method: "POST" });
+      await fetch(`${API_BASE_URL}/categories/${categoryId}/translations/${code}/set-active?active=false`, {
+        method: "POST",
+        headers: await getAuthHeaders(),
+      });
     } catch {
       // best-effort — local hide still works even if the sync fails
     }
@@ -342,7 +362,10 @@ export default function LanguageSequencePanel({
     next.delete(code);
     persistHidden(next);
     try {
-      await fetch(`${API_BASE_URL}/categories/${categoryId}/translations/${code}/set-active?active=true`, { method: "POST" });
+      await fetch(`${API_BASE_URL}/categories/${categoryId}/translations/${code}/set-active?active=true`, {
+        method: "POST",
+        headers: await getAuthHeaders(),
+      });
     } catch {
       // best-effort
     }

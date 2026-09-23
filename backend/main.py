@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from models import init_db
-from routers import categories, translations, settings, generation, prompt_defaults, publish, language_templates, review, books, account_settings, wordpress, seo, backup
+from routers import categories, translations, settings, generation, prompt_defaults, publish, language_templates, review, books, account_settings, wordpress, seo, backup, auth
 from services.backup import maybe_run_auto_backup
 from database import SessionLocal
 
@@ -33,6 +33,7 @@ app.include_router(account_settings.router)
 app.include_router(wordpress.router)
 app.include_router(seo.router)
 app.include_router(backup.router)
+app.include_router(auth.router)
 
 
 @app.get("/health")

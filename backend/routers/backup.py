@@ -2,20 +2,27 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import BackupSettings
+from models import BackupSettings, User
 from schemas import BackupSettingsRead, BackupSettingsUpdate, BackupRecordRead, BackupRestoreResponse
 from services.backup import get_or_create_backup_settings, run_backup, get_backup_history, restore_backup
+from services.auth import get_current_user, require_admin
 
 router = APIRouter(prefix="/backup", tags=["backup"])
 
+# NOTE: whole-app backup/restore, not per-user — there's nothing to
+# scope, a backup covers everyone's data at once. Reads (settings,
+# history) just require login; anything that changes backup behavior or
+# actually restores data requires admin, since it affects every user's
+# data, not just the caller's own.
+
 
 @router.get("/settings", response_model=BackupSettingsRead)
-def get_settings_route(db: Session = Depends(get_db)):
+def get_settings_route(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     return get_or_create_backup_settings(db)
 
 
 @router.put("/settings", response_model=BackupSettingsRead)
-def update_settings_route(payload: BackupSettingsUpdate, db: Session = Depends(get_db)):
+def update_settings_route(payload: BackupSettingsUpdate, db: Session = Depends(get_db), user: User = Depends(require_admin)):
     row = get_or_create_backup_settings(db)
     if payload.auto_backup_enabled is not None:
         row.auto_backup_enabled = payload.auto_backup_enabled
@@ -29,7 +36,7 @@ def update_settings_route(payload: BackupSettingsUpdate, db: Session = Depends(g
 
 
 @router.post("/run", response_model=BackupRecordRead)
-def run_backup_route(db: Session = Depends(get_db)):
+def run_backup_route(db: Session = Depends(get_db), user: User = Depends(require_admin)):
     try:
         record = run_backup(db, triggered_by="manual")
     except ValueError as e:
@@ -48,12 +55,12 @@ def run_backup_route(db: Session = Depends(get_db)):
     
     
 @router.get("/history", response_model=list[BackupRecordRead])
-def history_route(db: Session = Depends(get_db)):
+def history_route(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     return get_backup_history(db)
 
 
 @router.post("/restore/{timestamp}", response_model=BackupRestoreResponse)
-def restore_backup_route(timestamp: str, db: Session = Depends(get_db)):
+def restore_backup_route(timestamp: str, db: Session = Depends(get_db), user: User = Depends(require_admin)):
     try:
         safety = run_backup(db, triggered_by="pre-restore")
         restored = restore_backup(db, timestamp)

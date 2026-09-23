@@ -4,15 +4,18 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from database import get_db
+from models import User
 from schemas import ReviewJob, ReviewImage, CategoryImageStatus, RejectImageRequest, MoveImageCategoryRequest
 from services.review import get_images_for_job, get_jobs_for_category, reject_image, restore_image, get_current_file_path, get_images_for_category, move_image_to_category
+from services.auth import get_current_user
+from services.ownership import get_owned_category, get_owned_image, get_owned_job
 
 router = APIRouter(prefix="/review", tags=["review"])
 
 
 @router.get("/jobs/{category_name}", response_model=list[ReviewJob])
-def list_jobs(category_name: str, db: Session = Depends(get_db)):
-    jobs = get_jobs_for_category(db, category_name)
+def list_jobs(category_name: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    jobs = get_jobs_for_category(db, category_name, user.id)
     return [
         ReviewJob(
             job_id=j.id,
@@ -25,7 +28,8 @@ def list_jobs(category_name: str, db: Session = Depends(get_db)):
 
 
 @router.get("/jobs/{category_name}/{job_id}/images", response_model=list[ReviewImage])
-def list_job_images(category_name: str, job_id: int, db: Session = Depends(get_db)):
+def list_job_images(category_name: str, job_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    get_owned_job(job_id, user, db)
     images = get_images_for_job(db, job_id)
     return [
         ReviewImage(
@@ -41,17 +45,24 @@ def list_job_images(category_name: str, job_id: int, db: Session = Depends(get_d
 
 
 @router.get("/images-by-ids", response_model=list[ReviewImage])
-def get_images_by_ids(ids: str, db: Session = Depends(get_db)):
+def get_images_by_ids(ids: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """Resolves a comma-separated list of real image IDs into their full
     details — used by the Publish page's selected-images preview, which
     only carries raw IDs forward from Generate's selection checkboxes."""
-    from models import GenerationImage
+    from models import GenerationImage, GenerationJob
     try:
         id_list = [int(i) for i in ids.split(",") if i.strip()]
     except ValueError:
         raise HTTPException(status_code=400, detail="ids must be a comma-separated list of integers")
 
-    images = db.query(GenerationImage).filter(GenerationImage.id.in_(id_list)).all()
+    # Any id belonging to someone else's job is silently dropped, same as
+    # a stale/deleted id — never a 403/404 for one entry in a batch call.
+    images = (
+        db.query(GenerationImage)
+        .join(GenerationJob, GenerationImage.job_id == GenerationJob.id)
+        .filter(GenerationImage.id.in_(id_list), GenerationJob.user_id == user.id)
+        .all()
+    )
     by_id = {img.id: img for img in images}
     # Preserve the caller's original order, silently skipping any ID that
     # no longer exists (e.g. deleted since selection).
@@ -71,11 +82,8 @@ def get_images_by_ids(ids: str, db: Session = Depends(get_db)):
 
 
 @router.get("/image/{image_id}/file")
-def serve_image_file(image_id: int, db: Session = Depends(get_db)):
-    from models import GenerationImage
-    image = db.query(GenerationImage).filter(GenerationImage.id == image_id).first()
-    if not image:
-        raise HTTPException(status_code=404, detail="Image not found")
+def serve_image_file(image_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    image = get_owned_image(image_id, user, db)
 
     path = get_current_file_path(image)
     if not os.path.exists(path):
@@ -85,7 +93,8 @@ def serve_image_file(image_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/image/{image_id}/reject")
-def reject(image_id: int, payload: RejectImageRequest | None = None, db: Session = Depends(get_db)):
+def reject(image_id: int, payload: RejectImageRequest | None = None, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    get_owned_image(image_id, user, db)
     try:
         reason = payload.reason if payload else None
         image = reject_image(db, image_id, reason)
@@ -95,7 +104,8 @@ def reject(image_id: int, payload: RejectImageRequest | None = None, db: Session
 
 
 @router.post("/image/{image_id}/restore")
-def restore(image_id: int, db: Session = Depends(get_db)):
+def restore(image_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    get_owned_image(image_id, user, db)
     try:
         image = restore_image(db, image_id)
     except ValueError as e:
@@ -104,17 +114,20 @@ def restore(image_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/images/{category_id}", response_model=list[CategoryImageStatus])
-def list_category_images(category_id: int, db: Session = Depends(get_db)):
+def list_category_images(category_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    get_owned_category(category_id, user, db)
     return get_images_for_category(db, category_id)
 
 
 @router.post("/image/{image_id}/move-category")
-def move_category(image_id: int, payload: MoveImageCategoryRequest, db: Session = Depends(get_db)):
+def move_category(image_id: int, payload: MoveImageCategoryRequest, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """Recovery endpoint: reassigns an image (file + DB row) to a
     different category. Exists for images that were mis-filed by the
     since-fixed name-collision bug in generation (two categories sharing
     a name in different books) — not exposed in the UI, called directly
     when fixing up a specific image."""
+    get_owned_image(image_id, user, db)
+    get_owned_category(payload.category_id, user, db)
     try:
         image = move_image_to_category(db, image_id, payload.category_id)
     except ValueError as e:

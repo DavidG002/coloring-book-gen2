@@ -1,3 +1,5 @@
+import os
+
 from sqlalchemy import (
     create_engine, Column, Integer, String, Text, Float, Boolean,
     ForeignKey, DateTime, UniqueConstraint
@@ -32,7 +34,13 @@ class Book(Base):
     __tablename__ = "books"
 
     id = Column(Integer, primary_key=True)
-    name = Column(String, unique=True, nullable=False)
+    # Private per user — David and zuzu (and future helpers) each see and
+    # manage only their own books, not a shared catalog. See
+    # docs/decision-log.md-style note: this was a deliberate call (over a
+    # single shared library), matching the earlier finding that Book.name
+    # needed per-user uniqueness rather than a global constraint.
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    name = Column(String, nullable=False)
     base_prompt = Column(Text, nullable=False)
     wizard_completed = Column(Boolean, nullable=False, default=False)
     book_type = Column(String, nullable=False, default="coloring_book")
@@ -68,7 +76,10 @@ class Book(Base):
     watermark_opacity = Column(Float, nullable=False, default=0.6)
     watermark_scale = Column(Float, nullable=False, default=0.15)
     watermark_filename = Column(String, nullable=True)
-    
+
+    user = relationship("User")
+
+    __table_args__ = (UniqueConstraint("user_id", "name", name="uq_book_per_user"),)
 
 
 class Category(Base):
@@ -203,6 +214,11 @@ class GenerationJob(Base):
     __tablename__ = "generation_jobs"
 
     id = Column(Integer, primary_key=True)
+    # Set from the caller's session at creation time (routers/generation.py)
+    # — this is the actual per-person attribution the training-data goal
+    # needs, since a job isn't otherwise linked to a book/category by
+    # foreign key at all (only the free-text `category` string below).
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     category = Column(String, nullable=False)
     params_json = Column(Text, nullable=False)                # serialized GenerationRequest
     status = Column(String, nullable=False, default="pending")  # pending/running/done/failed/cancelled
@@ -214,6 +230,7 @@ class GenerationJob(Base):
     completed_at = Column(DateTime, nullable=True)
 
     images = relationship("GenerationImage", back_populates="job", cascade="all, delete-orphan")
+    user = relationship("User")
 
 
 class GenerationImage(Base):
@@ -284,9 +301,39 @@ class Setting(Base):
     value = Column(String, nullable=False)                    # stored as string, cast on read
 
 
+class User(Base):
+    """Invite-only accounts — there is no public signup, so every row here
+    was created by David (or a future admin) directly, not by the person
+    signing themselves up. password_hash is a bcrypt hash, never the raw
+    password (see services/auth.py). Auth.js (the Next.js frontend) checks
+    credentials against this table via POST /auth/verify-credentials, then
+    issues its own session JWT signed with AUTH_SECRET — the same secret
+    FastAPI verifies incoming request tokens against (see services/auth.py
+    get_current_user), so this table is the single source of truth for
+    who's allowed in, even though the session token itself is minted by
+    the frontend, not by FastAPI."""
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True)
+    email = Column(String, unique=True, nullable=False)
+    password_hash = Column(String, nullable=False)
+    name = Column(String, nullable=False)
+    is_admin = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 # --- Engine setup ---
-DATABASE_URL = "sqlite:///./data.db"
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+# DATABASE_URL is read from the environment so the same code runs against
+# either database: SQLite for the historical local, no-Docker dev setup
+# (default, when the var isn't set), or Postgres via docker-compose (see
+# /docker-compose.yml at the repo root, which sets this to a
+# postgresql+psycopg2://... URL). Schema changes going forward are
+# managed by Alembic (see /backend/alembic/) rather than by
+# _run_light_migrations() below, which is SQLite-only and a no-op on
+# Postgres — see its own docstring.
+DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./data.db")
+_connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+engine = create_engine(DATABASE_URL, connect_args=_connect_args)
 
 
 def init_db():
@@ -296,10 +343,18 @@ def init_db():
 
 def _run_light_migrations():
     """create_all() only creates missing TABLES — it never adds columns to
-    a table that already exists. This project has no migration framework,
-    so a column added to a model after its table already exists on disk
-    needs a manual ALTER TABLE. This runs on every startup and is a no-op
-    once the column is present."""
+    a table that already exists. This project had no migration framework
+    when this was written, so a column added to a model after its table
+    already exists on disk needed a manual ALTER TABLE. This runs on every
+    startup and is a no-op once the column is present.
+
+    SQLite-only: uses PRAGMA table_info, which doesn't exist on Postgres.
+    On Postgres, this is a deliberate no-op — every column referenced here
+    is already declared on the model itself, so create_all() creates a
+    fresh Postgres database with them from the start. New schema changes
+    going forward should be an Alembic migration, not an addition here."""
+    if engine.dialect.name != "sqlite":
+        return
     with engine.begin() as conn:
         existing_cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(publish_runs)").fetchall()}
         if "batch_id" not in existing_cols:

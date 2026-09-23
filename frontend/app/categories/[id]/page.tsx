@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
-import { getCategory, getTranslations, ApiError, type Category } from "@/lib/api";
+import { getCategory, getTranslations, getAuthHeaders, ApiError, type Category } from "@/lib/api";
 import CategorySequenceShell, { type StepId } from "@/components/CategorySequenceShell";
 import LanguageSequencePanel from "@/components/LanguageSequencePanel";
 import GenerateSequencePanel from "@/components/GenerateSequencePanel";
@@ -137,7 +137,9 @@ export default function CategoryDetailPage() {
         let incomplete = false;
         const langsWithPendingReview: string[] = [];
         for (const t of translations) {
-          const res = await fetch(`${API_BASE_URL}/categories/${categoryId}/seo/${t.lang}`);
+          const res = await fetch(`${API_BASE_URL}/categories/${categoryId}/seo/${t.lang}`, {
+            headers: await getAuthHeaders(),
+          });
           if (!res.ok) continue;
           const data = await res.json();
           if (data.content_variants?.some((v: { generated: boolean }) => !v.generated)) {
@@ -167,9 +169,10 @@ export default function CategoryDetailPage() {
     const timer = setTimeout(async () => {
       try {
         const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+        const authHeaders = await getAuthHeaders();
         const [historyRes, wpRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/publish/history/${encodeURIComponent(category.name)}`),
-          fetch(`${API_BASE_URL}/account/wordpress`),
+          fetch(`${API_BASE_URL}/publish/history/${encodeURIComponent(category.name)}`, { headers: authHeaders }),
+          fetch(`${API_BASE_URL}/account/wordpress`, { headers: authHeaders }),
         ]);
         const history = await historyRes.json();
         const wp = await wpRes.json();

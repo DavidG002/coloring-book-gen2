@@ -2,6 +2,8 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { Check, RotateCw, Trash2, Expand, X, ChevronLeft, ChevronRight, Minimize2, Maximize2 } from "lucide-react";
+import { getAuthHeaders } from "@/lib/api";
+import { useAccessToken } from "@/lib/hooks/useAccessToken";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -26,7 +28,7 @@ const REJECT_REASONS = [
   { key: "other", label: "Other" },
 ];
 async function getCategoryImages(categoryId: number): Promise<CategoryImage[]> {
-  const res = await fetch(`${API_BASE_URL}/review/images/${categoryId}`);
+  const res = await fetch(`${API_BASE_URL}/review/images/${categoryId}`, { headers: await getAuthHeaders() });
   return res.json();
 }
 async function rejectImage(imageId: number, reason?: string | null) {
@@ -35,15 +37,18 @@ async function rejectImage(imageId: number, reason?: string | null) {
   // rather than prompting the user to relabel the same picture.
   await fetch(`${API_BASE_URL}/review/image/${imageId}/reject`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
     body: JSON.stringify({ reason: reason ?? null }),
   });
 }
 async function restoreImage(imageId: number) {
-  await fetch(`${API_BASE_URL}/review/image/${imageId}/restore`, { method: "POST" });
+  await fetch(`${API_BASE_URL}/review/image/${imageId}/restore`, { method: "POST", headers: await getAuthHeaders() });
 }
 async function regenerateSameSlots(imageId: number) {
-  const res = await fetch(`${API_BASE_URL}/generate/regenerate-same-slots/${imageId}`, { method: "POST" });
+  const res = await fetch(`${API_BASE_URL}/generate/regenerate-same-slots/${imageId}`, {
+    method: "POST",
+    headers: await getAuthHeaders(),
+  });
   if (!res.ok) throw new Error((await res.json()).detail || "Failed to regenerate");
   return res.json() as Promise<{ job_id: number }>;
 }
@@ -51,7 +56,7 @@ async function regenerateSameSlots(imageId: number) {
 async function runPairs(categoryId: number, pairs: { subject: string; variation_text: string }[]) {
   const res = await fetch(`${API_BASE_URL}/generate/run-pairs`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
     body: JSON.stringify({ category_id: categoryId, pairs }),
   });
   if (!res.ok) throw new Error((await res.json()).detail || "Failed to start generation");
@@ -59,15 +64,21 @@ async function runPairs(categoryId: number, pairs: { subject: string; variation_
 }
 
 async function getJobStatus(jobId: number): Promise<{ status: string; completed_images: number; total_images: number }> {
-  const res = await fetch(`${API_BASE_URL}/generate/status/${jobId}`);
+  const res = await fetch(`${API_BASE_URL}/generate/status/${jobId}`, { headers: await getAuthHeaders() });
   return res.json();
 }
 
 
 
-function imageFileUrl(imageId: number, createdAt?: string): string {
-  const cacheBuster = createdAt ? `?v=${encodeURIComponent(createdAt)}` : "";
-  return `${API_BASE_URL}/review/image/${imageId}/file${cacheBuster}`;
+// Handed straight to <img src> — can't set an Authorization header, so the
+// access token rides along as a query param (accepted as a fallback by
+// backend/services/auth.py's get_current_user). accessToken is undefined
+// until the session has loaded (see useAccessToken).
+function imageFileUrl(imageId: number, accessToken: string | undefined, createdAt?: string): string {
+  const params = new URLSearchParams();
+  if (createdAt) params.set("v", createdAt);
+  params.set("token", accessToken ?? "");
+  return `${API_BASE_URL}/review/image/${imageId}/file?${params.toString()}`;
 }
 
 function statusKeyFor(img: CategoryImage): StatusKey {
@@ -121,6 +132,7 @@ export default function CategoryImageStrip({
   subjectSizeRatio?: number;
 }) {
 
+  const accessToken = useAccessToken();
   const [images, setImages] = useState<CategoryImage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -811,7 +823,7 @@ async function doRegenerate(id: number) {
 
                   <button onClick={() => setLightboxIndex(sortedImages.indexOf(img))} className="block w-full">
                     <img
-                      src={imageFileUrl(img.id, img.created_at)}
+                      src={imageFileUrl(img.id, accessToken, img.created_at)}
                       alt={`${img.subject} — ${img.variation_text ?? ""}`}
                       className="w-full object-contain"
                       style={{ height: 368, background: "var(--canvas)" }}
@@ -1008,7 +1020,7 @@ async function doRegenerate(id: number) {
             style={{ width: "min(680px, 100%)", padding: 40, border: "1px solid var(--pencil-light)", background: "var(--canvas)", boxShadow: "0 18px 55px rgba(28,27,26,0.1)" }}
           >
             <img
-              src={imageFileUrl(sortedImages[lightboxIndex].id, sortedImages[lightboxIndex].created_at)}
+              src={imageFileUrl(sortedImages[lightboxIndex].id, accessToken, sortedImages[lightboxIndex].created_at)}
               alt={sortedImages[lightboxIndex].subject}
               style={{ maxWidth: "100%", maxHeight: "50vh", borderRadius: 6 }}
             />

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Card, SaveRow } from "./SettingsUI";
+import { getAuthHeaders } from "@/lib/api";
 import type { components } from "@/lib/api/generated-types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -22,21 +23,21 @@ type BackupSettings = components["schemas"]["BackupSettingsRead"];
 type BackupRecord = components["schemas"]["BackupRecordRead"];
 
 async function getBackupSettings(): Promise<BackupSettings> {
-  const res = await fetch(`${API_BASE_URL}/backup/settings`);
+  const res = await fetch(`${API_BASE_URL}/backup/settings`, { headers: await getAuthHeaders() });
   return res.json();
 }
 
 async function updateBackupSettings(payload: Record<string, unknown>): Promise<BackupSettings> {
   const res = await fetch(`${API_BASE_URL}/backup/settings`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
     body: JSON.stringify(payload),
   });
   return res.json();
 }
 
 async function runBackupNow(): Promise<BackupRecord> {
-  const res = await fetch(`${API_BASE_URL}/backup/run`, { method: "POST" });
+  const res = await fetch(`${API_BASE_URL}/backup/run`, { method: "POST", headers: await getAuthHeaders() });
   if (!res.ok) {
     const data = await res.json();
     throw new Error(data.detail || "Backup failed");
@@ -45,12 +46,15 @@ async function runBackupNow(): Promise<BackupRecord> {
 }
 
 async function getBackupHistory(): Promise<BackupRecord[]> {
-  const res = await fetch(`${API_BASE_URL}/backup/history`);
+  const res = await fetch(`${API_BASE_URL}/backup/history`, { headers: await getAuthHeaders() });
   return res.json();
 }
 
 async function restoreBackup(timestamp: string): Promise<{ message: string }> {
-  const res = await fetch(`${API_BASE_URL}/backup/restore/${timestamp}`, { method: "POST" });
+  const res = await fetch(`${API_BASE_URL}/backup/restore/${timestamp}`, {
+    method: "POST",
+    headers: await getAuthHeaders(),
+  });
   if (!res.ok) {
     const data = await res.json();
     throw new Error(data.detail || "Restore failed");

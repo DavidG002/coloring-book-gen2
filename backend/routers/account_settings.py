@@ -3,15 +3,21 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 
 from database import get_db
-from models import AppCredential, WordPressIntegration, SupportedLanguage
+from models import AppCredential, WordPressIntegration, SupportedLanguage, User
 from schemas import (
     OpenAIKeyRead, OpenAIKeyUpdate,
     WordPressIntegrationRead, WordPressIntegrationUpdate, WordPressTestResult,
     SupportedLanguageRead, SupportedLanguageCreate,
 )
 from services.wordpress import mask_key, test_wordpress_connection
+from services.auth import get_current_user, require_admin
 
 router = APIRouter(prefix="/account", tags=["account"])
+
+# NOTE: AppCredential (OpenAI key) and WordPressIntegration are still
+# singleton tables shared by the whole app — per-user encrypted keys is
+# task 5 in the roadmap, not done yet. These endpoints just require
+# login for now, same shared config for everyone.
 
 
 def _get_or_create_credential(db: Session) -> AppCredential:
@@ -35,7 +41,7 @@ def _get_or_create_wp(db: Session) -> WordPressIntegration:
 
 
 @router.get("/openai-key", response_model=OpenAIKeyRead)
-def get_openai_key(db: Session = Depends(get_db)):
+def get_openai_key(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     row = _get_or_create_credential(db)
     if not row.openai_api_key:
         return OpenAIKeyRead(has_key=False)
@@ -43,7 +49,7 @@ def get_openai_key(db: Session = Depends(get_db)):
 
 
 @router.put("/openai-key", response_model=OpenAIKeyRead)
-def update_openai_key(payload: OpenAIKeyUpdate, db: Session = Depends(get_db)):
+def update_openai_key(payload: OpenAIKeyUpdate, db: Session = Depends(get_db), user: User = Depends(require_admin)):
     row = _get_or_create_credential(db)
     row.openai_api_key = payload.openai_api_key.strip()
     db.commit()
@@ -51,7 +57,7 @@ def update_openai_key(payload: OpenAIKeyUpdate, db: Session = Depends(get_db)):
 
 
 @router.get("/wordpress", response_model=WordPressIntegrationRead)
-def get_wordpress_integration(db: Session = Depends(get_db)):
+def get_wordpress_integration(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     row = _get_or_create_wp(db)
     return WordPressIntegrationRead(
         site_url=row.site_url,
@@ -67,7 +73,7 @@ def get_wordpress_integration(db: Session = Depends(get_db)):
 
 
 @router.put("/wordpress", response_model=WordPressIntegrationRead)
-def update_wordpress_integration(payload: WordPressIntegrationUpdate, db: Session = Depends(get_db)):
+def update_wordpress_integration(payload: WordPressIntegrationUpdate, db: Session = Depends(get_db), user: User = Depends(require_admin)):
     row = _get_or_create_wp(db)
     if payload.site_url is not None:
         row.site_url = payload.site_url.strip()
@@ -96,7 +102,7 @@ def update_wordpress_integration(payload: WordPressIntegrationUpdate, db: Sessio
 
 
 @router.post("/wordpress/test", response_model=WordPressTestResult)
-def test_wordpress(db: Session = Depends(get_db)):
+def test_wordpress(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     row = _get_or_create_wp(db)
     success, message = test_wordpress_connection(row.site_url, row.username, row.app_password)
 
@@ -109,12 +115,12 @@ def test_wordpress(db: Session = Depends(get_db)):
 
 
 @router.get("/languages", response_model=list[SupportedLanguageRead])
-def list_languages(db: Session = Depends(get_db)):
+def list_languages(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     return db.query(SupportedLanguage).order_by(SupportedLanguage.name).all()
 
 
 @router.post("/languages", response_model=SupportedLanguageRead, status_code=201)
-def add_language(payload: SupportedLanguageCreate, db: Session = Depends(get_db)):
+def add_language(payload: SupportedLanguageCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     existing = db.query(SupportedLanguage).filter(SupportedLanguage.code == payload.code).first()
     if existing:
         raise HTTPException(status_code=409, detail=f"Language '{payload.code}' already exists")
@@ -126,7 +132,7 @@ def add_language(payload: SupportedLanguageCreate, db: Session = Depends(get_db)
 
 
 @router.delete("/languages/{code}", status_code=204)
-def delete_language(code: str, db: Session = Depends(get_db)):
+def delete_language(code: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     lang = db.query(SupportedLanguage).filter(SupportedLanguage.code == code).first()
     if not lang:
         raise HTTPException(status_code=404, detail=f"Language '{code}' not found")

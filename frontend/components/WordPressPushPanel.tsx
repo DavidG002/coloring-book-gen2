@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { Send, ChevronDown, Check } from "lucide-react";
-import { getTranslations, ApiError, type Translation } from "@/lib/api";
+import { getTranslations, getAuthHeaders, ApiError, type Translation } from "@/lib/api";
+import { useAccessToken } from "@/lib/hooks/useAccessToken";
 import type { components } from "@/lib/api/generated-types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -15,7 +16,7 @@ type LangFile = WordPressPreviewFile & { lang: string };
 async function previewPush(categoryId: number, lang: string): Promise<WordPressPreviewResponse> {
   const res = await fetch(`${API_BASE_URL}/wordpress/preview`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
     body: JSON.stringify({ category_id: categoryId, lang }),
   });
   if (!res.ok) {
@@ -28,7 +29,7 @@ async function previewPush(categoryId: number, lang: string): Promise<WordPressP
 async function runPush(categoryId: number, lang: string, status: string, sourcePaths: string[]) {
   const res = await fetch(`${API_BASE_URL}/wordpress/push`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
     body: JSON.stringify({ category_id: categoryId, lang, status, source_paths: sourcePaths }),
   });
   if (!res.ok) {
@@ -46,7 +47,7 @@ async function runPush(categoryId: number, lang: string, status: string, sourceP
 async function setExclude(sourcePath: string, excluded: boolean): Promise<void> {
   await fetch(`${API_BASE_URL}/wordpress/exclude`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
     body: JSON.stringify({ source_path: sourcePath, excluded }),
   });
 }
@@ -54,7 +55,7 @@ async function setExclude(sourcePath: string, excluded: boolean): Promise<void> 
 async function syncToWordPress(sourcePath: string, lang: string) {
   const res = await fetch(`${API_BASE_URL}/wordpress/sync`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
     body: JSON.stringify({ source_path: sourcePath, lang }),
   });
   if (!res.ok) {
@@ -75,8 +76,11 @@ function formatDateHeading(dayKey: string): string {
   return d.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
 }
 
-function imageFileUrl(imageId: number): string {
-  return `${API_BASE_URL}/review/image/${imageId}/file`;
+// Handed straight to <img src> — can't set an Authorization header, so the
+// access token rides along as a query param (accepted as a fallback by
+// backend/services/auth.py's get_current_user).
+function imageFileUrl(imageId: number, accessToken: string | undefined): string {
+  return `${API_BASE_URL}/review/image/${imageId}/file?token=${encodeURIComponent(accessToken ?? "")}`;
 }
 
 type ImageGroup = { sourcePath: string; imageId: number | null; files: LangFile[] };
@@ -93,6 +97,7 @@ function groupBySourcePath(files: LangFile[]): ImageGroup[] {
 }
 
 export default function WordPressPushPanel({ categoryId, categoryName }: { categoryId: number; categoryName: string }) {
+  const accessToken = useAccessToken();
   const [languages, setLanguages] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -190,7 +195,7 @@ export default function WordPressPushPanel({ categoryId, categoryName }: { categ
         />
         {imageId != null && (
           <img
-            src={imageFileUrl(imageId)}
+            src={imageFileUrl(imageId, accessToken)}
             alt=""
             className="w-10 h-10 rounded-md object-cover shrink-0"
             style={{ border: "1px solid var(--pencil-light)" }}
@@ -423,7 +428,7 @@ export default function WordPressPushPanel({ categoryId, categoryName }: { categ
   async function verifyPushes(categoryId: number, lang: string) {
     const res = await fetch(`${API_BASE_URL}/wordpress/verify`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
       body: JSON.stringify({ category_id: categoryId, lang }),
     });
     if (!res.ok) {
@@ -658,7 +663,7 @@ export default function WordPressPushPanel({ categoryId, categoryName }: { categ
                         />
                         {group.imageId != null && (
                           <img
-                            src={imageFileUrl(group.imageId)}
+                            src={imageFileUrl(group.imageId, accessToken)}
                             alt=""
                             className="w-10 h-10 rounded-md object-cover shrink-0"
                             style={{ border: "1px solid var(--pencil-light)" }}

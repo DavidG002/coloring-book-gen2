@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
-from services.openai_client import get_openai_client
+from services.openai_client import get_openai_client, get_active_credential_key
+from services.rate_limits import get_text_semaphore
 from services.translate import LANGUAGE_NAMES
 from models import Subject, Variation, ContentVariant, Category, CategoryDescription
 
@@ -42,11 +43,12 @@ META_DESC: <a compelling meta description under 155 characters, written to earn 
 """
 
     client = get_openai_client()
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.5,
-    )
+    with get_text_semaphore(get_active_credential_key()):
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.5,
+        )
 
     raw = response.choices[0].message.content or ""
     result = {
@@ -117,11 +119,12 @@ Respond with EXACTLY this format, no extra commentary:
 """
 
     client = get_openai_client()
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.5,
-    )
+    with get_text_semaphore(get_active_credential_key()):
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.5,
+        )
 
     raw = (response.choices[0].message.content or "").strip()
     prefix = f"{response_prefix}:"
@@ -294,11 +297,12 @@ audience described above. Avoid vague or overselling language. Respond with
 ONLY the sentence, no quotes, no explanation."""
 
     client = get_openai_client()
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.5,
-    )
+    with get_text_semaphore(get_active_credential_key()):
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.5,
+        )
     return (response.choices[0].message.content or "").strip()
 
 

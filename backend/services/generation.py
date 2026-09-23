@@ -5,7 +5,8 @@ from PIL import Image
 from services.prompt_knobs import get_book_knobs
 from sqlalchemy.orm import Session
 
-from services.openai_client import get_openai_client
+from services.openai_client import get_openai_client, get_active_credential_key
+from services.rate_limits import get_image_rate_limiter
 
 
 from models import Category, Subject, Variation, Book, BookPreview, GenerationJob, GenerationImage
@@ -494,6 +495,11 @@ def generate_image_file(task: dict, settings: dict, output_path: str) -> tuple[b
     compiled_json = json.dumps(compiled)
 
     try:
+        # Blocks until this credential's account-wide images/minute budget
+        # (see services/rate_limits.py) has a free slot — matters here more
+        # than anywhere else, since this is the loop that can fire many
+        # calls back-to-back across a whole generation job.
+        get_image_rate_limiter(get_active_credential_key()).acquire()
         client = get_openai_client()
         response = client.images.generate(
             model="gpt-image-2",
@@ -575,6 +581,10 @@ def generate_preview_image(
     compiled_json = json.dumps(compiled)
 
     try:
+        # Same rate-limited image budget as generate_image_file — a preview
+        # is still a real, billed gpt-image-2 call and counts against the
+        # same account-wide 5/minute cap.
+        get_image_rate_limiter(get_active_credential_key()).acquire()
         client = get_openai_client()
         response = client.images.generate(
             model="gpt-image-2",

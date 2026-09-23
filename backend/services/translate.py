@@ -1,4 +1,5 @@
-from services.openai_client import get_openai_client
+from services.openai_client import get_openai_client, get_active_credential_key
+from services.rate_limits import get_text_semaphore
 
 TRANSLATE_MODEL = "gpt-4o-mini"
 
@@ -42,11 +43,12 @@ def translate_phrases(phrases: list[str], target_lang: str) -> dict[str, str]:
     )
 
     client = get_openai_client()
-    response = client.chat.completions.create(
-        model=TRANSLATE_MODEL,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.3,
-    )
+    with get_text_semaphore(get_active_credential_key()):
+        response = client.chat.completions.create(
+            model=TRANSLATE_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+        )
 
     raw = response.choices[0].message.content or ""
     lines = [line.strip() for line in raw.strip().splitlines() if line.strip()]
@@ -76,11 +78,12 @@ def translate_template(text: str, target_lang: str) -> str:
         f"Respond with ONLY the translated text, no explanation, no quotes:\n\n{text}"
     )
     client = get_openai_client()
-    response = client.chat.completions.create(
-        model=TRANSLATE_MODEL,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.3,
-    )
+    with get_text_semaphore(get_active_credential_key()):
+        response = client.chat.completions.create(
+            model=TRANSLATE_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+        )
 
     return (response.choices[0].message.content or "").strip()
 

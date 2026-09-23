@@ -1,5 +1,4 @@
 import os
-from turtle import title
 import httpx
 from sqlalchemy.orm import Session
 from models import Category, Translation, Subject

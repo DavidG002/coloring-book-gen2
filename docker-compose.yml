@@ -1,0 +1,70 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-coloringbook}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-coloringbook}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # Published to localhost only, so local dev processes (uvicorn --reload,
+    # npm run dev) can reach the same database the containers use, without
+    # exposing it beyond this machine. Other containers still reach it by
+    # service name ("postgres") over the compose network either way.
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-coloringbook}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-coloringbook}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-coloringbook}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      # Generated content and backups live on the host, not just inside
+      # the container, so they survive a rebuild/redeploy.
+      - ./backend/output:/app/output
+      - ./backend/publish:/app/publish
+      - ./backend/preview_cache:/app/preview_cache
+      - ./backend/watermarks:/app/watermarks
+      - ./backend/backups:/app/backups
+      # Mounted (not just baked in at build time) so a migration file
+      # generated via `docker compose exec backend alembic revision ...`
+      # lands directly on the host — committable to git — instead of
+      # only existing inside the container until the next rebuild wipes it.
+      - ./backend/alembic/versions:/app/alembic/versions
+    ports:
+      # Bound to localhost only — nginx on the host is the public entry
+      # point and reverse-proxies to this.
+      - "127.0.0.1:8000:8000"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Baked into the Next.js build at build time (see frontend/Dockerfile) —
+        # not a runtime env var, so it must be passed here, not under `environment`.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    restart: unless-stopped
+    # AUTH_SECRET is read at request time (verifying/minting session
+    # tokens), not baked into the build like NEXT_PUBLIC_API_URL above —
+    # so it's a runtime env var, not a build arg.
+    env_file:
+      - ./frontend/.env.local
+    depends_on:
+      - backend
+    ports:
+      - "127.0.0.1:3000:3000"
+
+volumes:
+  postgres_data:

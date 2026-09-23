@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { ChevronDown, Palette } from "lucide-react";
-import { getBook, updateBook, ApiError, type Book } from "@/lib/api";
+import { getBook, updateBook, getAuthHeaders, ApiError, type Book } from "@/lib/api";
 import { PAPER_PRESETS } from "./SettingsUI";
 import KnobsPanel from "./KnobsPanel";
 import ExpandableTextModal from "./ExpandableTextModal";
@@ -46,7 +46,8 @@ export default function BookStyleSidebar({
     const timer = setTimeout(async () => {
       try {
         const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/categories/by-name/${bookId}/${encodeURIComponent(categoryName)}/base-prompt`
+          `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/categories/by-name/${bookId}/${encodeURIComponent(categoryName)}/base-prompt`,
+          { headers: await getAuthHeaders() }
         );
         const data = await res.json();
         if (!cancelled && res.ok) setBasePrompt(data.base_prompt);
@@ -132,7 +133,7 @@ export default function BookStyleSidebar({
       if (categoryName) {
         const res = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/categories/by-name/${bookId}/${encodeURIComponent(categoryName)}/base-prompt`,
-          { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ base_prompt: trimmed }) }
+          { method: "PUT", headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) }, body: JSON.stringify({ base_prompt: trimmed }) }
         );
         const data = await res.json();
         if (!res.ok) throw new ApiError(res.status, data.detail);

@@ -72,10 +72,18 @@ def get_images_for_category(db: Session, category_id: int) -> list[dict]:
         for img in images
     ]
 
-def get_jobs_for_category(db: Session, category: str) -> list[GenerationJob]:
+def get_jobs_for_category(db: Session, category: str, user_id: int) -> list[GenerationJob]:
+    # user_id is required, not optional — category is a free-text string,
+    # not a foreign key, so without this filter two different users' jobs
+    # sharing a category name (e.g. both named "dinosaurs") would leak
+    # into each other's review list.
     return (
         db.query(GenerationJob)
-        .filter(GenerationJob.category == category, GenerationJob.status == "done")
+        .filter(
+            GenerationJob.category == category,
+            GenerationJob.status == "done",
+            GenerationJob.user_id == user_id,
+        )
         .order_by(GenerationJob.created_at.desc())
         .all()
     )
