@@ -42,22 +42,22 @@ def run_publish(payload: PublishRequest, db: Session = Depends(get_db), user: Us
     get_owned_category(payload.category_id, user, db)
     try:
         image_ids_set = set(payload.image_ids) if payload.image_ids is not None else None
-        result = execute_publish(db, payload.category_id, payload.lang, only_new=payload.only_new, image_ids=image_ids_set, batch_id=payload.batch_id)
+        result = execute_publish(db, payload.category_id, payload.lang, only_new=payload.only_new, image_ids=image_ids_set, batch_id=payload.batch_id, user_id=user.id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
     return PublishRunResponse(**result)
 
 
-@router.get("/history/{category_name}", response_model=list[PublishHistoryRunRead])
-def publish_history(category_name: str, lang: str | None = None, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    # NOTE: category_name is a free-text string here, not a foreign key —
-    # PublishRun has no category_id/user_id column, so this can't be
-    # ownership-scoped the way category_id-based endpoints above are.
-    # Same class of gap as the deferred Book.name audit (task 6 in the
-    # roadmap); this just requires login, it doesn't yet prevent one user
-    # from seeing another's publish history for a same-named category.
-    runs = get_publish_history(db, category_name, lang)
+@router.get("/history/{category_id}", response_model=list[PublishHistoryRunRead])
+def publish_history(category_id: int, lang: str | None = None, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    # Ownership-scoped by category_id now (task 6 follow-up, 2026-09-24) —
+    # PublishRun.category_id is a real FK, so this is checked the same way
+    # as every other category_id-based endpoint above, closing the gap
+    # where a free-text category-name lookup could return another user's
+    # publish history for a same-named category in a different book.
+    get_owned_category(category_id, user, db)
+    runs = get_publish_history(db, category_id, lang)
     return [
         PublishHistoryRunRead(
             id=r.id,
@@ -74,8 +74,14 @@ def publish_history(category_name: str, lang: str | None = None, db: Session = D
     ]
 @router.get("/runs/{run_id}/manifest")
 def download_run_manifest(run_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    # Same residual gap as publish_history above — PublishRun isn't
-    # linked to a user, only requires login for now.
+    # Ownership-scoped (2026-09-24) via the run's category_id — a run from
+    # before that column existed (category_id NULL) has no owner to check
+    # against, so it's treated as not found rather than allowed through.
+    run = db.query(PublishRun).filter(PublishRun.id == run_id).first()
+    if not run or run.category_id is None:
+        raise HTTPException(status_code=404, detail=f"Publish run {run_id} not found")
+    get_owned_category(run.category_id, user, db)
+
     try:
         csv_content = generate_manifest_csv(db, run_id)
     except ValueError as e:
@@ -87,28 +93,38 @@ def download_run_manifest(run_id: int, db: Session = Depends(get_db), user: User
         headers={"Content-Disposition": f"attachment; filename=manifest-run-{run_id}.csv"},
     )
 
-@router.get("/latest-manifest/{category_name}")
-def download_latest_manifest(category_name: str, lang: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+@router.get("/latest-manifest/{category_id}")
+def download_latest_manifest(category_id: int, lang: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    category = get_owned_category(category_id, user, db)
+
     latest = (
         db.query(PublishRun)
-        .filter(PublishRun.category == category_name, PublishRun.lang == lang)
+        .filter(PublishRun.category_id == category_id, PublishRun.lang == lang)
         .order_by(PublishRun.created_at.desc())
         .first()
     )
     if not latest:
-        raise HTTPException(status_code=404, detail=f"No publish runs found for '{category_name}'/'{lang}'")
+        raise HTTPException(status_code=404, detail=f"No publish runs found for '{category.name}'/'{lang}'")
 
     csv_content = generate_manifest_csv(db, latest.id)
     return Response(
         content=csv_content,
         media_type="text/csv",
-        headers={"Content-Disposition": f"attachment; filename={category_name}-{lang}-manifest.csv"},
+        headers={"Content-Disposition": f"attachment; filename={category.name}-{lang}-manifest.csv"},
     )
 
-@router.get("/output-path/{category_name}", response_model=OutputPathResponse)
-def get_output_path(category_name: str, user: User = Depends(get_current_user)):
+@router.get("/output-path/{category_id}", response_model=OutputPathResponse)
+def get_output_path(category_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     import os
-    output_path = os.path.abspath(os.path.join("output", category_name))
+    category = get_owned_category(category_id, user, db)
+    # Fixed alongside the ownership scoping (2026-09-24): real generated
+    # files live under output/<category_id>/ (see services/generation.py's
+    # _get_generated_files / category_dir), not output/<category name>/ —
+    # this endpoint was building the wrong path entirely before. It has no
+    # current frontend caller (confirmed via a grep across the frontend),
+    # so this was a live but silently-unused bug rather than something
+    # observed breaking in the UI.
+    output_path = os.path.abspath(os.path.join("output", str(category.id)))
     publish_path = os.path.abspath(os.path.join("publish"))
     return {"output_path": output_path, "publish_root": publish_path}
 

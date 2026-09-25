@@ -14,6 +14,19 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 type OpenAIKeyRead = components["schemas"]["OpenAIKeyRead"];
 type WordPressIntegrationRead = components["schemas"]["WordPressIntegrationRead"];
 
+// Not yet in generated-types.ts — these are new (task 5, per-user OpenAI
+// keys) and generated-types.ts is regenerated from the backend's OpenAPI
+// schema as a separate step. Defined locally for now; safe to switch to
+// components["schemas"][...] once that regeneration is run.
+type CurrentUserRead = { id: number; email: string; name: string; is_admin: boolean };
+type UserSummary = { id: number; email: string; name: string; is_admin: boolean };
+type OpenAIUserKeyRead = { user_id: number | null; user: UserSummary | null; has_key: boolean; masked_key: string | null };
+type OpenAIKeyListResponse = { house: OpenAIUserKeyRead; personal_keys: OpenAIUserKeyRead[] };
+
+async function getCurrentUser(): Promise<CurrentUserRead> {
+  const res = await fetch(`${API_BASE_URL}/auth/me`, { headers: await getAuthHeaders() });
+  return res.json();
+}
 async function getOpenAIKey(): Promise<OpenAIKeyRead> {
   const res = await fetch(`${API_BASE_URL}/account/openai-key`, { headers: await getAuthHeaders() });
   return res.json();
@@ -25,6 +38,30 @@ async function updateOpenAIKey(key: string): Promise<OpenAIKeyRead> {
     body: JSON.stringify({ openai_api_key: key }),
   });
   return res.json();
+}
+async function getAllUsers(): Promise<UserSummary[]> {
+  const res = await fetch(`${API_BASE_URL}/account/users`, { headers: await getAuthHeaders() });
+  if (!res.ok) return [];
+  return res.json();
+}
+async function getOpenAIKeyList(): Promise<OpenAIKeyListResponse | null> {
+  const res = await fetch(`${API_BASE_URL}/account/openai-keys`, { headers: await getAuthHeaders() });
+  if (!res.ok) return null;
+  return res.json();
+}
+async function updateUserOpenAIKey(userId: number, key: string) {
+  const res = await fetch(`${API_BASE_URL}/account/openai-keys/user/${userId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
+    body: JSON.stringify({ openai_api_key: key }),
+  });
+  return res.json();
+}
+async function deleteUserOpenAIKey(userId: number) {
+  await fetch(`${API_BASE_URL}/account/openai-keys/user/${userId}`, {
+    method: "DELETE",
+    headers: await getAuthHeaders(),
+  });
 }
 async function getWordPressIntegration(): Promise<WordPressIntegrationRead> {
   const res = await fetch(`${API_BASE_URL}/account/wordpress`, { headers: await getAuthHeaders() });
@@ -51,10 +88,20 @@ async function testWordPressConnection(): Promise<{ success: boolean; message: s
 }
 
 export default function AccountPage() {
+  const [currentUser, setCurrentUser] = useState<CurrentUserRead | null>(null);
   const [openaiKey, setOpenaiKey] = useState<OpenAIKeyRead | null>(null);
   const [openaiKeyInput, setOpenaiKeyInput] = useState("");
   const [savingKey, setSavingKey] = useState(false);
   const [keySaved, setKeySaved] = useState(false);
+
+  // Admin-only per-user key management (task 5) — only fetched/shown when
+  // currentUser.is_admin is true. Regular users just see the house key's
+  // status above, with no way to add their own (admin-only by design).
+  const [keyList, setKeyList] = useState<OpenAIKeyListResponse | null>(null);
+  const [allUsers, setAllUsers] = useState<UserSummary[]>([]);
+  const [pickerUserId, setPickerUserId] = useState<string>("");
+  const [pickerKeyInput, setPickerKeyInput] = useState("");
+  const [savingUserKey, setSavingUserKey] = useState(false);
 
   const [wpSiteUrl, setWpSiteUrl] = useState("");
   const [wpUsername, setWpUsername] = useState("");
@@ -78,9 +125,16 @@ export default function AccountPage() {
       setLoading(true);
       setError(null);
       try {
-        const [keyData, wpData] = await Promise.all([getOpenAIKey(), getWordPressIntegration()]);
+        const [userData, keyData, wpData] = await Promise.all([getCurrentUser(), getOpenAIKey(), getWordPressIntegration()]);
         if (cancelled) return;
+        setCurrentUser(userData);
         setOpenaiKey(keyData);
+        if (userData.is_admin) {
+          const [list, users] = await Promise.all([getOpenAIKeyList(), getAllUsers()]);
+          if (cancelled) return;
+          setKeyList(list);
+          setAllUsers(users);
+        }
         setWpSiteUrl(wpData.site_url ?? "");
         setWpUsername(wpData.username ?? "");
         setWpHasPassword(wpData.has_password);
@@ -119,6 +173,40 @@ export default function AccountPage() {
       setError("Failed to save API key");
     } finally {
       setSavingKey(false);
+    }
+  }
+
+  async function refreshKeyList() {
+    const list = await getOpenAIKeyList();
+    setKeyList(list);
+  }
+
+  async function handleAssignUserKey() {
+    if (!pickerUserId || !pickerKeyInput.trim()) {
+      setError("Pick a user and enter a key first.");
+      return;
+    }
+    setError(null);
+    setSavingUserKey(true);
+    try {
+      await updateUserOpenAIKey(Number(pickerUserId), pickerKeyInput.trim());
+      setPickerKeyInput("");
+      setPickerUserId("");
+      await refreshKeyList();
+    } catch {
+      setError("Failed to save that user's API key");
+    } finally {
+      setSavingUserKey(false);
+    }
+  }
+
+  async function handleRemoveUserKey(userId: number) {
+    setError(null);
+    try {
+      await deleteUserOpenAIKey(userId);
+      await refreshKeyList();
+    } catch {
+      setError("Failed to remove that user's API key");
     }
   }
 
@@ -222,27 +310,95 @@ export default function AccountPage() {
                 description="Used for image generation (gpt-image-2) and translation (gpt-4o-mini)."
                 icon={<KeyRound size={16} />}
               >
-                {openaiKey?.has_key && (
-                  <p className="text-sm mb-2" style={{ color: "var(--ink)" }}>
-                    Current key: <span className="font-mono">{openaiKey.masked_key}</span>
-                  </p>
-                )}
-                <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
-                  {openaiKey?.has_key ? "Replace API key" : "OpenAI API key"}
-                </label>
-                <input
-                  type="password"
-                  value={openaiKeyInput}
-                  onChange={(e) => setOpenaiKeyInput(e.target.value)}
-                  placeholder="sk-..."
-                  className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
-                  style={{ borderColor: "var(--pencil-light)", background: "var(--paper)" }}
-                />
-                <SaveRow onClick={handleSaveKey} saving={savingKey} saved={keySaved} label="Save key" />
-                {keySaved && (
-                  <p className="mt-2 text-xs" style={{ color: "var(--pencil)" }}>
-                    Takes effect immediately, no restart needed.
-                  </p>
+                {currentUser && !currentUser.is_admin ? (
+                  <div className="rounded-md border-[1.5px] border-dashed p-4 text-sm" style={{ borderColor: "var(--pencil-light)", color: "var(--pencil)" }}>
+                    OpenAI keys are managed by your admin.{" "}
+                    {openaiKey?.has_key ? "A shared key is currently configured." : "No shared key is configured yet."}
+                  </div>
+                ) : (
+                  <>
+                    <SubCard title="House key" description="The shared fallback — used by any user with no personal key of their own." defaultOpen>
+                      {openaiKey?.has_key && (
+                        <p className="text-sm mb-2" style={{ color: "var(--ink)" }}>
+                          Current key: <span className="font-mono">{openaiKey.masked_key}</span>
+                        </p>
+                      )}
+                      <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
+                        {openaiKey?.has_key ? "Replace API key" : "OpenAI API key"}
+                      </label>
+                      <input
+                        type="password"
+                        value={openaiKeyInput}
+                        onChange={(e) => setOpenaiKeyInput(e.target.value)}
+                        placeholder="sk-..."
+                        className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
+                        style={{ borderColor: "var(--pencil-light)", background: "var(--paper)" }}
+                      />
+                      <SaveRow onClick={handleSaveKey} saving={savingKey} saved={keySaved} label="Save key" />
+                      {keySaved && (
+                        <p className="mt-2 text-xs" style={{ color: "var(--pencil)" }}>
+                          Takes effect immediately, no restart needed.
+                        </p>
+                      )}
+                    </SubCard>
+
+                    <div className="mt-4">
+                      <SubCard
+                        title="Per-user keys"
+                        description="Optional — a user with no personal key here automatically uses the house key above. Temporary, until everyone is consolidated onto one app-wide key."
+                      >
+                        {keyList && keyList.personal_keys.length > 0 && (
+                          <div className="space-y-2 mb-4">
+                            {keyList.personal_keys.map((row) => (
+                              <div
+                                key={row.user_id}
+                                className="flex items-center justify-between gap-3 px-3 py-2 rounded-md text-sm"
+                                style={{ background: "var(--canvas)", border: "1px solid var(--pencil-light)" }}
+                              >
+                                <div>
+                                  <span className="font-medium" style={{ color: "var(--ink)" }}>{row.user?.name ?? `User #${row.user_id}`}</span>
+                                  <span className="ml-2 font-mono text-xs" style={{ color: "var(--pencil)" }}>{row.masked_key}</span>
+                                </div>
+                                <button
+                                  onClick={() => row.user_id !== null && handleRemoveUserKey(row.user_id)}
+                                  className="text-xs font-medium"
+                                  style={{ color: "var(--coral-dark)" }}
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>
+                          Assign a personal key
+                        </label>
+                        <div className="flex flex-col gap-2">
+                          <select
+                            value={pickerUserId}
+                            onChange={(e) => setPickerUserId(e.target.value)}
+                            className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
+                            style={{ borderColor: "var(--pencil-light)", background: "var(--paper)" }}
+                          >
+                            <option value="">Choose a user...</option>
+                            {allUsers.map((u) => (
+                              <option key={u.id} value={u.id}>{u.name} ({u.email})</option>
+                            ))}
+                          </select>
+                          <input
+                            type="password"
+                            value={pickerKeyInput}
+                            onChange={(e) => setPickerKeyInput(e.target.value)}
+                            placeholder="sk-..."
+                            className="w-full px-3 py-2 rounded-md border-[1.5px] outline-none text-sm"
+                            style={{ borderColor: "var(--pencil-light)", background: "var(--paper)" }}
+                          />
+                          <SaveRow onClick={handleAssignUserKey} saving={savingUserKey} saved={false} label="Assign key" />
+                        </div>
+                      </SubCard>
+                    </div>
+                  </>
                 )}
               </AccountSection>
 

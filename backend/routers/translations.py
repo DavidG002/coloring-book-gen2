@@ -221,7 +221,7 @@ def translate_variations(category_id: int, lang: str, db: Session = Depends(get_
     if not to_translate:
         return TranslateVariationsResponse(translated_count=0, skipped_count=len(category.variations))
 
-    results = translate_phrases(to_translate, lang)
+    results = translate_phrases(to_translate, lang, user.id)
 
     for variation_text, translated_text in results.items():
         if not translated_text:
@@ -255,7 +255,7 @@ def translate_subjects(category_id: int, lang: str, db: Session = Depends(get_db
     if not to_translate:
         return TranslateVariationsResponse(translated_count=0, skipped_count=len(category.subjects))
 
-    results = translate_phrases(to_translate, lang)
+    results = translate_phrases(to_translate, lang, user.id)
 
     for subject_name, translated_text in results.items():
         if not translated_text:
@@ -279,6 +279,6 @@ def translate_subjects(category_id: int, lang: str, db: Session = Depends(get_db
 @router.post("/{lang}/translate-category-name", response_model=TranslateCategoryNameResponse)
 def translate_category_name(category_id: int, lang: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     category = _get_category_or_404(category_id, db, user)
-    results = translate_phrases([category.name], lang)
+    results = translate_phrases([category.name], lang, user.id)
     translated = results.get(category.name, "")
     return TranslateCategoryNameResponse(translated_text=translated)

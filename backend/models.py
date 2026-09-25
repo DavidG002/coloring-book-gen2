@@ -366,12 +366,22 @@ def _run_light_migrations():
 
 
 class AppCredential(Base):
-    """Single-row table (id=1 always) holding provider credentials.
-    DB-backed rather than .env so it's editable from the UI and ready
-    for a future multi-user model."""
+    """Holds OpenAI API keys. The id=1 row is the shared "house" key,
+    always present, with user_id left NULL — every call falls back to it
+    when the calling user has no personal key of their own. Any other row
+    is one user's personal key (user_id set, unique — at most one personal
+    key per user). Per-user keys are an interim measure (see roadmap task
+    5): David plans to eventually consolidate everyone back onto a single
+    app-wide key, at which point every non-house row can simply be
+    deleted and this table returns to being a single-row table again.
+
+    openai_api_key is stored encrypted at rest (Fernet, see
+    services/crypto.py) — always decrypt via that module, never read it
+    as a usable key directly off this column."""
     __tablename__ = "app_credentials"
 
     id = Column(Integer, primary_key=True, default=1)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, unique=True)
     openai_api_key = Column(String, nullable=True)
 
 

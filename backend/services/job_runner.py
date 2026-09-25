@@ -56,7 +56,7 @@ def run_generation_job(job_id: int, tasks: list[dict], settings: dict):
                 if task.get("category_id"):
                     try:
                         from services.content_variants import auto_generate_seo_for_all_languages
-                        auto_generate_seo_for_all_languages(db, task["category_id"], task["subject"], task["variation_text"])
+                        auto_generate_seo_for_all_languages(db, task["category_id"], task["subject"], task["variation_text"], task.get("user_id"))
                     except Exception:
                         # SEO auto-generation is a convenience, never worth
                         # failing a real, already-successful image generation

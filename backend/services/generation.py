@@ -5,7 +5,7 @@ from PIL import Image
 from services.prompt_knobs import get_book_knobs
 from sqlalchemy.orm import Session
 
-from services.openai_client import get_openai_client, get_active_credential_key
+from services.openai_client import resolve_credential
 from services.rate_limits import get_image_rate_limiter
 
 
@@ -23,6 +23,7 @@ def build_task_list(
     subject_names: list[str] | None,
     new_variations_per_subject: int,
     max_images: int | None,
+    user_id: int,
 ) -> list[dict]:
     # Looked up by id, not name — the caller (routers/generation.py) already
     # resolved and validated the exact intended Category by id; re-resolving
@@ -56,6 +57,7 @@ def build_task_list(
                 "variation_text": modifier.text,
                 "base_prompt": category.effective_base_prompt,
                 "knobs": get_book_knobs(category.book),
+                "user_id": user_id,
             })
 
     if max_images:
@@ -79,7 +81,7 @@ def _get_existing_max_variation(category_id: int, subject_name: str) -> int:
     return max(numbers) if numbers else 0
 
 
-def build_task_list_from_pairs(db: Session, category_id: int, pairs: list[dict]) -> list[dict]:
+def build_task_list_from_pairs(db: Session, category_id: int, pairs: list[dict], user_id: int) -> list[dict]:
     # See build_task_list's comment above — looked up by id for the same
     # reason: a name-based re-lookup can silently resolve to a different,
     # same-named category in another book.
@@ -105,6 +107,7 @@ def build_task_list_from_pairs(db: Session, category_id: int, pairs: list[dict])
             "variation_text": pair["variation_text"],
             "base_prompt": category.effective_base_prompt,
             "knobs": get_book_knobs(category.book),
+            "user_id": user_id,
         })
     return tasks
 
@@ -170,7 +173,7 @@ def get_promoted_preview_map(db: Session, book_id: int) -> dict[int, int]:
     return result
 
 
-def promote_preview_to_image(db: Session, book_id: int, preview_id: int) -> dict:
+def promote_preview_to_image(db: Session, book_id: int, preview_id: int, user_id: int) -> dict:
     """Turns an already-generated settings preview into a real, permanent
     generated image for its category, instead of running a second
     (billed, and not guaranteed identical) generation. This is safe
@@ -279,7 +282,7 @@ def promote_preview_to_image(db: Session, book_id: int, preview_id: int) -> dict
     # image over.
     try:
         from services.content_variants import auto_generate_seo_for_all_languages
-        auto_generate_seo_for_all_languages(db, category.id, subject.name, preview.variation_text)
+        auto_generate_seo_for_all_languages(db, category.id, subject.name, preview.variation_text, user_id)
     except Exception:
         pass
 
@@ -495,12 +498,12 @@ def generate_image_file(task: dict, settings: dict, output_path: str) -> tuple[b
     compiled_json = json.dumps(compiled)
 
     try:
+        client, credential_key = resolve_credential(task.get("user_id"))
         # Blocks until this credential's account-wide images/minute budget
         # (see services/rate_limits.py) has a free slot — matters here more
         # than anywhere else, since this is the loop that can fire many
         # calls back-to-back across a whole generation job.
-        get_image_rate_limiter(get_active_credential_key()).acquire()
-        client = get_openai_client()
+        get_image_rate_limiter(credential_key).acquire()
         response = client.images.generate(
             model="gpt-image-2",
             prompt=prompt,
@@ -517,7 +520,7 @@ def generate_image_file(task: dict, settings: dict, output_path: str) -> tuple[b
         traceback.print_exc()
         return False, None, None
 
-def build_regenerate_task(db: Session, image_id: int) -> dict:
+def build_regenerate_task(db: Session, image_id: int, user_id: int) -> dict:
     """Builds a single task for regenerating a rejected image using its
     OWN real, stored compiled slots — not a fresh compile from the
     book's current knobs. This is what makes Review's 'Regenerate' give
@@ -551,6 +554,7 @@ def build_regenerate_task(db: Session, image_id: int) -> dict:
         "base_prompt": category.effective_base_prompt,  # unused when override_compiled is set, kept for shape consistency
         "knobs": {},  # same — override_compiled takes precedence in generate_image_file
         "override_compiled": compiled,
+        "user_id": user_id,
     }
 
 
@@ -563,6 +567,7 @@ def generate_preview_image(
     variation_text: str,
     settings: dict,
     knobs: dict,
+    user_id: int,
 ) -> tuple[bytes, str, str] | tuple[None, None, None]:
     """Runs a real, billed generation call using an actual subject + variation
     from the book's categories, so the preview matches genuine output exactly.
@@ -581,11 +586,11 @@ def generate_preview_image(
     compiled_json = json.dumps(compiled)
 
     try:
+        client, credential_key = resolve_credential(user_id)
         # Same rate-limited image budget as generate_image_file — a preview
         # is still a real, billed gpt-image-2 call and counts against the
         # same account-wide 5/minute cap.
-        get_image_rate_limiter(get_active_credential_key()).acquire()
-        client = get_openai_client()
+        get_image_rate_limiter(credential_key).acquire()
         response = client.images.generate(
             model="gpt-image-2",
             prompt=prompt,

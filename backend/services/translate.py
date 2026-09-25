@@ -1,4 +1,4 @@
-from services.openai_client import get_openai_client, get_active_credential_key
+from services.openai_client import resolve_credential
 from services.rate_limits import get_text_semaphore
 
 TRANSLATE_MODEL = "gpt-4o-mini"
@@ -19,7 +19,7 @@ LANGUAGE_NAMES = {
 }
 
 
-def translate_phrases(phrases: list[str], target_lang: str) -> dict[str, str]:
+def translate_phrases(phrases: list[str], target_lang: str, user_id: int | None) -> dict[str, str]:
     if not phrases:
         return {}
 
@@ -42,8 +42,8 @@ def translate_phrases(phrases: list[str], target_lang: str) -> dict[str, str]:
         f"no extra commentary:\n\n{numbered}"
     )
 
-    client = get_openai_client()
-    with get_text_semaphore(get_active_credential_key()):
+    client, credential_key = resolve_credential(user_id)
+    with get_text_semaphore(credential_key):
         response = client.chat.completions.create(
             model=TRANSLATE_MODEL,
             messages=[{"role": "user", "content": prompt}],
@@ -64,7 +64,7 @@ def translate_phrases(phrases: list[str], target_lang: str) -> dict[str, str]:
 
     return result
 
-def translate_template(text: str, target_lang: str) -> str:
+def translate_template(text: str, target_lang: str, user_id: int | None) -> str:
     """Translates surrounding text while leaving {category}/{item}/{variant}
     tokens completely untouched — used for one-time template structure setup
     per language, not per category."""
@@ -77,8 +77,8 @@ def translate_template(text: str, target_lang: str) -> str:
         f"do not translate or alter the tokens themselves, only translate the surrounding words. "
         f"Respond with ONLY the translated text, no explanation, no quotes:\n\n{text}"
     )
-    client = get_openai_client()
-    with get_text_semaphore(get_active_credential_key()):
+    client, credential_key = resolve_credential(user_id)
+    with get_text_semaphore(credential_key):
         response = client.chat.completions.create(
             model=TRANSLATE_MODEL,
             messages=[{"role": "user", "content": prompt}],
@@ -88,7 +88,7 @@ def translate_template(text: str, target_lang: str) -> str:
     return (response.choices[0].message.content or "").strip()
 
 
-def translate_template_structure_for_book(product_noun: str, target_lang: str) -> dict[str, str]:
+def translate_template_structure_for_book(product_noun: str, target_lang: str, user_id: int | None) -> dict[str, str]:
     """Translates a neutral template structure, using this specific Book's
     product noun, into a new language, once — the result becomes that
     Book+language's reusable default. If the target is English, the neutral
@@ -105,11 +105,11 @@ def translate_template_structure_for_book(product_noun: str, target_lang: str) -
         return neutral_templates
 
     return {
-        key: translate_template(text, target_lang)
+        key: translate_template(text, target_lang, user_id)
         for key, text in neutral_templates.items()
     }
 
-def auto_translate_new_items(db, category, new_subjects: list, new_variations: list) -> dict:
+def auto_translate_new_items(db, category, new_subjects: list, new_variations: list, user_id: int) -> dict:
     """Called right after new subjects/variations are added to a Category.
     For every language the category already has a Translation set up for,
     automatically translates just the genuinely-new items and saves them —
@@ -132,7 +132,7 @@ def auto_translate_new_items(db, category, new_subjects: list, new_variations: l
 
         if new_subjects:
             phrases = [s.name for s in new_subjects]
-            translated = translate_phrases(phrases, lang)
+            translated = translate_phrases(phrases, lang, user_id)
             for subject in new_subjects:
                 text = translated.get(subject.name, "")
                 if text:
@@ -144,7 +144,7 @@ def auto_translate_new_items(db, category, new_subjects: list, new_variations: l
 
         if new_variations:
             phrases = [v.text for v in new_variations]
-            translated = translate_phrases(phrases, lang)
+            translated = translate_phrases(phrases, lang, user_id)
             for variation in new_variations:
                 text = translated.get(variation.text, "")
                 if text:
@@ -160,7 +160,7 @@ def auto_translate_new_items(db, category, new_subjects: list, new_variations: l
     return result
 
 
-def generate_all_translations_for_category(category_id: int) -> None:
+def generate_all_translations_for_category(category_id: int, user_id: int) -> None:
     """Best-effort background job: creates a Translation (book-level
     filename/alt/title templates + a translated category name) for every
     language the account has ever added, for a freshly created category.
@@ -206,7 +206,7 @@ def generate_all_translations_for_category(category_id: int) -> None:
                         "title_template": template_row.title_template,
                     }
                 else:
-                    templates = translate_template_structure_for_book(book.product_noun, lang)
+                    templates = translate_template_structure_for_book(book.product_noun, lang, user_id)
                     db.add(LanguageTemplateDefault(
                         book_id=book.id,
                         lang=lang,
@@ -215,7 +215,7 @@ def generate_all_translations_for_category(category_id: int) -> None:
                         title_template=templates["title_template"],
                     ))
 
-                translated_name = translate_phrases([category.name], lang).get(category.name, category.name)
+                translated_name = translate_phrases([category.name], lang, user_id).get(category.name, category.name)
 
                 db.add(Translation(
                     category_id=category.id,

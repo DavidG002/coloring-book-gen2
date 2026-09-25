@@ -1,3 +1,5 @@
+import os
+
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -11,9 +13,21 @@ from database import SessionLocal
 
 app = FastAPI(title="Coloring Book Generator API")
 
+# Configurable via CORS_ALLOWED_ORIGINS (comma-separated) so production
+# (frontend and backend on separate subdomains, e.g. yooprints.com /
+# api.yooprints.com — see the VPS deploy roadmap) doesn't need another
+# code change to add its real origin. Defaults to local dev's origin,
+# unchanged from before this was made configurable.
+_cors_origins_env = os.environ.get("CORS_ALLOWED_ORIGINS")
+allow_origins = (
+    [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
+    if _cors_origins_env
+    else ["http://localhost:3000"]
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=allow_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )

@@ -97,7 +97,7 @@ def create_category(payload: CategoryCreate, background_tasks: BackgroundTasks, 
     # is already ready in every language by the time anyone opens its
     # Language step — no manual "Generate all" click needed. Runs after the
     # response is sent and never blocks category creation.
-    background_tasks.add_task(generate_all_translations_for_category, category.id)
+    background_tasks.add_task(generate_all_translations_for_category, category.id, user.id)
     return _to_category_read(category)
 
 @router.put("/{category_id}", response_model=CategoryRead)
@@ -167,7 +167,7 @@ def update_category(category_id: int, payload: CategoryUpdate, db: Session = Dep
     # language later finds it already filled in.
     auto_translated = {}
     if new_subjects or new_variations:
-        auto_translated = auto_translate_new_items(db, category, new_subjects, new_variations)
+        auto_translated = auto_translate_new_items(db, category, new_subjects, new_variations, user.id)
 
     db.commit()
     db.refresh(category)

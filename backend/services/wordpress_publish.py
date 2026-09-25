@@ -863,7 +863,7 @@ def get_locally_published_paths(db: Session, category: str, lang: str) -> set[st
     return {r[0] for r in rows}
 
 
-def preview_wordpress_push(db: Session, category_id: int, lang: str) -> dict:
+def preview_wordpress_push(db: Session, category_id: int, lang: str, user_id: int | None = None) -> dict:
     """Shows every locally-published-and-eligible file for this category+
     language — each tagged with push status (for the currently configured
     site), exclusion status, whether it needs re-syncing, and which local
@@ -936,6 +936,7 @@ def preview_wordpress_push(db: Session, category_id: int, lang: str) -> dict:
                     subject_name=image_record.subject,
                     variation_text=image_record.variation_text,
                     lang=lang,
+                    user_id=user_id,
                 )
                 display_title = variant.seo_title
                 display_alt = variant.seo_alt_text
@@ -986,6 +987,7 @@ def push_batch_to_wordpress(
     status: str = "draft",
     only_new: bool = True,
     source_paths: list[str] | None = None,
+    user_id: int | None = None,
 ) -> dict:
     """The main entry point: pushes a category's images, in one language, to
     WordPress — reusing the same translated/SEO content already computed
@@ -1032,7 +1034,7 @@ def push_batch_to_wordpress(
         ] if only_new else all_files
         skipped_count = len(all_files) - len(files_to_push)
 
-    category_description = ensure_category_description(db, category.id, translation.category_translated, lang)
+    category_description = ensure_category_description(db, category.id, translation.category_translated, lang, user_id)
     term_id = ensure_category_term(db, config, category.id, category_name, lang, translation.category_translated, description=category_description, book_id=category.book_id)
     translation_items_by_subject = {item.subject_id: item.translated_text for item in translation.items}
     pushed_items = []
@@ -1050,6 +1052,7 @@ def push_batch_to_wordpress(
                 subject_name=image_record.subject,
                 variation_text=image_record.variation_text,
                 lang=lang,
+                user_id=user_id,
             )
             filename = os.path.basename(f["source_path"])
             media_id = upload_media(
@@ -1147,7 +1150,7 @@ def push_batch_to_wordpress(
     }
 
 
-def sync_pushed_item_to_wordpress(db: Session, source_path: str, lang: str) -> dict:
+def sync_pushed_item_to_wordpress(db: Session, source_path: str, lang: str, user_id: int | None = None) -> dict:
     """Re-syncs an already-pushed WordPress post + media with whatever
     content currently exists locally (e.g. after a Regenerate), for the
     currently configured site."""
@@ -1179,6 +1182,7 @@ def sync_pushed_item_to_wordpress(db: Session, source_path: str, lang: str) -> d
         subject_name=image_record.subject,
         variation_text=image_record.variation_text,
         lang=lang,
+        user_id=user_id,
     )
 
     update_post(config, item.wp_post_id, variant.seo_title, variant.seo_content, variant.seo_excerpt)

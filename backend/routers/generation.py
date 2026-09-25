@@ -55,7 +55,7 @@ def plan_generation(payload: GenerationPlanRequest, db: Session = Depends(get_db
     try:
         tasks = build_task_list(
             db, category.id, payload.subjects,
-            payload.new_variations_per_subject, payload.max_images,
+            payload.new_variations_per_subject, payload.max_images, user.id,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -73,7 +73,7 @@ def run_generation(payload: GenerationRunRequest, background_tasks: BackgroundTa
     try:
         tasks = build_task_list(
             db, category.id, payload.subjects,
-            payload.new_variations_per_subject, payload.max_images,
+            payload.new_variations_per_subject, payload.max_images, user.id,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -135,7 +135,7 @@ def plan_generation_pairs(payload: GenerationPairsPlanRequest, db: Session = Dep
     category = _get_category_or_404(db, payload.category_id, user)
     try:
         tasks = build_task_list_from_pairs(
-            db, category.id, [p.model_dump() for p in payload.pairs]
+            db, category.id, [p.model_dump() for p in payload.pairs], user.id
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -152,7 +152,7 @@ def run_generation_pairs(payload: GenerationPairsRunRequest, background_tasks: B
     category = _get_category_or_404(db, payload.category_id, user)
     try:
         tasks = build_task_list_from_pairs(
-            db, category.id, [p.model_dump() for p in payload.pairs]
+            db, category.id, [p.model_dump() for p in payload.pairs], user.id
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -187,7 +187,7 @@ def pair_counts(category_id: int, db: Session = Depends(get_db), user: User = De
 @router.post("/regenerate-same-slots/{image_id}", response_model=RegenerateSameSlotsResponse)
 def regenerate_same_slots(image_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     try:
-        task = build_regenerate_task(db, image_id)
+        task = build_regenerate_task(db, image_id, user.id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

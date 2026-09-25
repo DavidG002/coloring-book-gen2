@@ -90,6 +90,7 @@ def preview_book_settings(book_id: int, payload: BookPreviewRequest, db: Session
         task["variation_text"],
         settings,
         get_book_knobs(book),
+        user.id,
     )
     if image_bytes is None:
         raise HTTPException(status_code=500, detail="Failed to generate preview image")
@@ -139,7 +140,7 @@ def get_preview_file(preview_id: int, db: Session = Depends(get_db), user: User 
 def promote_preview_route(book_id: int, preview_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     get_owned_book(book_id, user, db)
     try:
-        return promote_preview_to_image(db, book_id, preview_id)
+        return promote_preview_to_image(db, book_id, preview_id, user.id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 

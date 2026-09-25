@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from services.openai_client import get_openai_client, get_active_credential_key
+from services.openai_client import resolve_credential
 from services.rate_limits import get_text_semaphore
 from services.translate import LANGUAGE_NAMES
 from models import Subject, Variation, ContentVariant, Category, CategoryDescription
@@ -12,6 +12,7 @@ def generate_content_variant(
     subject_name: str,
     variation_text: str,
     lang: str,
+    user_id: int,
 ) -> dict:
     language_name = LANGUAGE_NAMES.get(lang.lower(), lang)
 
@@ -42,8 +43,8 @@ YOAST_TITLE: <a search-engine title under 60 characters, starting with the keyph
 META_DESC: <a compelling meta description under 155 characters, written to earn clicks in search results, naturally including the keyphrase>
 """
 
-    client = get_openai_client()
-    with get_text_semaphore(get_active_credential_key()):
+    client, credential_key = resolve_credential(user_id)
+    with get_text_semaphore(credential_key):
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
@@ -86,6 +87,7 @@ def generate_single_field(
     variation_text: str,
     lang: str,
     field: str,
+    user_id: int,
 ) -> str:
     """Regenerates exactly ONE SEO field, leaving every other field on the
     row completely untouched — the fix for 'one field has a mistake, but
@@ -118,8 +120,8 @@ Respond with EXACTLY this format, no extra commentary:
 {response_prefix}: <your answer>
 """
 
-    client = get_openai_client()
-    with get_text_semaphore(get_active_credential_key()):
+    client, credential_key = resolve_credential(user_id)
+    with get_text_semaphore(credential_key):
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
@@ -140,6 +142,7 @@ def regenerate_single_field(
     variation_text: str,
     lang: str,
     field: str,
+    user_id: int,
 ) -> str:
     """Regenerates one field via the LLM, saves it, and returns the new
     value — every other field on this ContentVariant row is untouched."""
@@ -152,7 +155,7 @@ def regenerate_single_field(
 
     new_value = generate_single_field(
         category.effective_base_prompt, category.book.product_noun, category.name,
-        subject_name, variation_text, lang, field,
+        subject_name, variation_text, lang, field, user_id,
     )
 
     existing = (
@@ -181,6 +184,7 @@ def ensure_content_variant(
     subject_name: str,
     variation_text: str,
     lang: str,
+    user_id: int,
 ) -> ContentVariant:
     """Returns the cached ContentVariant if it exists, otherwise generates
     and stores it once — every future image using this same subject,
@@ -220,7 +224,7 @@ def ensure_content_variant(
     if existing:
         return existing
 
-    generated = generate_content_variant(category.effective_base_prompt, category.book.product_noun, category_name, subject_name, variation_text, lang)
+    generated = generate_content_variant(category.effective_base_prompt, category.book.product_noun, category_name, subject_name, variation_text, lang, user_id)
 
     record = ContentVariant(
         subject_id=subject.id,
@@ -234,7 +238,7 @@ def ensure_content_variant(
     return record
 
 
-def auto_generate_seo_for_all_languages(db: Session, category_id: int, subject_name: str, variation_text: str) -> dict:
+def auto_generate_seo_for_all_languages(db: Session, category_id: int, subject_name: str, variation_text: str, user_id: int) -> dict:
     """Called right after a pairing's first-ever image is successfully
     generated. For every language this category already has a
     Translation set up for, auto-generates SEO content (if it doesn't
@@ -266,7 +270,7 @@ def auto_generate_seo_for_all_languages(db: Session, category_id: int, subject_n
             continue
 
         generated = generate_content_variant(
-            category.effective_base_prompt, category.book.product_noun, category.name, subject_name, variation_text, lang
+            category.effective_base_prompt, category.book.product_noun, category.name, subject_name, variation_text, lang, user_id
         )
         record = ContentVariant(
             subject_id=subject.id,
@@ -283,7 +287,7 @@ def auto_generate_seo_for_all_languages(db: Session, category_id: int, subject_n
 
     return langs_touched
 
-def generate_category_description(book_base_prompt: str, product_noun: str, category_name: str, translated_category_name: str, lang: str) -> str:
+def generate_category_description(book_base_prompt: str, product_noun: str, category_name: str, translated_category_name: str, lang: str, user_id: int) -> str:
     language_name = LANGUAGE_NAMES.get(lang.lower(), lang)
 
     prompt = f"""The site/product is described as:
@@ -296,8 +300,8 @@ site, consistently referring to this as a "{product_noun}". Match the style and
 audience described above. Avoid vague or overselling language. Respond with
 ONLY the sentence, no quotes, no explanation."""
 
-    client = get_openai_client()
-    with get_text_semaphore(get_active_credential_key()):
+    client, credential_key = resolve_credential(user_id)
+    with get_text_semaphore(credential_key):
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
@@ -306,7 +310,7 @@ ONLY the sentence, no quotes, no explanation."""
     return (response.choices[0].message.content or "").strip()
 
 
-def ensure_category_description(db: Session, category_id: int, translated_category_name: str, lang: str) -> str:
+def ensure_category_description(db: Session, category_id: int, translated_category_name: str, lang: str, user_id: int) -> str:
     """Returns the cached description if this category+language has one
     already; otherwise generates and stores it once."""
     category = _get_category_or_raise(db, category_id)
@@ -320,7 +324,7 @@ def ensure_category_description(db: Session, category_id: int, translated_catego
     if existing:
         return existing.description
 
-    description = generate_category_description(category.effective_base_prompt, category.book.product_noun, category_name, translated_category_name, lang)
+    description = generate_category_description(category.effective_base_prompt, category.book.product_noun, category_name, translated_category_name, lang, user_id)
 
     record = CategoryDescription(category=category_name, category_id=category_id, lang=lang, description=description)
     db.add(record)
@@ -334,6 +338,7 @@ def regenerate_content_variant(
     subject_name: str,
     variation_text: str,
     lang: str,
+    user_id: int,
 ) -> ContentVariant:
     """Forces a fresh generation even if one is already cached — the fix
     for when the existing AI-written copy is wrong and needs a redo."""
@@ -355,7 +360,7 @@ def regenerate_content_variant(
     if not subject or not variation:
         raise ValueError("Subject or variation not found")
 
-    generated = generate_content_variant(category.effective_base_prompt, category.book.product_noun, category_name, subject_name, variation_text, lang)
+    generated = generate_content_variant(category.effective_base_prompt, category.book.product_noun, category_name, subject_name, variation_text, lang, user_id)
 
     existing = (
         db.query(ContentVariant)
@@ -450,11 +455,11 @@ def list_content_variants(db: Session, category_id: int, lang: str) -> list[dict
     return rows
 
 
-def regenerate_category_description(db: Session, category_id: int, translated_category_name: str, lang: str) -> str:
+def regenerate_category_description(db: Session, category_id: int, translated_category_name: str, lang: str, user_id: int) -> str:
     category = _get_category_or_raise(db, category_id)
     category_name = category.name
 
-    description = generate_category_description(category.effective_base_prompt, category.book.product_noun, category_name, translated_category_name, lang)
+    description = generate_category_description(category.effective_base_prompt, category.book.product_noun, category_name, translated_category_name, lang, user_id)
 
     existing = (
         db.query(CategoryDescription)

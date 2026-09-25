@@ -98,29 +98,20 @@ def _check_subject_ownership(db: Session, subject_id: int, user: User) -> None:
     get_owned_category(subject.category_id, user, db)
 
 
-# NOTE: this function was defined twice in this file before this pass
-# (found while adding auth) — Python keeps only the second definition,
-# so the first was dead code. Left both in place, both now with the
-# ownership check, rather than changing behavior in an auth-focused
-# change; worth cleaning up separately.
+# Fixed 2026-09-24 (flagged in the roadmap as a found-not-fixed bug):
+# this function used to be defined twice — Python silently kept only
+# the second definition, and that surviving one was DROPPING
+# payload.update_slug entirely (only the dead first copy passed it
+# through). Real effect: the "update slug" option was always a no-op —
+# rename_subject_term defaults update_slug to False, so every rename
+# silently preserved the old slug regardless of what the caller asked
+# for. Merged into one definition that forwards update_slug correctly.
 @router.post("/rename-subject-tag")
 def rename_subject_tag(payload: RenameSubjectTagRequest, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     _check_subject_ownership(db, payload.subject_id, user)
     try:
         config = _get_wp_config(db)
         return rename_subject_term(db, payload.subject_id, payload.lang, payload.new_name, config.site_url, payload.update_slug)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-
-
-@router.post("/rename-subject-tag")
-def rename_subject_tag(payload: RenameSubjectTagRequest, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    _check_subject_ownership(db, payload.subject_id, user)
-    try:
-        config = _get_wp_config(db)
-        return rename_subject_term(db, payload.subject_id, payload.lang, payload.new_name, config.site_url)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except RuntimeError as e:
@@ -208,6 +199,7 @@ def push_to_wordpress(payload: WordPressPushRequest, db: Session = Depends(get_d
             status=payload.status,
             only_new=payload.only_new,
             source_paths=payload.source_paths,
+            user_id=user.id,
         )
         
     except ValueError as e:
@@ -218,7 +210,7 @@ def push_to_wordpress(payload: WordPressPushRequest, db: Session = Depends(get_d
 def preview_push(payload: WordPressPreviewRequest, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     get_owned_category(payload.category_id, user, db)
     try:
-        result = preview_wordpress_push(db, payload.category_id, payload.lang)
+        result = preview_wordpress_push(db, payload.category_id, payload.lang, user.id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return WordPressPreviewResponse(**result)
@@ -250,7 +242,7 @@ def sync_to_wordpress(payload: WordPressSyncRequest, db: Session = Depends(get_d
     if not owned:
         raise HTTPException(status_code=404, detail="Image not found")
     try:
-        result = sync_pushed_item_to_wordpress(db, payload.source_path, payload.lang)
+        result = sync_pushed_item_to_wordpress(db, payload.source_path, payload.lang, user.id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except RuntimeError as e:

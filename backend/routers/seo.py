@@ -50,7 +50,7 @@ def get_seo_pending_review_count(category_id: int, db: Session = Depends(get_db)
 def get_seo_data(category_id: int, lang: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     category = _get_category_or_404(db, category_id, user)
     translation = _get_translation_or_404(db, category, lang)
-    description = ensure_category_description(db, category.id, translation.category_translated, lang)
+    description = ensure_category_description(db, category.id, translation.category_translated, lang, user.id)
     variants = list_content_variants(db, category.id, lang)
     return SeoDataResponse(
         category_description=description,
@@ -60,19 +60,21 @@ def get_seo_data(category_id: int, lang: str, db: Session = Depends(get_db), use
 
 @router.put("/{lang}/description")
 def update_description(category_id: int, lang: str, payload: CategoryDescriptionUpdate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    # Fixed 2026-09-24 (flagged in the roadmap as a found-not-fixed bug):
+    # this fallback branch used to build a ContentVariant referencing
+    # undefined `subject`/`variation` locals — a copy-paste from
+    # update_content_variant below that was never adapted. CategoryDescriptionUpdate
+    # only ever carries a `description` field (see schemas.py), and the
+    # right row to create-or-update here is CategoryDescription, not
+    # ContentVariant — this endpoint edits the one description per
+    # (category, language), not a per-subject/variation SEO row.
     category = _get_category_or_404(db, category_id, user)
     existing = db.query(CategoryDescription).filter(CategoryDescription.category == category.name, CategoryDescription.lang == lang).first()
     if not existing:
-        existing = ContentVariant(subject_id=subject.id, variation_id=variation.id, lang=lang, seo_title="", seo_alt_text="", seo_excerpt="", seo_content="")
+        existing = CategoryDescription(category=category.name, category_id=category.id, lang=lang, description=payload.description)
         db.add(existing)
-    existing.seo_title = payload.seo_title
-    existing.seo_alt_text = payload.seo_alt_text
-    existing.seo_excerpt = payload.seo_excerpt
-    existing.seo_content = payload.seo_content
-    existing.focus_keyphrase = payload.focus_keyphrase
-    existing.yoast_title = payload.yoast_title
-    existing.yoast_meta_description = payload.yoast_meta_description
-    existing.needs_tag_sync = False
+    else:
+        existing.description = payload.description
     db.commit()
     return {"status": "saved"}
 
@@ -82,7 +84,7 @@ def regen_description(category_id: int, lang: str, db: Session = Depends(get_db)
     category = _get_category_or_404(db, category_id, user)
     translation = _get_translation_or_404(db, category, lang)
     try:
-        description = regenerate_category_description(db, category.id, translation.category_translated, lang)
+        description = regenerate_category_description(db, category.id, translation.category_translated, lang, user.id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return {"description": description}
@@ -147,7 +149,7 @@ def generate_missing_content(category_id: int, lang: str, db: Session = Depends(
     for row in list_content_variants(db, category.id, lang):
         if not row["generated"]:
             try:
-                ensure_content_variant(db, category.id, row["subject_name"], row["variation_text"], lang)
+                ensure_content_variant(db, category.id, row["subject_name"], row["variation_text"], lang, user.id)
                 generated_count += 1
             except Exception:
                 continue
@@ -158,7 +160,7 @@ def generate_missing_content(category_id: int, lang: str, db: Session = Depends(
 def regen_one_content(category_id: int, lang: str, payload: SeoRegenerateRequest, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     category = _get_category_or_404(db, category_id, user)
     try:
-        variant = regenerate_content_variant(db, category.id, payload.subject_name, payload.variation_text, lang)
+        variant = regenerate_content_variant(db, category.id, payload.subject_name, payload.variation_text, lang, user.id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     variant.needs_tag_sync = False
@@ -177,7 +179,7 @@ def regen_one_content(category_id: int, lang: str, payload: SeoRegenerateRequest
 def regen_single_field(category_id: int, lang: str, payload: SeoFieldRegenerateRequest, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     _get_category_or_404(db, category_id, user)
     try:
-        value = regenerate_single_field(db, category_id, payload.subject_name, payload.variation_text, lang, payload.field)
+        value = regenerate_single_field(db, category_id, payload.subject_name, payload.variation_text, lang, payload.field, user.id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return SeoFieldRegenerateResponse(field=payload.field, value=value)

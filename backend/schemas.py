@@ -482,6 +482,29 @@ class OpenAIKeyUpdate(BaseModel):
     openai_api_key: str
 
 
+class UserSummary(BaseModel):
+    """Minimal user info for admin-only pickers (e.g. assigning a personal
+    OpenAI key to a specific user) — never includes password_hash."""
+    id: int
+    email: str
+    name: str
+    is_admin: bool
+
+
+class OpenAIUserKeyRead(BaseModel):
+    """One row in the admin's per-user OpenAI key list — either the shared
+    house key (user_id/user is None) or one user's personal key."""
+    user_id: Optional[int] = None
+    user: Optional[UserSummary] = None
+    has_key: bool
+    masked_key: Optional[str] = None
+
+
+class OpenAIKeyListResponse(BaseModel):
+    house: OpenAIUserKeyRead
+    personal_keys: list[OpenAIUserKeyRead] = []
+
+
 # ---------- WordPress Integration ----------
 
 class WordPressIntegrationRead(BaseModel):

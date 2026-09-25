@@ -221,7 +221,7 @@ def build_publish_plan(db: Session, category_id: int, lang: str, only_new: bool 
     }
 
 
-def execute_publish(db: Session, category_id: int, lang: str, only_new: bool = False, image_ids: set[int] | None = None, batch_id: str | None = None) -> dict:
+def execute_publish(db: Session, category_id: int, lang: str, only_new: bool = False, image_ids: set[int] | None = None, batch_id: str | None = None, user_id: int | None = None) -> dict:
     # See build_publish_plan's comment — looked up by id for the same
     # reason: a name-based re-lookup can silently resolve to a different,
     # same-named category in another book.
@@ -256,6 +256,7 @@ def execute_publish(db: Session, category_id: int, lang: str, only_new: bool = F
                     subject_name=image_record.subject,
                     variation_text=image_record.variation_text,
                     lang=lang,
+                    user_id=user_id,
                 )
                 alt_text = variant.seo_alt_text
                 title_text = variant.seo_title
@@ -327,8 +328,15 @@ def execute_publish(db: Session, category_id: int, lang: str, only_new: bool = F
     }
 
 
-def get_publish_history(db: Session, category_name: str, lang: str | None = None) -> list[PublishRun]:
-    query = db.query(PublishRun).filter(PublishRun.category == category_name)
+def get_publish_history(db: Session, category_id: int, lang: str | None = None) -> list[PublishRun]:
+    # Filtered by category_id (a real FK, ownership-checked by the caller
+    # via services/ownership.py's get_owned_category) rather than the old
+    # free-text category name — a name match could silently return another
+    # user's history for a same-named category. See the roadmap's "task 6"
+    # note. NOTE: PublishRun rows from before category_id existed have it
+    # as NULL and will no longer show up here — accepted as the same
+    # tradeoff already made elsewhere (e.g. GenerationImage.category_id).
+    query = db.query(PublishRun).filter(PublishRun.category_id == category_id)
     if lang:
         query = query.filter(PublishRun.lang == lang)
     return query.order_by(PublishRun.created_at.desc()).all()

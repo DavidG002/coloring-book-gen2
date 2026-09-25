@@ -1,32 +1,43 @@
 from openai import OpenAI
 from database import SessionLocal
 from models import AppCredential
+from services.crypto import decrypt_secret
 
 
-def get_openai_client() -> OpenAI:
-    """Builds a fresh OpenAI client using whatever key is currently saved
-    in the database — so changes made via Settings take effect immediately,
-    with no server restart needed."""
+def resolve_credential(user_id: int | None) -> tuple[OpenAI, str]:
+    """Resolves which OpenAI credential to use for a given user, and
+    returns both the ready-to-use client AND the credential key that
+    identifies which row was actually used (for rate-limiting — see
+    services/rate_limits.py). Resolving both together, from the same
+    query, matters: resolving them separately risked the rate limiter
+    keying off a different row than the one the client actually used, if
+    a key was added/removed in between the two lookups.
+
+    Falls back to the shared "house" key (AppCredential id=1) whenever
+    the user has no personal key of their own, or when user_id is None
+    (a caller with no user context, e.g. a very old background task) —
+    this fallback is deliberate (roadmap task 5's confirmed design), not
+    a bug: most users are expected to run on the house key indefinitely,
+    with a personal key being the exception, not the default.
+    """
     db = SessionLocal()
     try:
-        row = db.query(AppCredential).filter(AppCredential.id == 1).first()
-        api_key = row.openai_api_key if row and row.openai_api_key else None
+        row = None
+        if user_id is not None:
+            row = db.query(AppCredential).filter(AppCredential.user_id == user_id).first()
+
+        if row and row.openai_api_key:
+            credential_key = f"user:{user_id}"
+        else:
+            row = db.query(AppCredential).filter(AppCredential.id == 1).first()
+            credential_key = "house"
+
+        encrypted_key = row.openai_api_key if row else None
     finally:
         db.close()
 
-    if not api_key:
+    if not encrypted_key:
         raise ValueError("No OpenAI API key configured. Add one in Settings.")
 
-    return OpenAI(api_key=api_key)
-
-
-def get_active_credential_key() -> str:
-    """Identifies which OpenAI credential is "active", for rate-limiting
-    purposes (see services/rate_limits.py). Today there's only ever one
-    row (id=1, shared by every user — see get_openai_client above), so
-    this always returns the same key and every user shares one rate-limit
-    bucket. Once AppCredential moves to per-user (roadmap task 5), this
-    becomes the caller's own credential id instead — rate limiting then
-    becomes per-user automatically, with no change needed in
-    services/rate_limits.py or any of its callers."""
-    return "credential:1"
+    api_key = decrypt_secret(encrypted_key)
+    return OpenAI(api_key=api_key), credential_key

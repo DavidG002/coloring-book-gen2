@@ -70,7 +70,7 @@ def update_language_template(book_id: int, lang: str, payload: LanguageTemplateD
 def auto_translate_language_template(book_id: int, lang: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     book = get_owned_book(book_id, user, db)
 
-    translated = translate_template_structure_for_book(book.product_noun, lang)
+    translated = translate_template_structure_for_book(book.product_noun, lang, user.id)
 
     row = (
         db.query(LanguageTemplateDefault)

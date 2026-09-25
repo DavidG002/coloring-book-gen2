@@ -171,7 +171,7 @@ export default function CategoryDetailPage() {
         const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
         const authHeaders = await getAuthHeaders();
         const [historyRes, wpRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/publish/history/${encodeURIComponent(category.name)}`, { headers: authHeaders }),
+          fetch(`${API_BASE_URL}/publish/history/${categoryId}`, { headers: authHeaders }),
           fetch(`${API_BASE_URL}/account/wordpress`, { headers: authHeaders }),
         ]);
         const history = await historyRes.json();
