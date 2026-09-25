@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useSession, signOut } from "next-auth/react";
 import {
-  BookOpen, LayoutDashboard, Library, Grid2X2, Printer, Settings, Sparkles,ArrowUpRight, ChevronDown, ChevronLeft, LogOut,
+  BookOpen, LayoutDashboard, Library, Grid2X2, Printer, Settings, Sparkles,ArrowUpRight, ChevronDown, ChevronLeft, LogOut, Menu, X,
 } from "lucide-react";
 import { getBooks } from "@/lib/api";
 import NewBookModal from "./NewBookModal";
@@ -30,6 +30,56 @@ export default function AppShell({
   const [collapsed, setCollapsed] = useState(false);
   const [ready, setReady] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  // Stage 1 of the responsive pass (see the "responsive-ui-audit" project
+  // doc): below lg (1024px) there isn't room for the full 244px sidebar
+  // alongside real content, so it's forced into its collapsed/icon-only
+  // rail regardless of the user's manual preference. The manual toggle
+  // still works above that width exactly as before.
+  const [isNarrowViewport, setIsNarrowViewport] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 1023px)");
+    const update = () => setIsNarrowViewport(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
+  // Stage 2 (phone support): below 640px even the icon-only rail eats too
+  // much of the screen to leave real content room. On a phone the sidebar
+  // is hidden entirely and re-appears as an off-canvas drawer, opened by the
+  // header's menu button — full-width nav labels shown (not the icon rail),
+  // since it's the primary way to navigate while it's open.
+  const [isPhoneViewport, setIsPhoneViewport] = useState(false);
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 639px)");
+    const update = () => {
+      setIsPhoneViewport(mq.matches);
+      if (!mq.matches) setMobileDrawerOpen(false);
+    };
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
+  // Renamed from the Stage 1 "effectiveCollapsed" — this now specifically
+  // means "showing the narrow icon-only rail", which only applies above
+  // phone width. At phone width the sidebar is either fully hidden or fully
+  // expanded inside the drawer, never the icon rail.
+  const showCollapsedRail = !isPhoneViewport && (isNarrowViewport || collapsed);
+
+  function handleNavClick() {
+    if (isPhoneViewport) {
+      setMobileDrawerOpen(false);
+      return;
+    }
+    // Re-expand a manually-collapsed sidebar after navigating — but not
+    // when the collapse is just the forced tablet/laptop rail (isNarrowViewport),
+    // since there's no wider state to "return" to there.
+    if (collapsed && !isNarrowViewport) toggleCollapsed();
+  }
 
   // Shown in place of the old static "My studio" placeholder — the
   // sidebar card doubles as the sign-out control now that accounts exist.
@@ -56,40 +106,63 @@ export default function AppShell({
     });
   }
 
-  const sidebarWidth = collapsed ? 76 : 244;
+  const sidebarWidth = showCollapsedRail ? 76 : 244;
 
   return (
     <div className="min-h-screen flex" style={{ background: "var(--paper)" }}>
+      {/* Backdrop behind the phone drawer — tapping it closes the menu,
+          same as tapping a nav link inside it. Only exists while the drawer
+          is actually open, so it never intercepts clicks otherwise. */}
+      {isPhoneViewport && mobileDrawerOpen && (
+        <div
+          onClick={() => setMobileDrawerOpen(false)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 40 }}
+        />
+      )}
       <aside
         className="shrink-0 flex flex-col relative"
         style={{
-          width: sidebarWidth,
+          width: isPhoneViewport ? 244 : sidebarWidth,
           height: "100vh",
-          position: "sticky",
+          position: isPhoneViewport ? "fixed" : "sticky",
           top: 0,
-          padding: collapsed ? "24px 10px 18px" : "24px 16px 18px",
+          left: isPhoneViewport ? (mobileDrawerOpen ? 0 : -260) : undefined,
+          zIndex: isPhoneViewport ? 50 : undefined,
+          padding: showCollapsedRail ? "24px 10px 18px" : "24px 16px 18px",
           borderRight: "1px solid var(--pencil-light)",
           background: "var(--canvas)",
-          transition: ready ? "width 0.22s ease, padding 0.22s ease" : "none",
+          boxShadow: isPhoneViewport && mobileDrawerOpen ? "0 10px 40px rgba(0,0,0,0.25)" : undefined,
+          transition: isPhoneViewport ? "left 0.22s ease" : ready ? "width 0.22s ease, padding 0.22s ease" : "none",
           overflowX: "hidden",
           overflowY: "auto",
         }}
       >
-        <div className={`flex items-center gap-2.5 mb-7 ${collapsed ? "justify-center px-0" : "px-2.5"}`}>
+        <div className={`flex items-center gap-2.5 mb-7 ${showCollapsedRail ? "justify-center px-0" : "px-2.5"}`}>
           <div
             className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
             style={{ background: "var(--teal)", transform: "rotate(-5deg)" }}
           >
             <BookOpen size={15} color="white" />
           </div>
-          {!collapsed && (
-            <span className="font-display text-[19px] whitespace-nowrap" style={{ color: "var(--ink)", letterSpacing: "-0.02em" }}>
+          {!showCollapsedRail && (
+            <span className="font-display text-[19px] whitespace-nowrap flex-1" style={{ color: "var(--ink)", letterSpacing: "-0.02em" }}>
               coloring studio
             </span>
           )}
+          {isPhoneViewport && (
+            <button
+              type="button"
+              onClick={() => setMobileDrawerOpen(false)}
+              aria-label="Close menu"
+              className="shrink-0 flex items-center justify-center rounded-md"
+              style={{ width: 26, height: 26, color: "var(--pencil)" }}
+            >
+              <X size={16} />
+            </button>
+          )}
         </div>
 
-        {!collapsed ? (
+        {!showCollapsedRail ? (
           <button
             type="button"
             onClick={() => signOut({ callbackUrl: "/login" })}
@@ -128,9 +201,9 @@ export default function AppShell({
         <nav className="grid gap-1">
           <Link
             href="/"
-            onClick={() => collapsed && toggleCollapsed()}
-            title={collapsed ? "Overview" : undefined}
-            className={`nav-hover flex items-center gap-2.5 rounded-lg text-[13px] ${collapsed ? "justify-center px-0 py-2.5" : "px-3 py-2.5"}`}
+            onClick={handleNavClick}
+            title={showCollapsedRail ? "Overview" : undefined}
+            className={`nav-hover flex items-center gap-2.5 rounded-lg text-[13px] ${showCollapsedRail ? "justify-center px-0 py-2.5" : "px-3 py-2.5"}`}
             style={
               active === "Overview"
                 ? { background: "var(--teal-tint)", color: "var(--teal-dark)", fontWeight: 700 }
@@ -138,13 +211,13 @@ export default function AppShell({
             }
           >
             <LayoutDashboard size={16} />
-            {!collapsed && "Overview"}
+            {!showCollapsedRail && "Overview"}
           </Link>
           <Link
             href="/books"
-            onClick={() => collapsed && toggleCollapsed()}
-            title={collapsed ? "Books" : undefined}
-            className={`nav-hover flex items-center gap-2.5 rounded-lg text-[13px] ${collapsed ? "justify-center px-0 py-2.5" : "px-3 py-2.5"}`}
+            onClick={handleNavClick}
+            title={showCollapsedRail ? "Books" : undefined}
+            className={`nav-hover flex items-center gap-2.5 rounded-lg text-[13px] ${showCollapsedRail ? "justify-center px-0 py-2.5" : "px-3 py-2.5"}`}
             style={
               active === "Books"
                 ? { background: "var(--teal-tint)", color: "var(--teal-dark)", fontWeight: 700 }
@@ -152,7 +225,7 @@ export default function AppShell({
             }
           >
             <Library size={16} />
-            {!collapsed && (
+            {!showCollapsedRail && (
               <>
                 Books
                 {bookCount !== null && (
@@ -165,9 +238,9 @@ export default function AppShell({
           </Link>
           <Link
             href="/categories"
-            onClick={() => collapsed && toggleCollapsed()}
-            title={collapsed ? "Categories" : undefined}
-            className={`nav-hover flex items-center gap-2.5 rounded-lg text-[13px] ${collapsed ? "justify-center px-0 py-2.5" : "px-3 py-2.5"}`}
+            onClick={handleNavClick}
+            title={showCollapsedRail ? "Categories" : undefined}
+            className={`nav-hover flex items-center gap-2.5 rounded-lg text-[13px] ${showCollapsedRail ? "justify-center px-0 py-2.5" : "px-3 py-2.5"}`}
             style={
               active === "Categories"
                 ? { background: "var(--teal-tint)", color: "var(--teal-dark)", fontWeight: 700 }
@@ -175,13 +248,13 @@ export default function AppShell({
             }
           >
            <Grid2X2 size={16} />
-            {!collapsed && "Categories"}
+            {!showCollapsedRail && "Categories"}
           </Link>
           <Link
             href="/print"
-            onClick={() => collapsed && toggleCollapsed()}
-            title={collapsed ? "Print & Publish" : undefined}
-            className={`nav-hover flex items-center gap-2.5 rounded-lg text-[13px] ${collapsed ? "justify-center px-0 py-2.5" : "px-3 py-2.5"}`}
+            onClick={handleNavClick}
+            title={showCollapsedRail ? "Print & Publish" : undefined}
+            className={`nav-hover flex items-center gap-2.5 rounded-lg text-[13px] ${showCollapsedRail ? "justify-center px-0 py-2.5" : "px-3 py-2.5"}`}
             style={
               active === "Print"
                 ? { background: "var(--teal-tint)", color: "var(--teal-dark)", fontWeight: 700 }
@@ -189,35 +262,41 @@ export default function AppShell({
             }
           >
             <Printer size={16} />
-            {!collapsed && "Print & Publish"}
+            {!showCollapsedRail && "Print & Publish"}
           </Link>
           </nav>
 
-          <div className="mt-3 pt-3" style={{ borderTop: "1px solid var(--pencil-light)" }}>
-            <button
-              onClick={toggleCollapsed}
-              title={collapsed ? "Expand sidebar" : undefined}
-              className={`nav-hover flex items-center gap-2.5 rounded-lg text-[13px] w-full ${collapsed ? "justify-center px-0 py-2.5" : "px-3 py-2.5"}`}
-              style={{ color: "var(--pencil)" }}
-            >
-              <ChevronLeft size={16} style={{ transform: collapsed ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.22s ease" }} />
-              {!collapsed && "Collapse"}
-            </button>
-          </div>
+          {/* The manual collapse toggle only makes sense on the tablet/laptop
+              tier — at phone width the sidebar is a drawer (fully shown or
+              fully hidden, never an icon rail), and at the forced tablet
+              rail width there's no wider state for this button to return to. */}
+          {!isNarrowViewport && !isPhoneViewport && (
+            <div className="mt-3 pt-3" style={{ borderTop: "1px solid var(--pencil-light)" }}>
+              <button
+                onClick={toggleCollapsed}
+                title={collapsed ? "Expand sidebar" : undefined}
+                className={`nav-hover flex items-center gap-2.5 rounded-lg text-[13px] w-full ${collapsed ? "justify-center px-0 py-2.5" : "px-3 py-2.5"}`}
+                style={{ color: "var(--pencil)" }}
+              >
+                <ChevronLeft size={16} style={{ transform: collapsed ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.22s ease" }} />
+                {!collapsed && "Collapse"}
+              </button>
+            </div>
+          )}
 
         <div className="mt-auto">
         <Link
           href="/settings"
-          onClick={() => collapsed && toggleCollapsed()}
-          title={collapsed ? "Settings" : undefined}
-            className={`nav-hover flex items-center gap-2.5 rounded-lg text-[13px] ${collapsed ? "justify-center px-0 py-2.5" : "px-3 py-2.5"}`}
+          onClick={handleNavClick}
+          title={showCollapsedRail ? "Settings" : undefined}
+            className={`nav-hover flex items-center gap-2.5 rounded-lg text-[13px] ${showCollapsedRail ? "justify-center px-0 py-2.5" : "px-3 py-2.5"}`}
             style={{ color: "var(--pencil)" }}
           >
             <Settings size={16} />
-            {!collapsed && "Settings"}
+            {!showCollapsedRail && "Settings"}
           </Link>
 
-          {!collapsed && (
+          {!showCollapsedRail && (
             <>
               <div
                 className="mt-5 p-3.5 rounded-xl"
@@ -250,13 +329,26 @@ export default function AppShell({
 
       <main className="flex-1 min-w-0">
         <header
-          className="flex items-center justify-between px-11"
+          className="flex items-center justify-between px-5 md:px-8 lg:px-11"
           style={{ height: 70, borderBottom: "1px solid var(--pencil-light)" }}
         >
-          <div className="flex gap-2.5 text-xs" style={{ color: "var(--pencil)" }}>
-            <span>Studio</span>
-            <span>/</span>
-            <strong style={{ color: "var(--ink)" }}>{breadcrumb}</strong>
+          <div className="flex items-center gap-3">
+            {isPhoneViewport && (
+              <button
+                type="button"
+                onClick={() => setMobileDrawerOpen(true)}
+                aria-label="Open menu"
+                className="shrink-0 -ml-1.5 flex items-center justify-center rounded-lg"
+                style={{ width: 32, height: 32, color: "var(--pencil)" }}
+              >
+                <Menu size={19} />
+              </button>
+            )}
+            <div className="flex gap-2.5 text-xs" style={{ color: "var(--pencil)" }}>
+              <span>Studio</span>
+              <span>/</span>
+              <strong style={{ color: "var(--ink)" }}>{breadcrumb}</strong>
+            </div>
           </div>
           <div className="flex items-center gap-2.5 shrink-0">
             <ThemeToggle />
@@ -270,7 +362,10 @@ export default function AppShell({
           </div>
         </header>
 
-        <div className="mx-auto" style={{ maxWidth: contentMaxWidth ?? 1100, padding: "52px 44px 80px" }}>
+        <div
+          className="mx-auto px-5 md:px-8 lg:px-11"
+          style={{ maxWidth: contentMaxWidth ?? 1100, paddingTop: 52, paddingBottom: 80 }}
+        >
           {children}
         </div>
       </main>

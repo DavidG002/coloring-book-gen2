@@ -226,7 +226,7 @@ export default function BookDetailPage() {
               </>
             }
           >
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
               <button
                 onClick={() => setShowNewCategoryModal(true)}
                 className="lift-hover flex items-center gap-3 w-full text-left min-w-0"
@@ -313,7 +313,7 @@ export default function BookDetailPage() {
               })}
 
               {categories.length === 0 && (
-                <p className="text-sm mt-1 col-span-3" style={{ color: "var(--pencil)" }}>
+                <p className="text-sm mt-1 col-span-full" style={{ color: "var(--pencil)" }}>
                   No categories yet in this book.
                 </p>
               )}

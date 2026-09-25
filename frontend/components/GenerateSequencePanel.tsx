@@ -667,7 +667,12 @@ export default function GenerateSequencePanel({
         </div>
       </div>
 
-            <div className="grid relative" style={{ gridTemplateColumns: "minmax(320px, 0.8fr) 1.6fr", borderTop: "1px solid var(--pencil-light)", background: "#eef2f5cd" }}>
+            {/* Subjects/Variations pairing grid — was a fixed
+                "minmax(320px, 0.8fr) 1.6fr" two-column layout with no
+                fallback, so below ~640px the 320px-minimum Subjects column
+                crowded Variations into almost no space at all. Stacks to a
+                single column below sm (640px) instead. */}
+            <div className="grid relative grid-cols-1 sm:grid-cols-[minmax(280px,0.8fr)_1.6fr]" style={{ borderTop: "1px solid var(--pencil-light)", background: "#eef2f5cd" }}>
          <div
           className="absolute flex items-center justify-center"
           style={{ gridColumn: "1 / 2", justifySelf: "end", bottom: -13, width: 26, height: 26, position: "absolute", right: -13 }}
@@ -687,7 +692,7 @@ export default function GenerateSequencePanel({
             {listsExpanded ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
           </button>
         </div>
-        <div style={{ padding: 20, borderRight: "1px solid var(--pencil-light)" }}>
+        <div className="border-b sm:border-b-0 sm:border-r" style={{ padding: 20, borderColor: "var(--pencil-light)" }}>
           <div className="flex items-start justify-between mb-3.5">
             <div>
               <h3 className="font-display font-normal m-0" style={{ fontSize: 19, color: "var(--ink)" }}>

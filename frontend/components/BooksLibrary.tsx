@@ -32,6 +32,25 @@ export default function BooksLibrary() {
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortKey>("recent");
   const [showCreate, setShowCreate] = useState(false);
+  // Tracks the actual rendered column count (1 under md, 2 under xl, 3 at
+  // xl+ — mirrors the grid's own Tailwind breakpoints below) so the
+  // min-height reservation that keeps the page from jumping while the user
+  // types a search stays accurate at every width, not just the old fixed
+  // 3-column desktop layout.
+  const [columns, setColumns] = useState(3);
+
+  useEffect(() => {
+    function computeColumns() {
+      const w = window.innerWidth;
+      if (w >= 1280) return 3;
+      if (w >= 768) return 2;
+      return 1;
+    }
+    const update = () => setColumns(computeColumns());
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
 
   function load() {
     setLoading(true);
@@ -74,7 +93,7 @@ export default function BooksLibrary() {
 
   // Reserve space for the full (unfiltered) list so typing in search never shrinks the page.
   const totalGridItems = books.length + 1; // +1 for the "create a new book" tile
-  const gridRows = Math.max(1, Math.ceil(totalGridItems / 3));
+  const gridRows = Math.max(1, Math.ceil(totalGridItems / columns));
   const gridMinHeight = gridRows * 216 + (gridRows - 1) * 14;
 
   return (
@@ -141,7 +160,7 @@ export default function BooksLibrary() {
           Loading...
         </p>
       ) : (
-        <div className="grid grid-cols-3 gap-3.5" style={{ minHeight: gridMinHeight, alignContent: "start" }}>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5" style={{ minHeight: gridMinHeight, alignContent: "start" }}>
           <button
             onClick={() => setShowCreate(true)}
             className="lift-hover rounded-xl flex items-center gap-3 text-left"
@@ -193,7 +212,7 @@ export default function BooksLibrary() {
           })}
 
           {filteredBooks.length === 0 && (
-            <p className="text-sm col-span-3" style={{ color: "var(--pencil)" }}>
+            <p className="text-sm col-span-full" style={{ color: "var(--pencil)" }}>
               No books found. Try another search.
             </p>
           )}

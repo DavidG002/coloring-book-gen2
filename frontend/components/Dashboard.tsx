@@ -36,6 +36,25 @@ export default function Dashboard() {
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortKey>("recent");
   const [todayLabel, setTodayLabel] = useState("");
+  // Tracks the actual rendered column count of the "recent books" grid below
+  // (1 col under md, 2 under xl, 3 at xl+ — mirrors the Tailwind breakpoints
+  // used on its className) so the min-height reservation that keeps the page
+  // from jumping while the user types a search stays accurate at every
+  // width, not just the old fixed 3-column desktop layout.
+  const [recentBooksColumns, setRecentBooksColumns] = useState(3);
+
+  useEffect(() => {
+    function computeColumns() {
+      const w = window.innerWidth;
+      if (w >= 1280) return 3;
+      if (w >= 768) return 2;
+      return 1;
+    }
+    const update = () => setRecentBooksColumns(computeColumns());
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -118,7 +137,7 @@ export default function Dashboard() {
         </p>
       </div>
 
-      <div className="grid grid-cols-3 gap-3.5 mb-12">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 mb-12">
         <StatCard icon={<BookOpen size={16} />} label="Total books" value={books.length} tone={TONES[0]} />
         <StatCard icon={<FolderOpen size={16} />} label="Categories" value={categories.length} note="Across all books" tone={TONES[1]} />
         <StatCard icon={<Layers size={16} />} label="Subjects" value={totalSubjects} note="Across all categories" tone={TONES[2]} />
@@ -224,7 +243,13 @@ export default function Dashboard() {
           Loading...
         </p>
       ) : (
-        <div className="grid grid-cols-3 gap-3.5 mb-12" style={{ minHeight: 446, alignContent: "start" }}>
+        <div
+          className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5 mb-12"
+          style={{
+            minHeight: Math.ceil((RECENT_BOOKS_LIMIT + 1) / recentBooksColumns) * 216 + (Math.ceil((RECENT_BOOKS_LIMIT + 1) / recentBooksColumns) - 1) * 14,
+            alignContent: "start",
+          }}
+        >
           <button
             onClick={() => setShowCreate(true)}
             className="lift-hover rounded-xl flex items-center gap-3 text-left"

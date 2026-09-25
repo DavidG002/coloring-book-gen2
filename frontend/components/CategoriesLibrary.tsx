@@ -138,7 +138,7 @@ export default function CategoriesLibrary() {
           Loading...
         </p>
       ) : (
-      <div className="grid grid-cols-2 gap-3.5">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
       {filtered.flatMap((cat, i) => {
         const tone = TONES[i % TONES.length];
         const isExpanded = expandedCategory === cat.name;
@@ -226,7 +226,7 @@ export default function CategoriesLibrary() {
       })}
         {filtered.length === 0 && (
           <div
-            className="col-span-2 flex flex-col items-center justify-center gap-2 rounded-xl"
+            className="col-span-full flex flex-col items-center justify-center gap-2 rounded-xl"
             style={{ minHeight: 190, border: "1px dashed var(--pencil-light)", color: "var(--pencil)" }}
           >
             <Grid2X2 size={22} />

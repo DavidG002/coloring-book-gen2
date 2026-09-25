@@ -87,7 +87,7 @@ const stepIndex = activeStep === "wordpress" ? STEPS.length - 1 : mainStepIndex;
   return (
     <div style={{ minHeight: "100vh", background: "var(--paper)" }}>
       <header
-        className="flex items-center justify-between px-11"
+        className="flex items-center justify-between px-5 md:px-8 lg:px-11"
         style={{ height: 70, borderBottom: "1px solid var(--pencil-light)", background: "var(--canvas)" }}
       >
         <div className="flex items-center gap-4">
@@ -118,9 +118,14 @@ const stepIndex = activeStep === "wordpress" ? STEPS.length - 1 : mainStepIndex;
         </div>
       </header>
 
+      {/* Stage 1 of the responsive pass (see the "responsive-ui-audit" project
+          doc): the fixed 280px + 900px two-column layout had no fallback and
+          started overlapping below ~1250px of usable width — the single most
+          fragile layout in the app, since every category workflow goes
+          through this shell. Below lg (1024px) it stacks to one column (step
+          nav + style sidebar above, workflow content below) instead. */}
       <main
-        className="grid items-start justify-center mx-auto"
-        style={{ gridTemplateColumns: "280px minmax(0, 900px)", gap: 72, padding: "58px 6vw 90px" }}
+        className="grid items-start justify-center mx-auto grid-cols-1 lg:grid-cols-[280px_minmax(0,900px)] gap-8 lg:gap-[72px] px-5 md:px-10 lg:px-[6vw] py-12 lg:py-[58px] lg:pb-[90px]"
       >
         <aside>
           <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--pencil)", letterSpacing: "0.12em" }}>
@@ -214,13 +219,18 @@ const stepIndex = activeStep === "wordpress" ? STEPS.length - 1 : mainStepIndex;
               Thoughtful pairings create more consistent coloring pages.
             </p>
           </div>
-
-          {activeStep === "generate" && (
-            <BookStyleSidebar bookId={bookId} categoryName={categoryName} onLiveImageSettingsChange={onLiveImageSettingsChange} />
-          )}
         </aside>
 
-        <section className="min-w-0">
+        {/* lg:row-span-2 makes this the tall right-hand column at desktop
+            width, so CSS grid's auto-placement drops the style sidebar below
+            (into the newly-freed row 2, column 1) exactly where it used to
+            sit inside <aside> — desktop is visually unchanged. Below lg,
+            with only one column, grid auto-placement just stacks these three
+            siblings in document order: nav, then this content, then the
+            style sidebar last — which is the order David asked for (menu,
+            then the image panel, then book style/knobs), instead of the
+            style sidebar appearing between the menu and the content. */}
+        <section className="min-w-0 lg:row-span-2">
           <div className="flex items-center gap-3.5 mb-4 text-[10px]" style={{ color: "var(--pencil)" }}>
             <span>Step {stepIndex + 1} of {STEPS.length}</span>
             <div className="flex-1 rounded-full overflow-hidden" style={{ height: 3, background: "var(--pencil-light)" }}>
@@ -233,6 +243,10 @@ const stepIndex = activeStep === "wordpress" ? STEPS.length - 1 : mainStepIndex;
 
           {children(activeStep, setActiveStep)}
         </section>
+
+        {activeStep === "generate" && (
+          <BookStyleSidebar bookId={bookId} categoryName={categoryName} onLiveImageSettingsChange={onLiveImageSettingsChange} />
+        )}
       </main>
     </div>
   );
