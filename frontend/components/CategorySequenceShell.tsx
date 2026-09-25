@@ -64,6 +64,65 @@ const [activeStep, setActiveStepRaw] = useState<StepId>(initialStep ?? "generate
 const mainStepIndex = STEPS.findIndex((s) => s.id === activeStep);
 const stepIndex = activeStep === "wordpress" ? STEPS.length - 1 : mainStepIndex;
 
+  // Stage 2 (phone support): the left-rail step list reads fine as a
+  // vertical list at desktop/tablet width, but below 640px it's just a tall
+  // list of rows sitting above the actual content. Below that width it
+  // renders as a horizontal, swipeable tab strip instead — same steps, same
+  // state, just laid out for a phone.
+  const [isPhoneViewport, setIsPhoneViewport] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 639px)");
+    const update = () => setIsPhoneViewport(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
+  // Shared between both nav layouts so the "needs attention" / "pending
+  // review" logic exists in exactly one place.
+  function stepIndicator(stepId: MainStepId) {
+    if (stepId === "generate" && hasAnyPairingSelected) {
+      return <CircleCheck size={15} style={{ color: "var(--teal)" }} />;
+    }
+    if (stepId === "language" && languageNeedsAttention) {
+      return (
+        <span
+          className="w-2 h-2 rounded-full shrink-0"
+          style={{ background: "var(--coral)" }}
+          title="Some subjects or variations need translation"
+        />
+      );
+    }
+    if (stepId === "language" && !languageNeedsAttention && languagePendingReview && languagePendingReview.length > 0) {
+      return (
+        <span
+          className="w-2 h-2 rounded-full shrink-0"
+          style={{ background: "var(--tone-blue)" }}
+          title="New auto-translated items to review"
+        />
+      );
+    }
+    if (stepId === "publish" && publishNeedsAttention) {
+      return (
+        <span
+          className="w-2 h-2 rounded-full shrink-0"
+          style={{ background: "var(--coral)" }}
+          title="Some pairings still need SEO content"
+        />
+      );
+    }
+    if (stepId === "publish" && !publishNeedsAttention && publishPendingReview && publishPendingReview.length > 0) {
+      return (
+        <span
+          className="w-2 h-2 rounded-full shrink-0"
+          style={{ background: "var(--tone-blue)" }}
+          title="New auto-generated SEO content to review"
+        />
+      );
+    }
+    return null;
+  }
+
   useEffect(() => {
     if (initialStep) {
       setActiveStepRaw(initialStep);
@@ -142,76 +201,89 @@ const stepIndex = activeStep === "wordpress" ? STEPS.length - 1 : mainStepIndex;
             Match your creative ingredients, generate pages, and publish them to your book.
           </p>
 
-          <nav className="grid gap-1 mt-11">
-            {STEPS.map((step) => {
-              const active = activeStep === step.id;
-              return (
+          {isPhoneViewport ? (
+            <nav className="flex gap-2 overflow-x-auto mt-6 pb-1 -mx-5 px-5" style={{ scrollbarWidth: "none" }}>
+              {STEPS.map((step) => {
+                const active = activeStep === step.id;
+                return (
+                  <button
+                    key={step.id}
+                    onClick={() => setActiveStep(step.id)}
+                    className="flex items-center gap-1.5 rounded-full text-xs whitespace-nowrap shrink-0"
+                    style={{
+                      padding: "8px 14px",
+                      color: active ? "var(--teal-dark)" : "var(--pencil)",
+                      background: active ? "var(--teal-tint)" : "var(--canvas)",
+                      border: `1px solid ${active ? "var(--teal)" : "var(--pencil-light)"}`,
+                      fontWeight: active ? 700 : 500,
+                    }}
+                  >
+                    <span>{step.label}</span>
+                    {stepIndicator(step.id)}
+                  </button>
+                );
+              })}
+
+              {wordPressStepAvailable && (
                 <button
-                  key={step.id}
-                  onClick={() => setActiveStep(step.id)}
-                  className="flex items-center gap-3 rounded-lg text-left text-xs"
+                  onClick={() => setActiveStep("wordpress")}
+                  className="flex items-center gap-1.5 rounded-full text-xs whitespace-nowrap shrink-0"
                   style={{
-                    padding: "12px 13px",
-                    color: active ? "var(--teal-dark)" : "var(--pencil)",
-                    background: active ? "var(--teal-tint)" : "transparent",
-                    fontWeight: active ? 700 : 400,
+                    padding: "8px 14px",
+                    color: activeStep === "wordpress" ? "var(--teal-dark)" : "var(--pencil)",
+                    background: activeStep === "wordpress" ? "var(--teal-tint)" : "var(--canvas)",
+                    border: `1px solid ${activeStep === "wordpress" ? "var(--teal)" : "var(--pencil-light)"}`,
+                    fontWeight: activeStep === "wordpress" ? 700 : 500,
                   }}
                 >
-                  <span className="font-display" style={{ fontSize: 11, color: "var(--pencil)" }}>
-                    {step.eyebrow}
-                  </span>
-                  <span>{step.label}</span>
-                  {step.id === "generate" && hasAnyPairingSelected && (
-                    <CircleCheck size={15} className="ml-auto" style={{ color: "var(--teal)" }} />
-                  )}
-                  {step.id === "language" && languageNeedsAttention && (
-                    <span
-                      className="ml-auto w-2 h-2 rounded-full shrink-0"
-                      style={{ background: "var(--coral)" }}
-                      title="Some subjects or variations need translation"
-                    />
-                  )}
-                  {step.id === "language" && !languageNeedsAttention && languagePendingReview && languagePendingReview.length > 0 && (
-                    <span
-                      className="ml-auto w-2 h-2 rounded-full shrink-0"
-                      style={{ background: "var(--tone-blue)" }}
-                      title="New auto-translated items to review"
-                    />
-                  )}
-                  {step.id === "publish" && publishNeedsAttention && (
-                    <span
-                      className="ml-auto w-2 h-2 rounded-full shrink-0"
-                      style={{ background: "var(--coral)" }}
-                      title="Some pairings still need SEO content"
-                    />
-                  )}
-                  {step.id === "publish" && !publishNeedsAttention && publishPendingReview && publishPendingReview.length > 0 && (
-                    <span
-                      className="ml-auto w-2 h-2 rounded-full shrink-0"
-                      style={{ background: "var(--tone-blue)" }}
-                      title="New auto-generated SEO content to review"
-                    />
-                  )}
+                  <CornerDownRight size={13} style={{ flexShrink: 0 }} />
+                  <span className="truncate" style={{ maxWidth: 120 }}>{wordPressSiteLabel}</span>
                 </button>
-              );
-            })}
+              )}
+            </nav>
+          ) : (
+            <nav className="grid gap-1 mt-11">
+              {STEPS.map((step) => {
+                const active = activeStep === step.id;
+                const indicator = stepIndicator(step.id);
+                return (
+                  <button
+                    key={step.id}
+                    onClick={() => setActiveStep(step.id)}
+                    className="flex items-center gap-3 rounded-lg text-left text-xs"
+                    style={{
+                      padding: "12px 13px",
+                      color: active ? "var(--teal-dark)" : "var(--pencil)",
+                      background: active ? "var(--teal-tint)" : "transparent",
+                      fontWeight: active ? 700 : 400,
+                    }}
+                  >
+                    <span className="font-display" style={{ fontSize: 11, color: "var(--pencil)" }}>
+                      {step.eyebrow}
+                    </span>
+                    <span>{step.label}</span>
+                    {indicator && <span className="ml-auto">{indicator}</span>}
+                  </button>
+                );
+              })}
 
-            {wordPressStepAvailable && (
-              <button
-                onClick={() => setActiveStep("wordpress")}
-                className="flex items-center gap-2 rounded-lg text-left text-xs ml-3"
-                style={{
-                  padding: "10px 13px",
-                  color: activeStep === "wordpress" ? "var(--teal-dark)" : "var(--pencil)",
-                  background: activeStep === "wordpress" ? "var(--teal-tint)" : "transparent",
-                  fontWeight: activeStep === "wordpress" ? 700 : 400,
-                }}
-              >
-                <CornerDownRight size={13} style={{ flexShrink: 0 }} />
-                <span className="truncate">{wordPressSiteLabel}</span>
-              </button>
-            )}
-          </nav>
+              {wordPressStepAvailable && (
+                <button
+                  onClick={() => setActiveStep("wordpress")}
+                  className="flex items-center gap-2 rounded-lg text-left text-xs ml-3"
+                  style={{
+                    padding: "10px 13px",
+                    color: activeStep === "wordpress" ? "var(--teal-dark)" : "var(--pencil)",
+                    background: activeStep === "wordpress" ? "var(--teal-tint)" : "transparent",
+                    fontWeight: activeStep === "wordpress" ? 700 : 400,
+                  }}
+                >
+                  <CornerDownRight size={13} style={{ flexShrink: 0 }} />
+                  <span className="truncate">{wordPressSiteLabel}</span>
+                </button>
+              )}
+            </nav>
+          )}
 
           <div className="flex gap-2 mt-16 pt-4" style={{ borderTop: "1px solid var(--pencil-light)" }}>
             <Sparkles size={15} style={{ color: "var(--pencil)", flexShrink: 0 }} />
