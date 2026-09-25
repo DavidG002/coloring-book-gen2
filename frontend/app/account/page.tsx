@@ -257,7 +257,11 @@ export default function AccountPage() {
 
   return (
     <AppShell active="Overview" breadcrumb="Account">
-      <div className="grid mx-auto" style={{ maxWidth: 1120, gridTemplateColumns: "minmax(0, 1fr) 270px", gap: 24 }}>
+      {/* Same fixed two-column bug as Settings and the old CategorySequenceShell
+          layout (see the "responsive-ui-audit" project doc) — stacks below
+          lg instead of squeezing the content against a hardcoded 270px
+          column. */}
+      <div className="grid mx-auto grid-cols-1 lg:grid-cols-[minmax(0,1fr)_270px] gap-6" style={{ maxWidth: 1120 }}>
         <div>
           <div className="flex items-end justify-between gap-6 mb-9">
             <div>
@@ -444,7 +448,7 @@ export default function AccountPage() {
                         style={{ borderColor: "var(--pencil-light)", background: "var(--canvas)" }}
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="block text-sm font-medium mb-1.5" style={{ color: "var(--ink)" }}>Post type</label>
                         <input
@@ -533,7 +537,7 @@ export default function AccountPage() {
         </div>
 
         <aside>
-          <div className="rounded-xl p-5 sticky" style={{ top: 90, border: "1px solid var(--pencil-light)", background: "var(--paper)" }}>
+          <div className="rounded-xl p-5 lg:sticky" style={{ top: 90, border: "1px solid var(--pencil-light)", background: "var(--paper)" }}>
             <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--pencil)", letterSpacing: "0.1em" }}>
               Quick guide
             </p>

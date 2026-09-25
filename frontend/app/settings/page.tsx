@@ -132,7 +132,14 @@ export default function SettingsPage() {
 
   return (
     <AppShell active="Overview" breadcrumb="Settings">
-      <div className="grid mx-auto" style={{ maxWidth: 1120, gridTemplateColumns: "minmax(0, 1fr) 270px", gap: 24 }}>
+      {/* Same fixed two-column bug as the old CategorySequenceShell layout
+          (see the "responsive-ui-audit" project doc) — "Quick guide" was a
+          hardcoded 270px column with no fallback, squeezing the real content
+          at any narrower width. Stacks below lg (Quick guide moves below the
+          main content, and stops being sticky since a full-width block
+          "sticking" below scrolling content looks wrong once it's no longer
+          a side rail). */}
+      <div className="grid mx-auto grid-cols-1 lg:grid-cols-[minmax(0,1fr)_270px] gap-6" style={{ maxWidth: 1120 }}>
         <div>
           <div className="flex items-end justify-between gap-6 mb-9">
             <div>
@@ -235,7 +242,7 @@ export default function SettingsPage() {
                   description="Set the small pauses that keep batch creation predictable."
                   icon={<Settings2 size={16} />}
                 >
-                  <div className="grid grid-cols-2 gap-5 mb-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-4">
                     <Field label="Sleep between calls (sec)" hint="Pause after each successful image" value={settings.sleep_between_calls} onChange={(v) => update("sleep_between_calls", v)} step={0.1} min={0} />
                     <Field label="Sleep on failure (sec)" hint="Pause after a failed image before retrying" value={settings.sleep_on_failure} onChange={(v) => update("sleep_on_failure", v)} step={0.5} min={0} />
                     <Field label="Batch confirmation threshold" hint="Not yet enforced in the UI — reserved for a future safety prompt" value={settings.batch_confirmation_threshold} onChange={(v) => update("batch_confirmation_threshold", v)} min={1} />
@@ -259,7 +266,7 @@ export default function SettingsPage() {
         </div>
 
         <aside>
-          <div className="rounded-xl p-5 sticky" style={{ top: 90, border: "1px solid var(--pencil-light)", background: "var(--paper)" }}>
+          <div className="rounded-xl p-5 lg:sticky" style={{ top: 90, border: "1px solid var(--pencil-light)", background: "var(--paper)" }}>
             <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--pencil)", letterSpacing: "0.1em" }}>
               Quick guide
             </p>
