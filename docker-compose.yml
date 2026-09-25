@@ -12,8 +12,12 @@ services:
     # npm run dev) can reach the same database the containers use, without
     # exposing it beyond this machine. Other containers still reach it by
     # service name ("postgres") over the compose network either way.
+    # Port is overridable (POSTGRES_PORT) so a deploy host that already has
+    # something bound to 5432 can shift this without editing this file —
+    # same pattern as BACKEND_PORT/FRONTEND_PORT below, and as the libply
+    # project's own docker-compose.yml already does.
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-coloringbook}"]
       interval: 5s
@@ -45,8 +49,11 @@ services:
       - ./backend/alembic/versions:/app/alembic/versions
     ports:
       # Bound to localhost only — nginx on the host is the public entry
-      # point and reverse-proxies to this.
-      - "127.0.0.1:8000:8000"
+      # point and reverse-proxies to this. Port is overridable
+      # (BACKEND_PORT) so a deploy host with a port conflict (e.g.
+      # another project already using 8000) can shift this via its own
+      # .env instead of forking this file.
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
 
   frontend:
     build:
@@ -63,8 +70,12 @@ services:
       - ./frontend/.env.local
     depends_on:
       - backend
+    # Port is overridable (FRONTEND_PORT) for the same reason as
+    # BACKEND_PORT above — a deploy host with a conflicting 3000 (e.g.
+    # another project that hardcodes it) can shift this without editing
+    # this file.
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"
 
 volumes:
   postgres_data:
