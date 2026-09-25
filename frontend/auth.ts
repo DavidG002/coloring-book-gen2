@@ -65,10 +65,19 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     },
     async session({ session, token }) {
       if (session.user) {
-        (session.user as typeof session.user & { id?: string; isAdmin?: boolean }).id =
-          token.userId as string | undefined;
-        (session.user as typeof session.user & { id?: string; isAdmin?: boolean }).isAdmin =
-          token.isAdmin as boolean | undefined;
+        // next-auth 5.0.0-beta.30 (bumped for Next.js 16 support — see
+        // roadmap's VPS deploy notes) tightened DefaultSession["user"].id
+        // to a required `string`, which now conflicts with our old
+        // intersection type when assigning a possibly-undefined value —
+        // TS collapses `string & (string | undefined)` down to `string`.
+        // Omit-ing the base `id` before intersecting our own optional one
+        // avoids that collapse.
+        type ExtendedUser = Omit<NonNullable<typeof session.user>, "id"> & {
+          id?: string;
+          isAdmin?: boolean;
+        };
+        (session.user as ExtendedUser).id = token.userId as string | undefined;
+        (session.user as ExtendedUser).isAdmin = token.isAdmin as boolean | undefined;
       }
 
       // Auth.js's own session cookie is encrypted (JWE) and FastAPI has no
