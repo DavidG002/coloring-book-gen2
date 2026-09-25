@@ -14,6 +14,16 @@ COPY . .
 # build that already points at the right backend URL.
 ARG NEXT_PUBLIC_API_URL=http://localhost:8000
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+# AUTH_SECRET is a runtime-only value in production (supplied via
+# frontend/.env.local's env_file at container start — see docker-compose.yml).
+# But `next build` statically evaluates auth.ts while collecting route info
+# for /api/auth/[...nextauth], and that file throws if AUTH_SECRET is unset.
+# This placeholder only needs to be non-empty to satisfy that check at build
+# time — it's never used to sign anything for real, so there's no reason to
+# pass the actual secret in as a build arg (which would also bake it into
+# the image's layer history unnecessarily).
+ARG AUTH_SECRET=build-time-placeholder-not-used-at-runtime
+ENV AUTH_SECRET=${AUTH_SECRET}
 RUN npm run build
 
 FROM base AS runner
