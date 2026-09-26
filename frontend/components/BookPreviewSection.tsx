@@ -124,6 +124,7 @@ export default function BookPreviewSection({
   categories,
   lastCreatedCategoryId,
   liveImageSettings,
+  selectedCategoryOverride,
 }: {
   bookId: number;
   onCategoryChanged?: (categoryName: string) => void;
@@ -131,6 +132,14 @@ export default function BookPreviewSection({
   categories: CategorySummary[];
   lastCreatedCategoryId?: number;
   liveImageSettings?: { canvas_width: number; canvas_height: number; subject_size_ratio: number } | null;
+  // Set by the book page when the user clicks one of the relocated category
+  // tiles above the title, so that click can drive this component's own
+  // selectedPreviewCategory state (previously only readable one-way via
+  // onCategoryChanged, never settable from outside). `nonce` changes on
+  // every click, even a repeat click on the already-selected category, so
+  // the effect below always re-applies it — same nonce pattern already used
+  // for the "Publish step" deep link in PublishConnectionsPanel.
+  selectedCategoryOverride?: { name: string; nonce: number } | null;
 }) {
   const router = useRouter();
   const accessToken = useAccessToken();
@@ -156,6 +165,16 @@ export default function BookPreviewSection({
   useEffect(() => {
     onCategoryChanged?.(selectedPreviewCategory);
   }, [selectedPreviewCategory, onCategoryChanged]);
+
+  // Applies a category tile click from the book page (see the prop comment
+  // above). Keyed on the whole object (a fresh one every click) rather than
+  // just selectedCategoryOverride?.name, so clicking the already-selected
+  // category's tile again still re-applies cleanly instead of being a no-op
+  // because "the name didn't change".
+  useEffect(() => {
+    if (!selectedCategoryOverride) return;
+    setSelectedPreviewCategory(selectedCategoryOverride.name);
+  }, [selectedCategoryOverride]);
   const [sampleSubject, setSampleSubject] = useState<string | null>(null);
   const [sampleVariation, setSampleVariation] = useState<string | null>(null);
 

@@ -2,31 +2,24 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ApiError } from "@/lib/api";
+import { apiRequest, ApiError } from "@/lib/api";
 import type { components } from "@/lib/api/generated-types";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 type CategoryDeletionInfo = components["schemas"]["CategoryDeletionInfo"];
 
-async function getDeletionInfo(categoryId: number): Promise<CategoryDeletionInfo> {
-  const res = await fetch(`${API_BASE_URL}/categories/${categoryId}/deletion-info`);
-  if (!res.ok) {
-    const data = await res.json();
-    throw new ApiError(res.status, data.detail);
-  }
-  return res.json();
+// These two used to be hand-rolled `fetch()` calls with no Authorization
+// header — a leftover from before the backend required auth on every route.
+// Every other call site was already updated to go through `apiRequest`
+// (see the comment on getAuthHeaders in lib/api/client.ts), but this modal
+// was missed, so deletion-info and the delete itself both 401'd. Routed
+// through apiRequest now so they pick up the same Bearer token as
+// everything else.
+function getDeletionInfo(categoryId: number): Promise<CategoryDeletionInfo> {
+  return apiRequest<CategoryDeletionInfo>(`/categories/${categoryId}/deletion-info`);
 }
 
-async function deleteCategoryWithFiles(categoryId: number, deleteFiles: boolean): Promise<void> {
-  const res = await fetch(
-    `${API_BASE_URL}/categories/${categoryId}?delete_files=${deleteFiles}`,
-    { method: "DELETE" }
-  );
-  if (!res.ok) {
-    const data = await res.json();
-    throw new ApiError(res.status, data.detail);
-  }
+function deleteCategoryWithFiles(categoryId: number, deleteFiles: boolean): Promise<void> {
+  return apiRequest<void>(`/categories/${categoryId}?delete_files=${deleteFiles}`, { method: "DELETE" });
 }
 
 export default function DeleteCategoryModal({

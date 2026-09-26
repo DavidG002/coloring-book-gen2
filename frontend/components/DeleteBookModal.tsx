@@ -2,30 +2,22 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ApiError } from "@/lib/api";
+import { apiRequest, ApiError } from "@/lib/api";
 import type { components } from "@/lib/api/generated-types";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 type DeletionInfo = components["schemas"]["BookDeletionInfo"];
 
-async function getDeletionInfo(bookId: number): Promise<DeletionInfo> {
-  const res = await fetch(`${API_BASE_URL}/books/${bookId}/deletion-info`);
-  if (!res.ok) {
-    const data = await res.json();
-    throw new ApiError(res.status, data.detail);
-  }
-  return res.json();
+// Same pre-auth leftover as DeleteCategoryModal.tsx: these were hand-rolled
+// `fetch()` calls with no Authorization header from before the backend
+// required auth on every route, so both 401'd. Routed through apiRequest
+// now so they pick up the same Bearer token as everything else (see
+// getAuthHeaders in lib/api/client.ts).
+function getDeletionInfo(bookId: number): Promise<DeletionInfo> {
+  return apiRequest<DeletionInfo>(`/books/${bookId}/deletion-info`);
 }
 
-async function deleteBookWithFiles(bookId: number, deleteFiles: boolean): Promise<void> {
-  const res = await fetch(`${API_BASE_URL}/books/${bookId}?delete_files=${deleteFiles}`, {
-    method: "DELETE",
-  });
-  if (!res.ok) {
-    const data = await res.json();
-    throw new ApiError(res.status, data.detail);
-  }
+function deleteBookWithFiles(bookId: number, deleteFiles: boolean): Promise<void> {
+  return apiRequest<void>(`/books/${bookId}?delete_files=${deleteFiles}`, { method: "DELETE" });
 }
 
 export default function DeleteBookModal({ bookId, onClose }: { bookId: number; onClose: () => void }) {

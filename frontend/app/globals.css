@@ -140,3 +140,39 @@ h1, h2, h3, .font-display {
   transform: translateY(-2px);
   box-shadow: 0 10px 25px rgba(28, 27, 26, 0.06);
 }
+
+/* Used by the book page's categories row. Below lg it's a normal stacked
+   list with the browser's own vertical scrollbar (thin, styled here) — that
+   one was never the complaint. At lg+ the row scrolls sideways instead,
+   and THAT native scrollbar kept fading in and out on hover no matter how
+   it was styled — some browsers/OSes apply their own overlay-scrollbar
+   fade regardless of ::-webkit-scrollbar/scrollbar-width, so there was no
+   reliable way to make a native scrollbar just stay put. Rather than keep
+   fighting that, the lg+ native scrollbar is hidden entirely and a plain
+   div (see the book page's categoriesTrackRef) draws a real, always-visible
+   track/thumb underneath instead. */
+.category-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--pencil-light) transparent;
+}
+.category-scrollbar::-webkit-scrollbar {
+  height: 6px;
+}
+.category-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.category-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--pencil-light);
+  border-radius: 999px;
+}
+.category-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--pencil);
+}
+@media (min-width: 1024px) {
+  .category-scrollbar {
+    scrollbar-width: none;
+  }
+  .category-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
