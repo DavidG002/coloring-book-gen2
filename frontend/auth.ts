@@ -18,6 +18,19 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   secret,
+  // Without this (or an explicit AUTH_URL env var), Auth.js tries to infer
+  // its own base URL from the request it sees — which, behind nginx's
+  // reverse proxy to this container, can end up as the container's own
+  // internal hostname:port (Docker assigns the container ID as its
+  // hostname) instead of the real public domain. That's what produced the
+  // "https://<container-id>:3000/login" sign-out redirect. trustHost tells
+  // Auth.js to trust the proxy's X-Forwarded-Host/X-Forwarded-Proto headers
+  // instead of guessing — the officially recommended fix for exactly this
+  // deployment shape. Setting AUTH_URL explicitly in the VPS's
+  // frontend/.env.local is the other half of this fix (see the roadmap
+  // doc) — trustHost alone still depends on nginx actually forwarding
+  // those headers correctly.
+  trustHost: true,
   session: { strategy: "jwt" },
   pages: { signIn: "/login" },
   providers: [
