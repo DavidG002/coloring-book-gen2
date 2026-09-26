@@ -839,7 +839,11 @@ export default function BookPreviewSection({
 
       {/* Selection + history, one panel */}
       <Panel kicker="WHAT TO PREVIEW" title="Preview settings">
-        <div className="grid grid-cols-3 gap-4">
+        {/* Same fix as elsewhere in this pass: a native <select> can't wrap
+            or ellipsis its own text reliably across browsers, so three of
+            them crammed into equal-width columns just clips long subject/
+            variation names on a phone. Stacks to one column below sm. */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--ink)" }}>
               Category
