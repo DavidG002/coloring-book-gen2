@@ -129,8 +129,15 @@ export default function BookDetailPage() {
 
   function handleCategoriesTrackPointerDown(e: React.PointerEvent<HTMLDivElement>) {
     const el = categoriesScrollRef.current;
-    const track = categoriesTrackRef.current;
-    if (!el || !track) return;
+    const trackMaybeNull = categoriesTrackRef.current;
+    if (!el || !trackMaybeNull) return;
+    // Re-bind to a definitely-non-null const: TypeScript's control-flow
+    // narrowing from the guard above doesn't carry into the nested
+    // onMove/onUp function declarations below (a fresh closure each time),
+    // so `track` itself was still typed as possibly-null inside them —
+    // that's what broke the production type-check build even though this
+    // function can't actually reach those closures with a null value.
+    const track: HTMLDivElement = trackMaybeNull;
     const trackRect = track.getBoundingClientRect();
     const thumbWidthPx = (categoriesScrollMetrics.widthPct / 100) * trackRect.width;
     const maxScrollLeft = el.scrollWidth - el.clientWidth;
