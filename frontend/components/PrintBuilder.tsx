@@ -3,34 +3,37 @@
 import { useState } from "react";
 import { Search, FileText, Sparkles } from "lucide-react";
 import AppShell from "./AppShell";
-import PublishConnectionsPanel from "./PublishConnectionsPanel";
 
 export default function PrintBuilder() {
   const [exportFormat, setExportFormat] = useState<"PDF" | "SVG" | "Vector">("PDF");
   const [builderSearch, setBuilderSearch] = useState("");
 
   return (
-    <AppShell active="Print" breadcrumb="Print & Publish">
+    <AppShell active="Print" breadcrumb="Print">
       <div className="flex items-end justify-between gap-5 mb-7">
         <div>
           <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--pencil)", letterSpacing: "0.12em" }}>
-            Print production &amp; publishing
+            Print production
           </p>
           <h1
             className="font-display font-normal m-0 mt-2"
             style={{ fontSize: "clamp(34px, 4vw, 47px)", letterSpacing: "-0.045em", color: "var(--ink)" }}
           >
-            Print &amp; Publish<span style={{ color: "var(--teal)" }}>.</span>
+            Print<span style={{ color: "var(--teal)" }}>.</span>
           </h1>
           <p className="text-[13px] m-0 mt-2.5" style={{ color: "var(--pencil)" }}>
-            Build a print-ready collection, and see exactly where your work is already live.
+            Build a print-ready collection from your categories, sized for real production.
           </p>
         </div>
       </div>
 
       {/* Cosmetic print-builder section — real PDF/SVG/Vector export is a separate, later project */}
       <div className="rounded-xl overflow-hidden mb-11" style={{ border: "1px solid var(--pencil-light)", background: "var(--canvas)" }}>
-        <div className="flex items-end justify-between gap-6 p-6" style={{ borderBottom: "1px solid var(--pencil-light)", background: "var(--paper)" }}>
+        {/* Reuses the same accent tokens as the Settings/Account tab headers
+            (--account-accent-bg/border) — in light mode these resolve to the
+            same --paper/--pencil-light values this strip already had, so
+            it's a no-op there; in dark mode they pick up the shared purple. */}
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 sm:gap-6 p-5 sm:p-6" style={{ borderBottom: "1px solid var(--account-accent-border)", background: "var(--account-accent-bg)" }}>
           <div>
             <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--pencil)", letterSpacing: "0.1em" }}>
               Build for print
@@ -60,20 +63,23 @@ export default function PrintBuilder() {
           </div>
         </div>
 
-        <div className="grid" style={{ gridTemplateColumns: "minmax(0, 1.15fr) minmax(280px, 0.85fr)" }}>
-          <div className="flex flex-col items-center justify-center gap-4" style={{ minHeight: 400, padding: 28, background: "var(--paper)" }}>
+        {/* Mobile-only fix: below lg there isn't room for a fixed 280px+
+            second column next to the preview, so it stacks single-column
+            and the divider moves from a left border to a top border. */}
+        <div className="grid grid-cols-1 lg:[grid-template-columns:minmax(0,1.3fr)_minmax(280px,0.8fr)]">
+          <div className="flex flex-col items-center justify-center gap-4" style={{ minHeight: 460, padding: 36, background: "var(--paper)" }}>
             <div
               className="flex flex-col"
-              style={{ width: "min(230px, 65%)", aspectRatio: "8.5/ 11", padding: 15, background: "var(--canvas)", boxShadow: "0 14px 30px rgba(32,33,31,0.14)" }}
+              style={{ width: "min(320px, 78%)", aspectRatio: "8.5/ 11", padding: 20, background: "var(--canvas)", boxShadow: "0 14px 30px rgba(32,33,31,0.14)" }}
             >
-              <p className="text-[8px] uppercase font-mono m-0" style={{ color: "var(--pencil)" }}>
+              <p className="text-[9px] uppercase font-mono m-0" style={{ color: "var(--pencil)" }}>
                 {exportFormat} · 8.5 × 11 in
               </p>
-              <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center">
-                <span className="font-display" style={{ fontSize: 34, color: "var(--teal-dark)" }}>+</span>
-                <span className="text-[9px]" style={{ color: "var(--pencil)" }}>Add a page to begin</span>
+              <div className="flex-1 flex flex-col items-center justify-center gap-2.5 text-center">
+                <span className="font-display" style={{ fontSize: 42, color: "var(--teal-dark)" }}>+</span>
+                <span className="text-[10px]" style={{ color: "var(--pencil)" }}>Add a page to begin</span>
               </div>
-              <div className="flex justify-between pt-2.5 text-[8px] font-mono uppercase" style={{ borderTop: "1px solid var(--pencil-light)", color: "var(--pencil)" }}>
+              <div className="flex justify-between pt-3 text-[9px] font-mono uppercase" style={{ borderTop: "1px solid var(--pencil-light)", color: "var(--pencil)" }}>
                 <span>Page 01</span>
                 <span>0 pages</span>
               </div>
@@ -88,7 +94,7 @@ export default function PrintBuilder() {
             </button>
           </div>
 
-          <div style={{ padding: 22, borderLeft: "1px solid var(--pencil-light)" }}>
+          <div className="border-t lg:border-t-0 lg:border-l border-[color:var(--pencil-light)]" style={{ padding: 22 }}>
             <div className="flex items-end justify-between mb-3">
               <div>
                 <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--pencil)", letterSpacing: "0.1em" }}>
@@ -141,8 +147,6 @@ export default function PrintBuilder() {
           </p>
         </div>
       </div>
-
-      <PublishConnectionsPanel />
     </AppShell>
   );
 }

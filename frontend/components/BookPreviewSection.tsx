@@ -181,6 +181,30 @@ export default function BookPreviewSection({
   const wheelDragMoved = useRef(false);
   const [isDraggingWheel, setIsDraggingWheel] = useState(false);
 
+  // Mobile fix: canvasDisplayWidth/Height below were computed only against
+  // fixed desktop-oriented caps (600x660), with no awareness of how much
+  // room the page actually had. The wheel's own outer div already clamps to
+  // maxWidth: 100%, but its children (the canvas box, each preview image)
+  // stay at the full uncapped size and simply overflow off-screen on a
+  // phone — which is what showed up as "elongated, doesn't fit, have to
+  // scroll to see it" (that's the canvas overflowing, not the intentional
+  // side-to-side scroll between preview items). Measuring the actual
+  // available width via ResizeObserver and folding it into the cap below
+  // scales the whole canvas down proportionally so it fits the screen
+  // outright, on any viewport, without guessing at breakpoint numbers.
+  const previewContainerRef = useRef<HTMLDivElement>(null);
+  const [previewContainerWidth, setPreviewContainerWidth] = useState<number | null>(null);
+
+  useEffect(() => {
+    const el = previewContainerRef.current;
+    if (!el) return;
+    const update = () => setPreviewContainerWidth(el.clientWidth);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   function handleWheelMouseDown(e: React.MouseEvent) {
     if (!wheelRef.current) return;
     setIsDraggingWheel(true);
@@ -512,9 +536,15 @@ export default function BookPreviewSection({
   // ceiling, the scale math is unchanged.
   const CANVAS_PREVIEW_MAX_WIDTH = 600;
   const CANVAS_PREVIEW_MAX_HEIGHT = 660;
+  // The panel around the wheel has 20px padding on each side (see the
+  // "rounded-lg" teal-tint div below) — subtracting that from the measured
+  // container width gives the actual space the canvas box can use.
+  const effectiveMaxWidth = previewContainerWidth
+    ? Math.min(CANVAS_PREVIEW_MAX_WIDTH, previewContainerWidth - 40)
+    : CANVAS_PREVIEW_MAX_WIDTH;
   const canvasRatio = canvasW / canvasH;
-  let canvasDisplayWidth = CANVAS_PREVIEW_MAX_WIDTH;
-  let canvasDisplayHeight = CANVAS_PREVIEW_MAX_WIDTH / canvasRatio;
+  let canvasDisplayWidth = effectiveMaxWidth;
+  let canvasDisplayHeight = effectiveMaxWidth / canvasRatio;
   if (canvasDisplayHeight > CANVAS_PREVIEW_MAX_HEIGHT) {
     canvasDisplayHeight = CANVAS_PREVIEW_MAX_HEIGHT;
     canvasDisplayWidth = CANVAS_PREVIEW_MAX_HEIGHT * canvasRatio;
@@ -556,6 +586,7 @@ export default function BookPreviewSection({
         }
       >
           <div
+            ref={previewContainerRef}
             className="rounded-lg"
             style={{ background: "var(--teal-tint)", padding: "16px 20px 20px" }}
           >

@@ -538,7 +538,17 @@ async function doRegenerate(id: number) {
             {sortedImages.length} of {images.length} {images.length === 1 ? "page" : "pages"}
           </p>
         </div>
-         <div className="flex items-center gap-2 flex-nowrap overflow-x-auto">
+         {/* Two fixes: (1) the expand/minimize button used to be `ml-auto`
+             inside this same scrollable row, so on mobile it scrolled away
+             with the filters — easy to lose track of that a collapsed strip
+             could even be expanded again. It's now a fixed sibling outside
+             the scroll area, always visible on the right. (2) the scrollable
+             filters row had no room reserved below its content for the
+             native horizontal scrollbar, so the scrollbar rendered right on
+             top of the selects' bottom edge — pb-2/-mb-2 gives it a clean
+             strip below instead, without changing the row's outer height. */}
+         <div className="flex items-center gap-2 min-w-0">
+         <div className="flex items-center gap-2 flex-nowrap overflow-x-auto pb-2 -mb-2 min-w-0" style={{ scrollbarWidth: "thin" }}>
           <select
             value={showOnlyPublishSet ? "in_publish_set" : filterStatus}
             onChange={(e) => {
@@ -616,9 +626,10 @@ async function doRegenerate(id: number) {
             <option value="newest">Newest → Oldest</option>
             <option value="subject">By subject</option>
           </select>
+         </div>
           <button
             onClick={() => setMinimized((v) => !v)}
-            className="w-8 h-8 flex items-center justify-center rounded-md ml-auto"
+            className="w-8 h-8 flex items-center justify-center rounded-md shrink-0"
             style={{ border: "1px solid var(--tone-blue)", color: "var(--tone-blue)", background: "var(--canvas)" }}
             aria-label={minimized ? "Expand" : "Minimize"}
           >

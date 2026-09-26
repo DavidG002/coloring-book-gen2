@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useSession, signOut } from "next-auth/react";
 import {
-  BookOpen, LayoutDashboard, Library, Grid2X2, Printer, Settings, Sparkles,ArrowUpRight, ChevronDown, ChevronLeft, LogOut, Menu, X,
+  BookOpen, LayoutDashboard, Library, Grid2X2, Printer, Share2, Settings, Sparkles,ArrowUpRight, ChevronDown, ChevronLeft, LogOut, Menu, X,
 } from "lucide-react";
 import { getBooks } from "@/lib/api";
 import NewBookModal from "./NewBookModal";
@@ -16,7 +16,7 @@ export default function AppShell({
   children,
   contentMaxWidth,
 }: {
-  active: "Overview" | "Books" | "Categories" | "Print";
+  active: "Overview" | "Books" | "Categories" | "Print" | "Publish";
   breadcrumb: string;
   children: React.ReactNode;
   // Lets one page opt into a wider content area (e.g. the book detail
@@ -262,7 +262,21 @@ export default function AppShell({
             }
           >
             <Printer size={16} />
-            {!showCollapsedRail && "Print & Publish"}
+            {!showCollapsedRail && "Print"}
+          </Link>
+          <Link
+            href="/publish"
+            onClick={handleNavClick}
+            title={showCollapsedRail ? "Publish" : undefined}
+            className={`nav-hover flex items-center gap-2.5 rounded-lg text-[13px] ${showCollapsedRail ? "justify-center px-0 py-2.5" : "px-3 py-2.5"}`}
+            style={
+              active === "Publish"
+                ? { background: "var(--teal-tint)", color: "var(--teal-dark)", fontWeight: 700 }
+                : { color: "var(--pencil)" }
+            }
+          >
+            <Share2 size={16} />
+            {!showCollapsedRail && "Publish"}
           </Link>
           </nav>
 

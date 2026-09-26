@@ -177,7 +177,7 @@ export default function PublishConnectionsPanel() {
                     key={cat.category_id}
                     style={{ borderBottom: i < data.categories.length - 1 ? "1px solid var(--pencil-light)" : undefined }}
                   >
-                    <div className="w-full flex items-center gap-3.5" style={{ padding: "14px 22px" }}>
+                    <div className="w-full flex items-center gap-2 sm:gap-3.5" style={{ padding: "14px 22px" }}>
                       <button
                         onClick={() => toggle(cat.category_id)}
                         className="flex-1 min-w-0 flex items-center gap-3.5 text-left"
@@ -219,7 +219,12 @@ export default function PublishConnectionsPanel() {
                         style={{ padding: "5px 8px", color: "var(--teal-dark)", background: "var(--teal-tint)" }}
                         title={`Open ${cat.category_name}'s WordPress publish step in the app`}
                       >
-                        <CornerDownRight size={11} /> Publish step
+                        {/* Below sm there isn't room for the full label next
+                            to the name, live-count badge and chevron — the
+                            icon alone (with the title tooltip above) keeps
+                            this tappable without crushing the category name
+                            down to a couple of visible characters. */}
+                        <CornerDownRight size={11} /> <span className="hidden sm:inline">Publish step</span>
                       </a>
                       <button onClick={() => toggle(cat.category_id)} className="shrink-0" aria-label={isOpen ? "Collapse" : "Expand"}>
                         <ChevronDown

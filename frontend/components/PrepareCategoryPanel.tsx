@@ -153,7 +153,10 @@ export default function PrepareCategoryPanel({
         </p>
       ) : (
         <>
-        <div className="grid relative rounded-lg" style={{ gridTemplateColumns: "minmax(160px, 0.8fr) 1.6fr", border: "1px solid var(--pencil-light)", background: "var(--canvas)" }}>
+        {/* Same fix as the sequence page's Subjects/Variations grid: a fixed
+            two-column layout crowded Variations into almost no space below
+            ~640px. Stacks to a single column below sm (640px) instead. */}
+        <div className="grid relative rounded-lg grid-cols-1 sm:grid-cols-[minmax(160px,0.8fr)_1.6fr]" style={{ border: "1px solid var(--pencil-light)", background: "var(--canvas)" }}>
           <div
             className="absolute flex items-center justify-center"
             style={{ gridColumn: "1 / 2", justifySelf: "end", bottom: -13, width: 26, height: 26, position: "absolute", right: -13, zIndex: 10 }}
@@ -167,7 +170,10 @@ export default function PrepareCategoryPanel({
               {listsExpanded ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
             </button>
           </div>
-          <div className="rounded-l-lg overflow-hidden" style={{ padding: 16, borderRight: "1px solid var(--pencil-light)" }}>
+          <div
+            className="rounded-t-lg sm:rounded-t-none sm:rounded-l-lg overflow-hidden border-b sm:border-b-0 sm:border-r border-[color:var(--pencil-light)]"
+            style={{ padding: 16 }}
+          >
             <div className="flex items-center justify-between mb-3">
               <div>
                 <h4 className="font-display font-normal m-0" style={{ fontSize: 15, color: "var(--ink)" }}>
@@ -224,7 +230,7 @@ export default function PrepareCategoryPanel({
             </div>
           </div>
 
-          <div className="rounded-r-lg overflow-hidden" style={{ padding: 16 }}>
+          <div className="rounded-b-lg sm:rounded-b-none sm:rounded-r-lg overflow-hidden" style={{ padding: 16 }}>
             <div className="flex items-center justify-between mb-3">
               <div>
                 <h4 className="font-display font-normal m-0" style={{ fontSize: 15, color: "var(--ink)" }}>
