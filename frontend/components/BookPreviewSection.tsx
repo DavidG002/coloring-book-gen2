@@ -195,6 +195,16 @@ export default function BookPreviewSection({
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const [previewContainerWidth, setPreviewContainerWidth] = useState<number | null>(null);
 
+  // `loading` is a dependency here on purpose, not an oversight: while
+  // loading is true, this component returns the "Loading..." placeholder
+  // below (see the early return further down) instead of the real canvas
+  // markup — so previewContainerRef.current is still null on this effect's
+  // very first run. With an empty dependency array the effect would only
+  // ever run once, against that null ref, and never again — silently
+  // leaving previewContainerWidth stuck at null (and the canvas stuck at
+  // the old fixed-600px cap) for the rest of the component's life. Re-
+  // running when `loading` flips to false lets it attach once the real,
+  // ref-bearing markup has actually mounted.
   useEffect(() => {
     const el = previewContainerRef.current;
     if (!el) return;
@@ -203,7 +213,7 @@ export default function BookPreviewSection({
     const ro = new ResizeObserver(update);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [loading]);
 
   function handleWheelMouseDown(e: React.MouseEvent) {
     if (!wheelRef.current) return;
