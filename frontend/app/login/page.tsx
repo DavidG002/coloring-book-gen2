@@ -43,7 +43,7 @@ export default function LoginPage() {
             <BookOpen size={15} color="white" />
           </div>
           <span className="font-display text-[19px]" style={{ color: "var(--ink)", letterSpacing: "-0.02em" }}>
-            coloring studio
+            YOoPrints
           </span>
         </div>
 

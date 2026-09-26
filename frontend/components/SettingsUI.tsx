@@ -304,16 +304,28 @@ export function AccountSection({
   description,
   icon,
   children,
+  accent,
 }: {
   eyebrow: string;
   title: string;
   description: string;
   icon: React.ReactNode;
   children: React.ReactNode;
+  // Swaps the header strip's true-black --paper for the shared purple via
+  // --account-accent-bg (identical to --paper in light mode, so this is a
+  // no-op there) — opt-in per section so this doesn't change every
+  // AccountSection (e.g. on the Account page) that hasn't asked for it.
+  accent?: boolean;
 }) {
   return (
     <section className="rounded-[14px] overflow-hidden" style={{ border: "1px solid var(--pencil-light)", background: "var(--canvas)" }}>
-      <div className="flex gap-3.5 p-5" style={{ borderBottom: "1px solid var(--pencil-light)", background: "var(--paper)" }}>
+      <div
+        className="flex gap-3.5 p-5"
+        style={{
+          borderBottom: `1px solid ${accent ? "var(--account-accent-border)" : "var(--pencil-light)"}`,
+          background: accent ? "var(--account-accent-bg)" : "var(--paper)",
+        }}
+      >
         <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: "var(--teal-tint)", color: "var(--teal-dark)" }}>
           {icon}
         </div>

@@ -10,7 +10,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Coloring Book Generator",
+  title: "YOoPrints",
   description: "Manage categories, prompts, and batch image generation",
 };
 

@@ -672,7 +672,7 @@ export default function GenerateSequencePanel({
                 fallback, so below ~640px the 320px-minimum Subjects column
                 crowded Variations into almost no space at all. Stacks to a
                 single column below sm (640px) instead. */}
-            <div className="grid relative grid-cols-1 sm:grid-cols-[minmax(280px,0.8fr)_1.6fr]" style={{ borderTop: "1px solid var(--pencil-light)", background: "#eef2f5cd" }}>
+            <div className="grid relative grid-cols-1 sm:grid-cols-[minmax(280px,0.8fr)_1.6fr]" style={{ borderTop: "1px solid var(--pencil-light)", background: "var(--canvas)" }}>
          <div
           className="absolute flex items-center justify-center"
           style={{ gridColumn: "1 / 2", justifySelf: "end", bottom: -13, width: 26, height: 26, position: "absolute", right: -13 }}
@@ -681,8 +681,8 @@ export default function GenerateSequencePanel({
             onClick={() => setListsExpanded((v) => !v)}
             className="flex items-center justify-center rounded-full w-full h-full"
             style={{
-              background: "var(--canvas)",
-              border: "1px solid var(--pencil-light)",
+              background: "var(--shell)",
+              border: "1px solid var(--shell-border)",
               color: "var(--pencil)",
               zIndex: 10,
               boxShadow: "0 2px 6px rgba(28,27,26,0.12)",
@@ -721,7 +721,7 @@ export default function GenerateSequencePanel({
                 key={subject}
                 className="flex items-center gap-1.5 mt-1.5 rounded-lg"
                 style={{
-                  border: `1px solid ${active ? "#c9ddd2" : "transparent"}`,
+                  border: `1px solid ${active ? "var(--teal)" : "transparent"}`,
                   background: active ? "var(--teal-tint)" : "transparent",
                 }}
               >

@@ -129,8 +129,8 @@ export default function AppShell({
           left: isPhoneViewport ? (mobileDrawerOpen ? 0 : -260) : undefined,
           zIndex: isPhoneViewport ? 50 : undefined,
           padding: showCollapsedRail ? "24px 10px 18px" : "24px 16px 18px",
-          borderRight: "1px solid var(--pencil-light)",
-          background: "var(--canvas)",
+          borderRight: "1px solid var(--shell-border)",
+          background: "var(--shell)",
           boxShadow: isPhoneViewport && mobileDrawerOpen ? "0 10px 40px rgba(0,0,0,0.25)" : undefined,
           transition: isPhoneViewport ? "left 0.22s ease" : ready ? "width 0.22s ease, padding 0.22s ease" : "none",
           overflowX: "hidden",
@@ -146,7 +146,7 @@ export default function AppShell({
           </div>
           {!showCollapsedRail && (
             <span className="font-display text-[19px] whitespace-nowrap flex-1" style={{ color: "var(--ink)", letterSpacing: "-0.02em" }}>
-              coloring studio
+              YOoPrints
             </span>
           )}
           {isPhoneViewport && (
@@ -300,7 +300,7 @@ export default function AppShell({
             <>
               <div
                 className="mt-5 p-3.5 rounded-xl"
-                style={{ border: "1px solid var(--pencil-light)", background: "var(--paper)" }}
+                style={{ border: "1px solid var(--tone-blue)", background: "var(--tone-blue-bg)" }}
               >
                 <div
                   className="w-6 h-6 rounded-md flex items-center justify-center mb-3"

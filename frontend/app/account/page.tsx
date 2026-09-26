@@ -119,6 +119,10 @@ export default function AccountPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Same tabs treatment as the Settings page — Profile/AI provider/Integrations
+  // were three stacked cards, now switched via tabs labeled by their titles.
+  const [activeTab, setActiveTab] = useState<"profile" | "ai" | "integrations">("profile");
+
   useEffect(() => {
     let cancelled = false;
     const timer = setTimeout(async () => {
@@ -297,22 +301,53 @@ export default function AccountPage() {
             <p className="text-sm" style={{ color: "var(--pencil)" }}>Loading...</p>
           ) : (
             <div className="grid gap-4">
+              <div className="flex gap-2">
+                {(
+                  [
+                    { id: "profile", label: "Profile" },
+                    { id: "ai", label: "AI provider" },
+                    { id: "integrations", label: "Integrations" },
+                  ] as const
+                ).map((tab) => {
+                  const active = activeTab === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
+                      className="px-4 py-2 rounded-full text-xs font-bold"
+                      style={{
+                        border: `1px solid ${active ? "var(--account-accent-border)" : "var(--pencil-light)"}`,
+                        background: active ? "var(--account-accent-bg)" : "transparent",
+                        color: active ? "var(--ink)" : "var(--pencil)",
+                      }}
+                    >
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {activeTab === "profile" && (
               <AccountSection
                 eyebrow="Your workspace"
                 title="Profile"
                 description="Single-user local setup — no login required yet."
                 icon={<UserRound size={16} />}
+                accent
               >
                 <div className="rounded-md border-[1.5px] border-dashed p-4 text-sm" style={{ borderColor: "var(--pencil-light)", color: "var(--pencil)" }}>
                   Account management (name, email, sign-in) will live here in a future multi-user version.
                 </div>
               </AccountSection>
+              )}
 
+              {activeTab === "ai" && (
               <AccountSection
                 eyebrow="Generation credentials"
                 title="AI provider"
                 description="Used for image generation (gpt-image-2) and translation (gpt-4o-mini)."
                 icon={<KeyRound size={16} />}
+                accent
               >
                 {currentUser && !currentUser.is_admin ? (
                   <div className="rounded-md border-[1.5px] border-dashed p-4 text-sm" style={{ borderColor: "var(--pencil-light)", color: "var(--pencil)" }}>
@@ -405,12 +440,15 @@ export default function AccountPage() {
                   </>
                 )}
               </AccountSection>
+              )}
 
+              {activeTab === "integrations" && (
               <AccountSection
                 eyebrow="Publishing destination"
                 title="Integrations"
                 description="Connect external services to publish directly from this app."
                 icon={<Sparkles size={16} />}
+                accent
               >
                 <SubCard title="WordPress" description="Connect a WordPress site to publish directly from this app." defaultOpen>
                   <div className="space-y-3 mb-3">
@@ -532,13 +570,14 @@ export default function AccountPage() {
                   </div>
                 </SubCard>
               </AccountSection>
+              )}
             </div>
           )}
         </div>
 
         <aside>
-          <div className="rounded-xl p-5 lg:sticky" style={{ top: 90, border: "1px solid var(--pencil-light)", background: "var(--paper)" }}>
-            <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--pencil)", letterSpacing: "0.1em" }}>
+          <div className="rounded-xl p-5 lg:sticky" style={{ top: 90, border: "1px solid var(--tone-blue)", background: "var(--tone-blue-bg)" }}>
+            <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--tone-blue)", letterSpacing: "0.1em" }}>
               Quick guide
             </p>
             <h3 className="font-display font-normal m-0 mt-1.5" style={{ fontSize: 18, color: "var(--ink)" }}>

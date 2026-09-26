@@ -54,6 +54,11 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Languages and Generation behavior were two stacked panels; David asked
+  // for them as tabs instead, labeled by their existing eyebrow text
+  // ("Translation defaults" / "Studio rhythm").
+  const [activeTab, setActiveTab] = useState<"languages" | "generation">("languages");
+
   useEffect(() => {
     let cancelled = false;
     const timer = setTimeout(async () => {
@@ -175,11 +180,38 @@ export default function SettingsPage() {
             <p className="text-sm" style={{ color: "var(--pencil)" }}>Loading...</p>
           ) : (
             <div className="grid gap-4">
+              <div className="flex gap-2">
+                {(
+                  [
+                    { id: "languages", label: "Translation defaults" },
+                    { id: "generation", label: "Studio rhythm" },
+                  ] as const
+                ).map((tab) => {
+                  const active = activeTab === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
+                      className="px-4 py-2 rounded-full text-xs font-bold"
+                      style={{
+                        border: `1px solid ${active ? "var(--account-accent-border)" : "var(--pencil-light)"}`,
+                        background: active ? "var(--account-accent-bg)" : "transparent",
+                        color: active ? "var(--ink)" : "var(--pencil)",
+                      }}
+                    >
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {activeTab === "languages" && (
               <AccountSection
                 eyebrow="Translation defaults"
                 title="Languages"
                 description="Available languages for translations across the app."
                 icon={<Globe2 size={16} />}
+                accent
               >
                 {languageError && (
                   <p className="text-sm mb-2" style={{ color: "var(--coral-dark)" }}>{languageError}</p>
@@ -234,13 +266,15 @@ export default function SettingsPage() {
                   </div>
                 )}
               </AccountSection>
+              )}
 
-              {settings && (
+              {activeTab === "generation" && settings && (
                 <AccountSection
                   eyebrow="Studio rhythm"
                   title="Generation behavior"
                   description="Set the small pauses that keep batch creation predictable."
                   icon={<Settings2 size={16} />}
+                  accent
                 >
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-4">
                     <Field label="Sleep between calls (sec)" hint="Pause after each successful image" value={settings.sleep_between_calls} onChange={(v) => update("sleep_between_calls", v)} step={0.1} min={0} />
@@ -266,8 +300,8 @@ export default function SettingsPage() {
         </div>
 
         <aside>
-          <div className="rounded-xl p-5 lg:sticky" style={{ top: 90, border: "1px solid var(--pencil-light)", background: "var(--paper)" }}>
-            <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--pencil)", letterSpacing: "0.1em" }}>
+          <div className="rounded-xl p-5 lg:sticky" style={{ top: 90, border: "1px solid var(--tone-blue)", background: "var(--tone-blue-bg)" }}>
+            <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--tone-blue)", letterSpacing: "0.1em" }}>
               Quick guide
             </p>
             <h3 className="font-display font-normal m-0 mt-1.5" style={{ fontSize: 18, color: "var(--ink)" }}>

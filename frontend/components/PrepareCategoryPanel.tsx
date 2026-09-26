@@ -153,7 +153,7 @@ export default function PrepareCategoryPanel({
         </p>
       ) : (
         <>
-        <div className="grid relative rounded-lg" style={{ gridTemplateColumns: "minmax(160px, 0.8fr) 1.6fr", border: "1px solid var(--pencil-light)", background: "#eef2f5cd" }}>
+        <div className="grid relative rounded-lg" style={{ gridTemplateColumns: "minmax(160px, 0.8fr) 1.6fr", border: "1px solid var(--pencil-light)", background: "var(--canvas)" }}>
           <div
             className="absolute flex items-center justify-center"
             style={{ gridColumn: "1 / 2", justifySelf: "end", bottom: -13, width: 26, height: 26, position: "absolute", right: -13, zIndex: 10 }}
@@ -161,7 +161,7 @@ export default function PrepareCategoryPanel({
             <button
               onClick={() => setListsExpanded((v) => !v)}
               className="flex items-center justify-center rounded-full w-full h-full"
-              style={{ background: "var(--canvas)", border: "1px solid var(--pencil-light)", color: "var(--pencil)", boxShadow: "0 2px 6px rgba(28,27,26,0.12)" }}
+              style={{ background: "var(--shell)", border: "1px solid var(--shell-border)", color: "var(--pencil)", boxShadow: "0 2px 6px rgba(28,27,26,0.12)" }}
               title={listsExpanded ? "Collapse" : "Expand"}
             >
               {listsExpanded ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
@@ -198,7 +198,7 @@ export default function PrepareCategoryPanel({
                     key={subject}
                     className="flex items-center gap-1 mt-1.5 rounded-lg"
                     style={{
-                      border: `1px solid ${active ? "#c9ddd2" : "transparent"}`,
+                      border: `1px solid ${active ? "var(--teal)" : "transparent"}`,
                       background: active ? "var(--teal-tint)" : "transparent",
                     }}
                   >

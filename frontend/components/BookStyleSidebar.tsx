@@ -181,7 +181,25 @@ export default function BookStyleSidebar({
   }
 
   return (
-    <div className="mt-8 pt-6" style={{ borderTop: "1px solid var(--pencil-light)" }}>
+    // Mirrors CategorySequenceShell's <aside> panel treatment (rounded,
+    // dark-mode-only purple background via --nav-panel — a no-op in light
+    // mode). At lg it sits directly below the nav box as its own standalone
+    // rounded card, separated by a small fixed gap (the flex column's own
+    // gap-4 in CategorySequenceShell) rather than merged flush against it —
+    // the flush-merge approach previously here caused a CSS-grid row-height
+    // coupling bug (see CategorySequenceShell's isDesktopViewport comment).
+    // Below lg the two aren't adjacent at all (workflow content sits between
+    // them), so "standalone card" is the natural look there too.
+    <div
+      className="mt-8 lg:mt-0 pt-6 rounded-2xl border border-[color:var(--nav-panel-secondary-border)]"
+      style={{
+        borderTop: "1px solid var(--pencil-light)",
+        background: "var(--nav-panel-secondary)",
+        paddingLeft: "var(--nav-panel-padding)",
+        paddingRight: "var(--nav-panel-padding)",
+        paddingBottom: "var(--nav-panel-padding)",
+      }}
+    >
       <div className="flex items-center gap-2 mb-4">
         <Palette size={13} style={{ color: "var(--pencil)" }} />
         <p className="text-[10px] uppercase font-bold m-0" style={{ color: "var(--pencil)", letterSpacing: "0.12em" }}>

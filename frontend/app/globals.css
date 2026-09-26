@@ -1,6 +1,13 @@
 @import "tailwindcss";
 
 :root {
+  /* Tells the browser which theme is active so native controls (the
+     <select> popup list, scrollbars, checkboxes) render themselves to
+     match instead of always using their light-theme default — without
+     this, a dark-styled <select> field still opens a plain white/black
+     popup with the browser's own blue highlight, which is exactly the
+     "gray on gray with a white and blue highlight" look. */
+  color-scheme: light;
   --paper: #faf8f3;
   --canvas: #ffffff;
   --ink: #1c1b1a;
@@ -22,14 +29,57 @@
   --tone-yellow: #9a8353;
   --tone-lavender-bg: #e8e2ef;
   --tone-lavender: #81718e;
+  /* The sidebar's own surface — a branding anchor distinct from the content
+     area. In light mode it's unchanged from --canvas (no visual change to
+     light mode from this work); dark mode gives it a real, distinct color
+     below. --shell-border follows the same idea for its edge. */
+  --shell: var(--canvas);
+  --shell-border: var(--pencil-light);
+  /* A dark-mode-only card treatment for the category-sequence step nav —
+     transparent/zero here so light mode is completely unaffected (David:
+     "we don't have that on the light version"); dark mode wraps that nav
+     in its own purple panel below. */
+  --nav-panel: transparent;
+  --nav-panel-border: transparent;
+  --nav-panel-padding: 0px;
+  /* Book Style's own variant of the panel above — a touch darker/more muted
+     than the nav's, so it reads as a secondary/settings surface rather than
+     competing with the nav for attention. Transparent/no-op in light mode
+     like the rest of this family. */
+  --nav-panel-secondary: transparent;
+  --nav-panel-secondary-border: transparent;
+  /* AccountSection's optional "accent" header — matches --paper/--pencil-light
+     exactly here (the original, unaccented look) so light mode is pixel
+     identical; dark mode swaps in the shared purple below. Kept as its own
+     token rather than reusing --nav-panel directly since --nav-panel itself
+     is plain `transparent` in light mode (right for the sidebar it was built
+     for, wrong here — this header already shows a visible --paper band in
+     light mode today, and reusing --nav-panel verbatim would erase that). */
+  --account-accent-bg: var(--paper);
+  --account-accent-border: var(--pencil-light);
+  /* A soft "mat" behind white image previews (coloring pages are white with
+     black line art) — in light mode this is a no-op (page previews already
+     sit fine against a white/cream page), but dark mode uses it to ease the
+     white-page-against-black-canvas transition instead of a hard cliff. */
+  --image-mat: transparent;
 }
 
 .dark {
+  color-scheme: dark;
+  /* Kept true black on purpose (David: OLED benefit) — this is the app's
+     largest surface, so it's the one place true black actually pays off in
+     battery/contrast terms. --canvas is a cool, low-chroma neutral rather
+     than tinted warm: a color-tinted near-black is more prone to visible
+     blotchiness ("dirty screen effect") on WOLED panels than a clean
+     neutral gray, since panel non-uniformity reads more when the tint isn't
+     neutral. This also fixed the "brownish tabs" issue — --canvas is used
+     across ~26 components, so its old warm cast (#1a1714) was showing up
+     everywhere, not just the sidebar. */
   --paper: #000000;
-  --canvas: #0a0a0a;
+  --canvas: #17191b;
   --ink: #f0ede6;
   --pencil: #9a958a;
-  --pencil-light: #2a2a2a;
+  --pencil-light: #262a2d;
   --teal: #7a9cb3;
   --teal-dark: #5b7c93;
   --coral: #e8664f;
@@ -46,6 +96,22 @@
   --tone-yellow: #cbb87a;
   --tone-lavender-bg: #262133;
   --tone-lavender: #a998bb;
+  /* The branding move: a dark plum/purple, picking up the same family as
+     --tone-lavender rather than inventing an unrelated hue. Pitched a touch
+     lighter than --canvas (per David: "lighter, but on the darker tone, so
+     no reflection") — enough to read as its own surface without any
+     brightness that would glare on an OLED screen. Low-saturation/matte on
+     purpose, not a bright/glossy purple. */
+  --shell: #201a2b;
+  --shell-border: #362a44;
+  --image-mat: #1b1e21;
+  --nav-panel: var(--shell);
+  --nav-panel-border: var(--shell-border);
+  --nav-panel-padding: 22px;
+  --nav-panel-secondary: #171420;
+  --nav-panel-secondary-border: #2b2436;
+  --account-accent-bg: var(--nav-panel);
+  --account-accent-border: var(--nav-panel-border);
 }
 
 body {
